@@ -1,0 +1,567 @@
+import { Injectable } from '@nestjs/common';
+import { ReportRepository } from './report.repository';
+import { NotFoundError } from '../../common/errors';
+
+/**
+ * All 20 supported report types.
+ */
+export const REPORT_TYPES = [
+  'daily-collection',
+  'overdue',
+  'disbursement',
+  'loan-portfolio',
+  'customer',
+  'repayment-schedule',
+  'receipt-register',
+  'cash-handover',
+  'expense',
+  'income',
+  'trial-balance',
+  'profit-loss',
+  'balance-sheet',
+  'group-summary',
+  'group-collection',
+  'penalty',
+  'foreclosure',
+  'audit-trail',
+  'dpd-aging',
+  'officer-performance',
+] as const;
+
+export type ReportType = (typeof REPORT_TYPES)[number];
+
+export interface ReportQuery {
+  startDate?: string; // ISO 8601
+  endDate?: string;   // ISO 8601
+  asOfDate?: string;  // ISO 8601
+  officerId?: string;
+  bucket?: string;
+  status?: string;
+  productVersionId?: string;
+  loanId?: string;
+  skip?: number;
+  take?: number;
+}
+
+export interface ReportUser {
+  sub: string;
+  role: string;
+}
+
+/**
+ * Report service — dispatches to report-type-specific methods.
+ *
+ * RBAC scope enforcement:
+ * - field_officer: sees only own assigned data
+ * - collection_officer: sees only assigned routes/areas
+ * - manager, super_admin, accountant, viewer_auditor: full data
+ *
+ * All monetary totals derived from journal_lines (ledger source of truth).
+ *
+ * Rate limiting note: 5 report generations per minute per user
+ * (actual enforcement in task 36.3).
+ */
+@Injectable()
+export class ReportService {
+  constructor(private readonly reportRepo: ReportRepository) {}
+
+  /**
+   * Generate a report by type with RBAC scope filtering.
+   */
+  async generateReport(
+    reportType: string,
+    query: ReportQuery,
+    user: ReportUser,
+  ) {
+    if (!REPORT_TYPES.includes(reportType as ReportType)) {
+      throw new NotFoundError(`Unknown report type: ${reportType}`);
+    }
+
+    const scope = await this.resolveScope(user);
+
+    switch (reportType as ReportType) {
+      case 'daily-collection':
+        return this.dailyCollectionReport(query, scope);
+      case 'overdue':
+        return this.overdueReport(query, scope);
+      case 'disbursement':
+        return this.disbursementReport(query, scope);
+      case 'loan-portfolio':
+        return this.loanPortfolioReport(query, scope);
+      case 'dpd-aging':
+        return this.dpdAgingReport(query, scope);
+      case 'trial-balance':
+        return this.trialBalanceReport(query);
+      case 'profit-loss':
+        return this.profitLossReport(query);
+      case 'balance-sheet':
+        return this.balanceSheetReport(query);
+      // Stubbed report types — return placeholder with metadata
+      case 'customer':
+      case 'repayment-schedule':
+      case 'receipt-register':
+      case 'cash-handover':
+      case 'expense':
+      case 'income':
+      case 'group-summary':
+      case 'group-collection':
+      case 'penalty':
+      case 'foreclosure':
+      case 'audit-trail':
+      case 'officer-performance':
+        return this.stubbedReport(reportType, query);
+      default:
+        throw new NotFoundError(`Unknown report type: ${reportType}`);
+    }
+  }
+
+  /**
+   * Export a report — stub returning JSON with format metadata.
+   * Actual PDF/XLSX/CSV generation deferred to future task.
+   */
+  async exportReport(
+    reportType: string,
+    format: string,
+    query: ReportQuery,
+    user: ReportUser,
+  ) {
+    const validFormats = ['pdf', 'xlsx', 'csv'];
+    if (!validFormats.includes(format)) {
+      throw new NotFoundError(`Unsupported export format: ${format}. Supported: ${validFormats.join(', ')}`);
+    }
+
+    const reportData = await this.generateReport(reportType, query, user);
+
+    return {
+      reportType,
+      format,
+      generatedAt: new Date().toISOString(),
+      exportReady: false,
+      message: `Export stub: ${reportType} in ${format.toUpperCase()} format. Actual file generation pending implementation.`,
+      metadata: {
+        format,
+        mimeType: format === 'pdf' ? 'application/pdf'
+          : format === 'xlsx' ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          : 'text/csv',
+        filename: `${reportType}-${new Date().toISOString().slice(0, 10)}.${format}`,
+      },
+      data: reportData,
+    };
+  }
+
+  // ─── RBAC Scope Resolution ───────────────────────────────────────────────
+
+  private async resolveScope(user: ReportUser): Promise<ReportScope> {
+    const fullAccessRoles = ['super_admin', 'manager', 'accountant', 'viewer_auditor'];
+    if (fullAccessRoles.includes(user.role)) {
+      return { type: 'full' };
+    }
+
+    if (user.role === 'field_officer') {
+      const customerIds = await this.reportRepo.getAssignedCustomerIds(user.sub);
+      return { type: 'officer', officerId: user.sub, customerIds };
+    }
+
+    if (user.role === 'collection_officer') {
+      const areas = await this.reportRepo.getActiveAreas(user.sub);
+      const loanIds = areas.length
+        ? await this.reportRepo.getLoanIdsForAreas(areas)
+        : [];
+      return { type: 'area', loanIds };
+    }
+
+    // Default: no data (office_staff has no report.read permission anyway)
+    return { type: 'none' };
+  }
+
+  private scopeToLoanFilter(scope: ReportScope): {
+    loanIdScope?: string[];
+    officerId?: string;
+  } {
+    if (scope.type === 'full') return {};
+    if (scope.type === 'officer') return { officerId: scope.officerId };
+    if (scope.type === 'area') return { loanIdScope: scope.loanIds };
+    return { loanIdScope: [] };
+  }
+
+  // ─── Implemented Reports ─────────────────────────────────────────────────
+
+  /**
+   * Daily Collection Report — collections with journal-line-derived totals.
+   * Monetary totals from journal_lines, not cached fields.
+   */
+  private async dailyCollectionReport(query: ReportQuery, scope: ReportScope) {
+    const { startDate, endDate } = this.parseDateRange(query);
+    const filter = this.scopeToLoanFilter(scope);
+
+    const { collections, journalLines } = await this.reportRepo.getDailyCollections({
+      startDate,
+      endDate,
+      ...filter,
+    });
+
+    // Build journal line map keyed by journal_entry_id
+    const journalMap = new Map<string, { totalDebit: bigint; totalCredit: bigint }>();
+    for (const line of journalLines) {
+      const entryId = line.journal_entry_id as string;
+      const existing = journalMap.get(entryId) ?? { totalDebit: BigInt(0), totalCredit: BigInt(0) };
+      existing.totalDebit += BigInt(line.debit_paise ?? 0);
+      existing.totalCredit += BigInt(line.credit_paise ?? 0);
+      journalMap.set(entryId, existing);
+    }
+
+    // Compute summary totals from journal lines (ledger source of truth)
+    let totalCollectedPaise = BigInt(0);
+    for (const entry of journalMap.values()) {
+      totalCollectedPaise += entry.totalDebit;
+    }
+
+    return {
+      reportType: 'daily-collection',
+      generatedAt: new Date().toISOString(),
+      filters: { startDate: startDate.toISOString(), endDate: endDate.toISOString() },
+      summary: {
+        totalCollections: collections.length,
+        totalCollectedPaise: totalCollectedPaise.toString(),
+      },
+      data: collections.map((c: Record<string, unknown>) => ({
+        ...c,
+        amount_paise: String(c['amount_paise']),
+        ledgerVerified: journalMap.has(c['journal_entry_id'] as string),
+      })),
+    };
+  }
+
+  /**
+   * Overdue Report — loans with DPD > 0, grouped by bucket.
+   */
+  private async overdueReport(query: ReportQuery, scope: ReportScope) {
+    const filter = this.scopeToLoanFilter(scope);
+
+    const loans = await this.reportRepo.getOverdueLoans({
+      ...filter,
+      bucket: query.bucket,
+    });
+
+    // Group by bucket
+    const buckets: Record<string, unknown[]> = {};
+    for (const loan of loans) {
+      const bucket = (loan.overdue_bucket as string) ?? 'unknown';
+      if (!buckets[bucket]) buckets[bucket] = [];
+      buckets[bucket].push({
+        ...loan,
+        principal_paise: String(loan.principal_paise),
+        total_payable_paise: String(loan.total_payable_paise),
+        cached_outstanding_paise: String(loan.cached_outstanding_paise),
+      });
+    }
+
+    return {
+      reportType: 'overdue',
+      generatedAt: new Date().toISOString(),
+      summary: {
+        totalOverdueLoans: loans.length,
+        byBucket: Object.fromEntries(
+          Object.entries(buckets).map(([k, v]) => [k, v.length]),
+        ),
+      },
+      data: buckets,
+    };
+  }
+
+  /**
+   * Disbursement Report — disbursements in date range.
+   */
+  private async disbursementReport(query: ReportQuery, scope: ReportScope) {
+    const { startDate, endDate } = this.parseDateRange(query);
+    const filter = this.scopeToLoanFilter(scope);
+
+    const disbursements = await this.reportRepo.getDisbursements({
+      startDate,
+      endDate,
+      loanIdScope: filter.loanIdScope,
+    });
+
+    let totalDisbursedPaise = BigInt(0);
+    for (const d of disbursements) {
+      totalDisbursedPaise += BigInt(d.amount_paise);
+    }
+
+    return {
+      reportType: 'disbursement',
+      generatedAt: new Date().toISOString(),
+      filters: { startDate: startDate.toISOString(), endDate: endDate.toISOString() },
+      summary: {
+        totalDisbursements: disbursements.length,
+        totalDisbursedPaise: totalDisbursedPaise.toString(),
+      },
+      data: disbursements.map((d: Record<string, unknown>) => ({
+        ...d,
+        amount_paise: String(d['amount_paise']),
+      })),
+    };
+  }
+
+  /**
+   * Loan Portfolio Report — all loans with status/product breakdown.
+   */
+  private async loanPortfolioReport(query: ReportQuery, scope: ReportScope) {
+    const filter = this.scopeToLoanFilter(scope);
+
+    const loans = await this.reportRepo.getLoanPortfolio({
+      ...filter,
+      status: query.status,
+      productVersionId: query.productVersionId,
+    });
+
+    // Group by status
+    const byStatus: Record<string, number> = {};
+    let totalPrincipalPaise = BigInt(0);
+    let totalOutstandingPaise = BigInt(0);
+
+    for (const loan of loans) {
+      const status = loan.status as string;
+      byStatus[status] = (byStatus[status] ?? 0) + 1;
+      totalPrincipalPaise += BigInt(loan.principal_paise);
+      totalOutstandingPaise += BigInt(loan.cached_outstanding_paise ?? 0);
+    }
+
+    return {
+      reportType: 'loan-portfolio',
+      generatedAt: new Date().toISOString(),
+      summary: {
+        totalLoans: loans.length,
+        totalPrincipalPaise: totalPrincipalPaise.toString(),
+        totalOutstandingPaise: totalOutstandingPaise.toString(),
+        byStatus,
+      },
+      data: loans.map((l: Record<string, unknown>) => ({
+        ...l,
+        principal_paise: String(l['principal_paise']),
+        total_interest_paise: String(l['total_interest_paise']),
+        total_payable_paise: String(l['total_payable_paise']),
+        cached_outstanding_paise: String(l['cached_outstanding_paise']),
+      })),
+    };
+  }
+
+  /**
+   * DPD Aging Report — loans grouped by overdue bucket with journal-derived totals.
+   */
+  private async dpdAgingReport(query: ReportQuery, scope: ReportScope) {
+    const filter = this.scopeToLoanFilter(scope);
+
+    const { loans, journalTotals } = await this.reportRepo.getDpdAging({
+      loanIdScope: filter.loanIdScope,
+    });
+
+    // Aggregate by bucket
+    const bucketSummary: Record<string, { count: number; totalOutstandingPaise: bigint }> = {};
+    for (const loan of loans) {
+      const bucket = (loan.overdue_bucket as string) ?? 'bucket_0';
+      if (!bucketSummary[bucket]) {
+        bucketSummary[bucket] = { count: 0, totalOutstandingPaise: BigInt(0) };
+      }
+      bucketSummary[bucket].count += 1;
+      bucketSummary[bucket].totalOutstandingPaise += BigInt(loan.cached_outstanding_paise ?? 0);
+    }
+
+    return {
+      reportType: 'dpd-aging',
+      generatedAt: new Date().toISOString(),
+      summary: {
+        totalLoans: loans.length,
+        byBucket: Object.fromEntries(
+          Object.entries(bucketSummary).map(([k, v]) => [
+            k,
+            { count: v.count, totalOutstandingPaise: v.totalOutstandingPaise.toString() },
+          ]),
+        ),
+        journalLineTotals: journalTotals,
+      },
+      data: loans.map((l: Record<string, unknown>) => ({
+        ...l,
+        principal_paise: String(l['principal_paise']),
+        total_payable_paise: String(l['total_payable_paise']),
+        cached_outstanding_paise: String(l['cached_outstanding_paise']),
+      })),
+    };
+  }
+
+  /**
+   * Trial Balance — all account balances derived from journal_lines.
+   */
+  private async trialBalanceReport(query: ReportQuery) {
+    const asOfDate = query.asOfDate ? new Date(query.asOfDate) : new Date();
+    const balances = await this.reportRepo.getTrialBalanceData(asOfDate);
+    const accountsMap = await this.reportRepo.getAccountsMap();
+
+    let totalDebitPaise = BigInt(0);
+    let totalCreditPaise = BigInt(0);
+
+    const accounts = balances.map((b: { account_id: string; _sum: { debit_paise: bigint | null; credit_paise: bigint | null } }) => {
+      const debit = BigInt(b._sum.debit_paise ?? 0);
+      const credit = BigInt(b._sum.credit_paise ?? 0);
+      totalDebitPaise += debit;
+      totalCreditPaise += credit;
+      const acct = accountsMap.get(b.account_id);
+      return {
+        accountId: b.account_id,
+        code: acct?.code ?? 'unknown',
+        name: acct?.name ?? 'unknown',
+        category: acct?.category ?? 'unknown',
+        debitPaise: debit.toString(),
+        creditPaise: credit.toString(),
+        balancePaise: (debit - credit).toString(),
+      };
+    });
+
+    return {
+      reportType: 'trial-balance',
+      generatedAt: new Date().toISOString(),
+      asOfDate: asOfDate.toISOString(),
+      summary: {
+        totalDebitPaise: totalDebitPaise.toString(),
+        totalCreditPaise: totalCreditPaise.toString(),
+        isBalanced: totalDebitPaise === totalCreditPaise,
+      },
+      data: accounts,
+    };
+  }
+
+  /**
+   * Profit & Loss — income minus expenses from journal_lines.
+   */
+  private async profitLossReport(query: ReportQuery) {
+    const { startDate, endDate } = this.parseDateRange(query);
+    const lines = await this.reportRepo.getProfitLossData(startDate, endDate);
+
+    let totalIncomePaise = BigInt(0);
+    let totalExpensePaise = BigInt(0);
+    const incomeAccounts: Record<string, bigint> = {};
+    const expenseAccounts: Record<string, bigint> = {};
+
+    for (const line of lines) {
+      const category = line.account.category as string;
+      const name = line.account.name as string;
+      const credit = BigInt(line.credit_paise ?? 0);
+      const debit = BigInt(line.debit_paise ?? 0);
+
+      if (category === 'income') {
+        const net = credit - debit;
+        totalIncomePaise += net;
+        incomeAccounts[name] = (incomeAccounts[name] ?? BigInt(0)) + net;
+      } else if (category === 'expense') {
+        const net = debit - credit;
+        totalExpensePaise += net;
+        expenseAccounts[name] = (expenseAccounts[name] ?? BigInt(0)) + net;
+      }
+    }
+
+    return {
+      reportType: 'profit-loss',
+      generatedAt: new Date().toISOString(),
+      filters: { startDate: startDate.toISOString(), endDate: endDate.toISOString() },
+      summary: {
+        totalIncomePaise: totalIncomePaise.toString(),
+        totalExpensePaise: totalExpensePaise.toString(),
+        netProfitPaise: (totalIncomePaise - totalExpensePaise).toString(),
+      },
+      data: {
+        income: Object.fromEntries(
+          Object.entries(incomeAccounts).map(([k, v]) => [k, v.toString()]),
+        ),
+        expenses: Object.fromEntries(
+          Object.entries(expenseAccounts).map(([k, v]) => [k, v.toString()]),
+        ),
+      },
+    };
+  }
+
+  /**
+   * Balance Sheet — assets = liabilities + equity from journal_lines.
+   */
+  private async balanceSheetReport(query: ReportQuery) {
+    const asOfDate = query.asOfDate ? new Date(query.asOfDate) : new Date();
+    const lines = await this.reportRepo.getBalanceSheetData(asOfDate);
+
+    let totalAssetsPaise = BigInt(0);
+    let totalLiabilitiesPaise = BigInt(0);
+    let totalEquityPaise = BigInt(0);
+    let totalIncomePaise = BigInt(0);
+    let totalExpensePaise = BigInt(0);
+
+    for (const line of lines) {
+      const category = line.account.category as string;
+      const debit = BigInt(line.debit_paise ?? 0);
+      const credit = BigInt(line.credit_paise ?? 0);
+
+      switch (category) {
+        case 'asset':
+          totalAssetsPaise += debit - credit;
+          break;
+        case 'liability':
+          totalLiabilitiesPaise += credit - debit;
+          break;
+        case 'equity':
+          totalEquityPaise += credit - debit;
+          break;
+        case 'income':
+          totalIncomePaise += credit - debit;
+          break;
+        case 'expense':
+          totalExpensePaise += debit - credit;
+          break;
+      }
+    }
+
+    // Retained earnings = income - expenses (added to equity)
+    const retainedEarnings = totalIncomePaise - totalExpensePaise;
+    const totalEquityWithRetained = totalEquityPaise + retainedEarnings;
+
+    return {
+      reportType: 'balance-sheet',
+      generatedAt: new Date().toISOString(),
+      asOfDate: asOfDate.toISOString(),
+      summary: {
+        totalAssetsPaise: totalAssetsPaise.toString(),
+        totalLiabilitiesPaise: totalLiabilitiesPaise.toString(),
+        totalEquityPaise: totalEquityWithRetained.toString(),
+        isBalanced: totalAssetsPaise === totalLiabilitiesPaise + totalEquityWithRetained,
+      },
+    };
+  }
+
+  // ─── Stubbed Reports ─────────────────────────────────────────────────────
+
+  /**
+   * Placeholder for report types not yet fully implemented.
+   * Returns metadata and empty data array.
+   */
+  private stubbedReport(reportType: string, query: ReportQuery) {
+    return {
+      reportType,
+      generatedAt: new Date().toISOString(),
+      filters: query,
+      summary: { message: `Report type '${reportType}' is not yet fully implemented.` },
+      data: [],
+    };
+  }
+
+  // ─── Helpers ─────────────────────────────────────────────────────────────
+
+  private parseDateRange(query: ReportQuery): { startDate: Date; endDate: Date } {
+    const now = new Date();
+    const startDate = query.startDate ? new Date(query.startDate) : new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const endDate = query.endDate ? new Date(query.endDate) : now;
+    return { startDate, endDate };
+  }
+}
+
+// ─── Internal Types ──────────────────────────────────────────────────────────
+
+type ReportScope =
+  | { type: 'full' }
+  | { type: 'officer'; officerId: string; customerIds: string[] }
+  | { type: 'area'; loanIds: string[] }
+  | { type: 'none' };

@@ -1,0 +1,1065 @@
+// AS Finance LMS — Prisma Schema
+// All money fields use BigInt (integer paise, 1 INR = 100 paise)
+// All version fields use Int for optimistic locking
+// UUIDs generated via PostgreSQL gen_random_uuid()
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  super_admin
+  manager
+  field_officer
+  collection_officer
+  accountant
+  office_staff
+  viewer_auditor
+}
+
+enum LoanStatus {
+  draft
+  submitted
+  under_review
+  approved
+  rejected
+  disbursed
+  active
+  overdue
+  defaulted
+  foreclosed
+  closed
+}
+
+enum CustomerStatus {
+  active
+  blacklisted
+  inactive
+}
+
+enum RiskLevel {
+  low
+  medium
+  high
+}
+
+enum InterestType {
+  flat
+  reducing_balance
+}
+
+enum Frequency {
+  daily
+  weekly
+  monthly
+}
+
+enum PaymentMode {
+  cash
+  bank_transfer
+  online
+}
+
+enum CollectionStatus {
+  posted
+  reversed
+}
+
+enum ReceiptStatus {
+  active
+  reversed
+}
+
+enum InstallmentStatus {
+  pending
+  partial
+  paid
+  overdue
+  closed
+}
+
+enum OverdueBucket {
+  bucket_0
+  bucket_1_30
+  bucket_31_60
+  bucket_61_90
+  bucket_90_plus
+}
+
+enum GroupStatus {
+  active
+  inactive
+  dissolved
+}
+
+enum AccountCategory {
+  asset
+  liability
+  income
+  expense
+  equity
+}
+
+enum JournalSourceType {
+  disbursement
+  collection
+  reversal
+  penalty
+  expense
+  processing_fee
+  foreclosure
+}
+
+enum OutboxStatus {
+  pending
+  processing
+  sent
+  failed
+  dead_letter
+}
+
+enum AuditAction {
+  customer_created
+  customer_updated
+  customer_blacklisted
+  customer_reinstated
+  loan_created
+  loan_submitted
+  loan_reviewed
+  loan_approved
+  loan_rejected
+  loan_disbursed
+  loan_closed
+  loan_foreclosed
+  loan_overdue
+  loan_defaulted
+  collection_posted
+  collection_reversed
+  penalty_posted
+  penalty_waived
+  expense_recorded
+  login_success
+  login_failed
+  logout
+  account_locked
+  password_changed
+  user_created
+  user_role_changed
+  unauthorized_access
+  cash_handover
+  document_uploaded
+  document_deleted
+}
+
+enum DayOfWeek {
+  monday
+  tuesday
+  wednesday
+  thursday
+  friday
+  saturday
+  sunday
+}
+
+enum DocType {
+  aadhaar_front
+  aadhaar_back
+  pan
+  photo
+  address_proof
+  other
+}
+
+enum FeeType {
+  fixed
+  percentage
+}
+
+enum PenaltyType {
+  flat_per_period
+  percentage_of_overdue
+}
+
+enum ForeclosureStatus {
+  quote
+  approved
+  settled
+  expired
+  cancelled
+}
+
+enum VerificationStatus {
+  pending
+  verified
+  discrepancy
+}
+
+enum CashTxType {
+  inflow
+  outflow
+}
+
+enum CashCategory {
+  collection
+  disbursement
+  expense
+  handover_in
+  handover_out
+}
+
+enum ApprovalAction {
+  submitted
+  under_review
+  approved
+  rejected
+}
+
+enum NotificationEvent {
+  loan_approved
+  loan_rejected
+  disbursed
+  collection_receipt
+  emi_reminder
+  overdue_reminder
+  penalty_notice
+  daily_collection_summary
+}
+
+// ─── Entities ────────────────────────────────────────────────────────────────
+
+/// Core user entity for all system operators
+model users {
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  username              String    @unique @db.VarChar(100)
+  password_hash         String    @db.VarChar(255)
+  full_name             String    @db.VarChar(200)
+  email                 String?   @unique @db.VarChar(200)
+  mobile                String    @unique @db.VarChar(15)
+  role                  UserRole
+  is_active             Boolean   @default(true)
+  failed_login_attempts Int       @default(0)
+  locked_until          DateTime? @db.Timestamptz()
+  last_login_at         DateTime? @db.Timestamptz()
+  version               Int       @default(1)
+  created_at            DateTime  @default(now()) @db.Timestamptz()
+  updated_at            DateTime  @updatedAt @db.Timestamptz()
+
+  // Relations
+  refresh_tokens             refresh_tokens[]
+  area_assignments           user_area_assignments[] @relation("user_areas")
+  assigned_areas             user_area_assignments[] @relation("area_assigned_by")
+  assigned_customers         customers[]             @relation("assigned_officer")
+  created_customers          customers[]             @relation("customer_created_by")
+  blacklisted_customers      customers[]             @relation("customer_blacklisted_by")
+  customer_doc_verifications customer_documents[]    @relation("doc_verified_by")
+  created_loan_products      loan_products[]
+  created_loans              loans[]                 @relation("loan_created_by")
+  approved_loans             loans[]                 @relation("loan_approved_by")
+  loan_approval_actions      loan_approvals[]
+  loan_status_changes        loan_status_history[]
+  disbursements              disbursements[]
+  collections                collections[]
+  penalties_waived           penalties[]             @relation("penalty_waived_by")
+  penalties_waiver_approved  penalties[]             @relation("penalty_waiver_approved_by")
+  foreclosures_requested     foreclosures[]          @relation("foreclosure_requested_by")
+  foreclosures_approved      foreclosures[]          @relation("foreclosure_approved_by")
+  foreclosure_rebate_auth    foreclosures[]          @relation("foreclosure_rebate_auth")
+  created_groups             groups[]
+  group_collections          group_collections[]
+  cash_transactions          cash_transactions[]
+  handovers_as_officer       cash_handover_records[] @relation("handover_officer")
+  handovers_as_receiver      cash_handover_records[] @relation("handover_receiver")
+  expenses                   expenses[]
+  uploaded_files             file_metadata[]
+  audit_logs                 audit_logs[]
+  settings_updated           settings[]
+  journal_entries_created    journal_entries[]
+
+  @@index([role], name: "idx_users_role")
+}
+
+/// JWT refresh tokens for session management
+model refresh_tokens {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String   @db.Uuid
+  token_hash String   @db.VarChar(255)
+  expires_at DateTime @db.Timestamptz()
+  is_revoked Boolean  @default(false)
+  created_at DateTime @default(now()) @db.Timestamptz()
+
+  user users @relation(fields: [user_id], references: [id])
+
+  @@index([user_id], name: "idx_refresh_tokens_user_id")
+  @@index([token_hash], name: "idx_refresh_tokens_token_hash")
+}
+
+/// Area/route assignments for field and collection officers (RBAC scope)
+model user_area_assignments {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id     String   @db.Uuid
+  area_name   String   @db.VarChar(200)
+  is_active   Boolean  @default(true)
+  assigned_by String   @db.Uuid
+  created_at  DateTime @default(now()) @db.Timestamptz()
+
+  user     users @relation("user_areas", fields: [user_id], references: [id])
+  assigner users @relation("area_assigned_by", fields: [assigned_by], references: [id])
+
+  @@index([user_id], name: "idx_user_area_user_id")
+  @@index([area_name], name: "idx_user_area_area_name")
+}
+
+/// Customer entity with KYC, address, and risk information
+model customers {
+  id                       String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  full_name                String         @db.VarChar(200)
+  father_or_husband_name   String?        @db.VarChar(200)
+  mobile                   String         @db.VarChar(15)
+  alternate_mobile         String?        @db.VarChar(15)
+  aadhaar_number_encrypted String         @db.VarChar(500)
+  aadhaar_last_four        String         @db.Char(4)
+  pan_number_encrypted     String?        @db.VarChar(500)
+  pan_last_four            String?        @db.Char(4)
+  dob                      DateTime?      @db.Date
+  age                      Int?
+  gender                   String         @db.VarChar(10)
+  occupation               String?        @db.VarChar(200)
+  monthly_income_paise     BigInt?
+  work_or_business_details String?
+  address_line1            String         @db.VarChar(500)
+  address_line2            String?        @db.VarChar(500)
+  city                     String         @db.VarChar(100)
+  district                 String         @db.VarChar(100)
+  state                    String         @db.VarChar(100)
+  pincode                  String         @db.Char(6)
+  risk_level               RiskLevel      @default(medium)
+  status                   CustomerStatus @default(active)
+  blacklist_reason         String?
+  blacklisted_at           DateTime?      @db.Timestamptz()
+  blacklisted_by           String?        @db.Uuid
+  assigned_officer_id      String?        @db.Uuid
+  photo_file_id            String?        @db.Uuid
+  notes                    String?
+  version                  Int            @default(1)
+  created_by               String         @db.Uuid
+  created_at               DateTime       @default(now()) @db.Timestamptz()
+  updated_at               DateTime       @updatedAt @db.Timestamptz()
+
+  // Relations
+  assigned_officer users?         @relation("assigned_officer", fields: [assigned_officer_id], references: [id])
+  blacklister      users?         @relation("customer_blacklisted_by", fields: [blacklisted_by], references: [id])
+  creator          users          @relation("customer_created_by", fields: [created_by], references: [id])
+  photo            file_metadata? @relation(fields: [photo_file_id], references: [id])
+
+  documents      customer_documents[]
+  family_members family_members[]
+  guarantors     guarantors[]
+  loans          loans[]
+  receipts       receipts[]
+  led_groups     groups[]             @relation("group_leader")
+  group_members  group_members[]
+
+  @@index([aadhaar_last_four], name: "idx_customers_aadhaar_last_four")
+  @@index([mobile], name: "idx_customers_mobile")
+  @@index([status], name: "idx_customers_status")
+  @@index([assigned_officer_id], name: "idx_customers_assigned_officer")
+  @@index([created_by], name: "idx_customers_created_by")
+}
+
+/// KYC and supporting documents for customers
+model customer_documents {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customer_id   String    @db.Uuid
+  document_type DocType
+  file_id       String    @db.Uuid
+  is_verified   Boolean   @default(false)
+  verified_by   String?   @db.Uuid
+  verified_at   DateTime? @db.Timestamptz()
+  is_active     Boolean   @default(true)
+  created_at    DateTime  @default(now()) @db.Timestamptz()
+
+  customer customers     @relation(fields: [customer_id], references: [id])
+  file     file_metadata @relation(fields: [file_id], references: [id])
+  verifier users?        @relation("doc_verified_by", fields: [verified_by], references: [id])
+
+  @@index([customer_id], name: "idx_customer_documents_customer_id")
+  @@index([document_type], name: "idx_customer_documents_type")
+}
+
+/// Family members of customers (for KYC/reference)
+model family_members {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customer_id         String   @db.Uuid
+  name                String   @db.VarChar(200)
+  relationship        String   @db.VarChar(50)
+  contact_number      String?  @db.VarChar(15)
+  occupation          String?  @db.VarChar(200)
+  income_contribution String?  @db.VarChar(200)
+  created_at          DateTime @default(now()) @db.Timestamptz()
+
+  customer customers @relation(fields: [customer_id], references: [id])
+
+  @@index([customer_id], name: "idx_family_members_customer_id")
+}
+
+/// Guarantors for customer loans
+model guarantors {
+  id                       String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customer_id              String   @db.Uuid
+  name                     String   @db.VarChar(200)
+  relationship             String   @db.VarChar(50)
+  mobile                   String   @db.VarChar(15)
+  aadhaar_number_encrypted String   @db.VarChar(500)
+  aadhaar_last_four        String   @db.Char(4)
+  address                  String
+  photo_file_id            String?  @db.Uuid
+  created_at               DateTime @default(now()) @db.Timestamptz()
+
+  customer customers      @relation(fields: [customer_id], references: [id])
+  photo    file_metadata? @relation(fields: [photo_file_id], references: [id])
+
+  @@index([customer_id], name: "idx_guarantors_customer_id")
+}
+
+/// Loan product definitions (versioned)
+model loan_products {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name               String   @unique @db.VarChar(200)
+  is_active          Boolean  @default(true)
+  current_version_id String?  @db.Uuid
+  created_by         String   @db.Uuid
+  created_at         DateTime @default(now()) @db.Timestamptz()
+  updated_at         DateTime @updatedAt @db.Timestamptz()
+
+  creator         users                   @relation(fields: [created_by], references: [id])
+  current_version loan_product_versions?  @relation("current_version", fields: [current_version_id], references: [id])
+  versions        loan_product_versions[] @relation("product_versions")
+
+  @@index([name], name: "idx_loan_products_name")
+  @@index([is_active], name: "idx_loan_products_is_active")
+}
+
+/// Immutable versioned configuration for loan products
+model loan_product_versions {
+  id                   String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  product_id           String       @db.Uuid
+  version_number       Int
+  interest_type        InterestType
+  annual_rate_bps      Int
+  min_principal_paise  BigInt
+  max_principal_paise  BigInt
+  min_tenure_months    Int
+  max_tenure_months    Int
+  repayment_frequency  Frequency
+  processing_fee_type  FeeType?
+  processing_fee_value Int?
+  penalty_grace_days   Int          @default(0)
+  penalty_type         PenaltyType?
+  penalty_value        Int?
+  penalty_frequency    Frequency?
+  max_concurrent_loans Int          @default(1)
+  allocation_order     Json         @default("[\"penalty\",\"interest\",\"principal\"]")
+  is_active            Boolean      @default(true)
+  created_at           DateTime     @default(now()) @db.Timestamptz()
+
+  product     loan_products   @relation("product_versions", fields: [product_id], references: [id])
+  current_for loan_products[] @relation("current_version")
+  loans       loans[]
+
+  @@unique([product_id, version_number], name: "idx_lpv_product_version")
+  @@index([product_id], name: "idx_lpv_product_id")
+}
+
+/// Loan applications and active loans
+model loans {
+  id                       String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  loan_number              String         @unique @db.VarChar(50)
+  customer_id              String         @db.Uuid
+  product_version_id       String         @db.Uuid
+  group_id                 String?        @db.Uuid
+  principal_paise          BigInt
+  tenure_months            Int
+  purpose                  String
+  status                   LoanStatus     @default(draft)
+  processing_fee_paise     BigInt?
+  total_interest_paise     BigInt?
+  total_payable_paise      BigInt?
+  cached_outstanding_paise BigInt?
+  disbursement_date        DateTime?      @db.Date
+  first_due_date           DateTime?      @db.Date
+  last_due_date            DateTime?      @db.Date
+  dpd                      Int            @default(0)
+  overdue_bucket           OverdueBucket?
+  created_by               String         @db.Uuid
+  approved_by              String?        @db.Uuid
+  version                  Int            @default(1)
+  created_at               DateTime       @default(now()) @db.Timestamptz()
+  updated_at               DateTime       @updatedAt @db.Timestamptz()
+
+  customer        customers             @relation(fields: [customer_id], references: [id])
+  product_version loan_product_versions @relation(fields: [product_version_id], references: [id])
+  group           groups?               @relation(fields: [group_id], references: [id])
+  creator         users                 @relation("loan_created_by", fields: [created_by], references: [id])
+  approver        users?                @relation("loan_approved_by", fields: [approved_by], references: [id])
+
+  approvals       loan_approvals[]
+  status_history  loan_status_history[]
+  schedules       loan_schedules[]
+  disbursements   disbursements[]
+  collections     collections[]
+  penalties       penalties[]
+  foreclosures    foreclosures[]
+  overdue_entries overdue_entries[]
+  receipts        receipts[]
+
+  @@index([customer_id], name: "idx_loans_customer_id")
+  @@index([status], name: "idx_loans_status")
+  @@index([group_id], name: "idx_loans_group_id")
+  @@index([product_version_id], name: "idx_loans_product_version_id")
+  @@index([created_by], name: "idx_loans_created_by")
+  @@index([dpd], name: "idx_loans_dpd")
+  @@index([overdue_bucket], name: "idx_loans_overdue_bucket")
+}
+
+/// Approval workflow entries for loans
+model loan_approvals {
+  id         String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  loan_id    String         @db.Uuid
+  action     ApprovalAction
+  actor_id   String         @db.Uuid
+  remarks    String?
+  created_at DateTime       @default(now()) @db.Timestamptz()
+
+  loan  loans @relation(fields: [loan_id], references: [id])
+  actor users @relation(fields: [actor_id], references: [id])
+
+  @@index([loan_id], name: "idx_loan_approvals_loan_id")
+  @@index([actor_id], name: "idx_loan_approvals_actor_id")
+}
+
+/// Immutable history of loan status transitions
+model loan_status_history {
+  id          String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  loan_id     String      @db.Uuid
+  from_status LoanStatus?
+  to_status   LoanStatus
+  changed_by  String      @db.Uuid
+  reason      String?
+  metadata    Json?
+  created_at  DateTime    @default(now()) @db.Timestamptz()
+
+  loan    loans @relation(fields: [loan_id], references: [id])
+  changer users @relation(fields: [changed_by], references: [id])
+
+  @@index([loan_id], name: "idx_loan_status_history_loan_id")
+  @@index([to_status], name: "idx_loan_status_history_to_status")
+  @@index([created_at], name: "idx_loan_status_history_created_at")
+}
+
+/// Repayment schedule installments for a loan
+model loan_schedules {
+  id                   String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  loan_id              String            @db.Uuid
+  installment_number   Int
+  due_date             DateTime          @db.Date
+  principal_paise      BigInt
+  interest_paise       BigInt
+  total_paise          BigInt
+  principal_paid_paise BigInt            @default(0)
+  interest_paid_paise  BigInt            @default(0)
+  penalty_paid_paise   BigInt            @default(0)
+  status               InstallmentStatus @default(pending)
+  version              Int               @default(1)
+  created_at           DateTime          @default(now()) @db.Timestamptz()
+  updated_at           DateTime          @updatedAt @db.Timestamptz()
+
+  loan                   loans                    @relation(fields: [loan_id], references: [id])
+  collection_allocations collection_allocations[]
+  penalties              penalties[]
+  overdue_entries        overdue_entries[]
+
+  @@unique([loan_id, installment_number], name: "idx_schedules_loan_installment")
+  @@index([loan_id], name: "idx_schedules_loan_id")
+  @@index([due_date], name: "idx_schedules_due_date")
+  @@index([status], name: "idx_schedules_status")
+}
+
+/// Disbursement records (one per loan, idempotent)
+model disbursements {
+  id               String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  loan_id          String      @db.Uuid
+  amount_paise     BigInt
+  mode             PaymentMode
+  reference_number String?     @db.VarChar(100)
+  disbursed_by     String      @db.Uuid
+  disbursed_at     DateTime    @db.Timestamptz()
+  journal_entry_id String      @db.Uuid
+  idempotency_key  String      @unique @db.VarChar(255)
+  created_at       DateTime    @default(now()) @db.Timestamptz()
+
+  loan              loans           @relation(fields: [loan_id], references: [id])
+  disbursed_by_user users           @relation(fields: [disbursed_by], references: [id])
+  journal_entry     journal_entries @relation(fields: [journal_entry_id], references: [id])
+
+  @@index([loan_id], name: "idx_disbursements_loan_id")
+}
+
+/// Collection (payment) records — append-only, reversals are separate records
+model collections {
+  id                     String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  loan_id                String           @db.Uuid
+  amount_paise           BigInt
+  payment_date           DateTime         @db.Date
+  payment_mode           PaymentMode
+  status                 CollectionStatus @default(posted)
+  is_reversal            Boolean          @default(false)
+  original_collection_id String?          @db.Uuid
+  reversal_reason        String?
+  collected_by           String           @db.Uuid
+  journal_entry_id       String           @db.Uuid
+  receipt_id             String?          @db.Uuid
+  idempotency_key        String           @unique @db.VarChar(255)
+  created_at             DateTime         @default(now()) @db.Timestamptz()
+
+  loan                    loans                    @relation(fields: [loan_id], references: [id])
+  collector               users                    @relation(fields: [collected_by], references: [id])
+  journal_entry           journal_entries          @relation(fields: [journal_entry_id], references: [id])
+  original_collection     collections?             @relation("collection_reversal", fields: [original_collection_id], references: [id])
+  reversals               collections[]            @relation("collection_reversal")
+  allocations             collection_allocations[]
+  receipts                receipts[]
+  foreclosure_settlements foreclosures[]
+
+  @@index([loan_id], name: "idx_collections_loan_id")
+  @@index([payment_date], name: "idx_collections_payment_date")
+  @@index([status], name: "idx_collections_status")
+  @@index([original_collection_id], name: "idx_collections_original_collection_id")
+}
+
+/// Allocation breakdown of a collection across installments
+model collection_allocations {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  collection_id   String   @db.Uuid
+  installment_id  String   @db.Uuid
+  penalty_paise   BigInt   @default(0)
+  interest_paise  BigInt   @default(0)
+  principal_paise BigInt   @default(0)
+  total_paise     BigInt
+  created_at      DateTime @default(now()) @db.Timestamptz()
+
+  collection  collections    @relation(fields: [collection_id], references: [id])
+  installment loan_schedules @relation(fields: [installment_id], references: [id])
+
+  @@index([collection_id], name: "idx_allocations_collection_id")
+  @@index([installment_id], name: "idx_allocations_installment_id")
+}
+
+/// Immutable receipt snapshots — content never modified after creation
+model receipts {
+  id                        String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  receipt_number            String        @unique @db.VarChar(50)
+  collection_id             String        @db.Uuid
+  loan_id                   String        @db.Uuid
+  customer_id               String        @db.Uuid
+  amount_paise              BigInt
+  payment_date              DateTime      @db.Date
+  payment_mode              PaymentMode
+  penalty_component_paise   BigInt        @default(0)
+  interest_component_paise  BigInt        @default(0)
+  principal_component_paise BigInt        @default(0)
+  outstanding_after_paise   BigInt
+  officer_name              String        @db.VarChar(200)
+  customer_name             String        @db.VarChar(200)
+  loan_number               String        @db.VarChar(50)
+  status                    ReceiptStatus @default(active)
+  compensating_receipt_id   String?       @db.Uuid
+  is_reversal               Boolean       @default(false)
+  original_receipt_id       String?       @db.Uuid
+  created_at                DateTime      @default(now()) @db.Timestamptz()
+
+  collection           collections @relation(fields: [collection_id], references: [id])
+  loan                 loans       @relation(fields: [loan_id], references: [id])
+  customer             customers   @relation(fields: [customer_id], references: [id])
+  compensating_receipt receipts?   @relation("receipt_compensation", fields: [compensating_receipt_id], references: [id])
+  compensated_by       receipts[]  @relation("receipt_compensation")
+  original_receipt     receipts?   @relation("receipt_reversal", fields: [original_receipt_id], references: [id])
+  reversal_receipts    receipts[]  @relation("receipt_reversal")
+
+  @@index([collection_id], name: "idx_receipts_collection_id")
+  @@index([loan_id], name: "idx_receipts_loan_id")
+  @@index([customer_id], name: "idx_receipts_customer_id")
+  @@index([payment_date], name: "idx_receipts_payment_date")
+}
+
+/// Penalty records — append-only, waivers tracked in-place
+model penalties {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  loan_id             String   @db.Uuid
+  installment_id      String   @db.Uuid
+  amount_paise        BigInt
+  penalty_period      String   @db.VarChar(20)
+  calculation_details Json
+  is_paid             Boolean  @default(false)
+  is_waived           Boolean  @default(false)
+  waived_by           String?  @db.Uuid
+  waiver_approved_by  String?  @db.Uuid
+  waived_reason       String?
+  journal_entry_id    String   @db.Uuid
+  created_at          DateTime @default(now()) @db.Timestamptz()
+
+  loan            loans           @relation(fields: [loan_id], references: [id])
+  installment     loan_schedules  @relation(fields: [installment_id], references: [id])
+  waiver_user     users?          @relation("penalty_waived_by", fields: [waived_by], references: [id])
+  waiver_approver users?          @relation("penalty_waiver_approved_by", fields: [waiver_approved_by], references: [id])
+  journal_entry   journal_entries @relation(fields: [journal_entry_id], references: [id])
+
+  @@unique([loan_id, installment_id, penalty_period], name: "idx_penalties_unique_period")
+  @@index([loan_id], name: "idx_penalties_loan_id")
+  @@index([installment_id], name: "idx_penalties_installment_id")
+}
+
+/// Foreclosure quotes and settlements
+model foreclosures {
+  id                          String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  loan_id                     String            @db.Uuid
+  outstanding_principal_paise BigInt
+  accrued_interest_paise      BigInt
+  pending_penalties_paise     BigInt
+  rebate_paise                BigInt            @default(0)
+  settlement_amount_paise     BigInt
+  rebate_reason               String?
+  rebate_authorized_by        String?           @db.Uuid
+  requested_by                String            @db.Uuid
+  approved_by                 String?           @db.Uuid
+  collection_id               String?           @db.Uuid
+  status                      ForeclosureStatus @default(quote)
+  quote_expires_at            DateTime          @db.Timestamptz()
+  created_at                  DateTime          @default(now()) @db.Timestamptz()
+  settled_at                  DateTime?         @db.Timestamptz()
+
+  loan              loans        @relation(fields: [loan_id], references: [id])
+  requester         users        @relation("foreclosure_requested_by", fields: [requested_by], references: [id])
+  approver          users?       @relation("foreclosure_approved_by", fields: [approved_by], references: [id])
+  rebate_authorizer users?       @relation("foreclosure_rebate_auth", fields: [rebate_authorized_by], references: [id])
+  settlement        collections? @relation(fields: [collection_id], references: [id])
+
+  @@index([loan_id], name: "idx_foreclosures_loan_id")
+  @@index([status], name: "idx_foreclosures_status")
+}
+
+/// Daily overdue snapshots for DPD tracking and reporting
+model overdue_entries {
+  id                      String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  loan_id                 String        @db.Uuid
+  installment_id          String?       @db.Uuid
+  recorded_date           DateTime      @db.Date
+  dpd                     Int
+  overdue_bucket          OverdueBucket
+  overdue_principal_paise BigInt
+  overdue_interest_paise  BigInt
+  created_at              DateTime      @default(now()) @db.Timestamptz()
+
+  loan        loans           @relation(fields: [loan_id], references: [id])
+  installment loan_schedules? @relation(fields: [installment_id], references: [id])
+
+  @@index([loan_id], name: "idx_overdue_entries_loan_id")
+  @@index([recorded_date], name: "idx_overdue_entries_date")
+  @@index([overdue_bucket], name: "idx_overdue_entries_bucket")
+}
+
+/// Group lending groups
+model groups {
+  id          String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String      @db.VarChar(200)
+  meeting_day DayOfWeek
+  branch_area String      @db.VarChar(200)
+  leader_id   String      @db.Uuid
+  status      GroupStatus @default(active)
+  created_by  String      @db.Uuid
+  created_at  DateTime    @default(now()) @db.Timestamptz()
+  updated_at  DateTime    @updatedAt @db.Timestamptz()
+
+  leader            customers           @relation("group_leader", fields: [leader_id], references: [id])
+  creator           users               @relation(fields: [created_by], references: [id])
+  members           group_members[]
+  loans             loans[]
+  group_collections group_collections[]
+
+  @@index([status], name: "idx_groups_status")
+  @@index([leader_id], name: "idx_groups_leader_id")
+  @@index([branch_area], name: "idx_groups_branch_area")
+}
+
+/// Group membership tracking
+model group_members {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  group_id    String    @db.Uuid
+  customer_id String    @db.Uuid
+  joined_at   DateTime  @default(now()) @db.Timestamptz()
+  left_at     DateTime? @db.Timestamptz()
+  is_active   Boolean   @default(true)
+
+  group    groups    @relation(fields: [group_id], references: [id])
+  customer customers @relation(fields: [customer_id], references: [id])
+
+  @@index([group_id], name: "idx_group_members_group_id")
+  @@index([customer_id], name: "idx_group_members_customer_id")
+}
+
+/// Group-level collection records
+model group_collections {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  group_id           String   @db.Uuid
+  total_amount_paise BigInt
+  collection_date    DateTime @db.Date
+  collected_by       String   @db.Uuid
+  idempotency_key    String   @unique @db.VarChar(255)
+  member_breakdown   Json
+  created_at         DateTime @default(now()) @db.Timestamptz()
+
+  group     groups @relation(fields: [group_id], references: [id])
+  collector users  @relation(fields: [collected_by], references: [id])
+
+  @@index([group_id], name: "idx_group_collections_group_id")
+  @@index([collection_date], name: "idx_group_collections_date")
+}
+
+/// Chart of accounts for double-entry bookkeeping
+model chart_of_accounts {
+  id         String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code       String          @unique @db.VarChar(20)
+  name       String          @db.VarChar(200)
+  category   AccountCategory
+  parent_id  String?         @db.Uuid
+  is_system  Boolean         @default(false)
+  is_active  Boolean         @default(true)
+  created_at DateTime        @default(now()) @db.Timestamptz()
+
+  parent        chart_of_accounts?  @relation("account_hierarchy", fields: [parent_id], references: [id])
+  children      chart_of_accounts[] @relation("account_hierarchy")
+  journal_lines journal_lines[]
+
+  @@index([category], name: "idx_coa_category")
+  @@index([parent_id], name: "idx_coa_parent_id")
+}
+
+/// Journal entries for double-entry accounting — immutable after creation
+model journal_entries {
+  id                 String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  entry_date         DateTime          @db.Date
+  description        String
+  source_type        JournalSourceType
+  source_id          String            @db.Uuid
+  total_debit_paise  BigInt
+  total_credit_paise BigInt
+  created_by         String            @db.Uuid
+  created_at         DateTime          @default(now()) @db.Timestamptz()
+
+  creator       users           @relation(fields: [created_by], references: [id])
+  lines         journal_lines[]
+  disbursements disbursements[]
+  collections   collections[]
+  penalties     penalties[]
+  expenses      expenses[]
+
+  @@index([entry_date], name: "idx_je_entry_date")
+  @@index([source_type, source_id], name: "idx_je_source")
+  @@index([source_type], name: "idx_je_source_type")
+}
+
+/// Individual debit/credit lines within a journal entry
+model journal_lines {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  journal_entry_id String   @db.Uuid
+  account_id       String   @db.Uuid
+  debit_paise      BigInt   @default(0)
+  credit_paise     BigInt   @default(0)
+  created_at       DateTime @default(now()) @db.Timestamptz()
+
+  journal_entry journal_entries   @relation(fields: [journal_entry_id], references: [id])
+  account       chart_of_accounts @relation(fields: [account_id], references: [id])
+
+  @@index([journal_entry_id], name: "idx_jl_journal_entry_id")
+  @@index([account_id], name: "idx_jl_account_id")
+}
+
+/// Cash transaction ledger for cashbook
+model cash_transactions {
+  id               String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  transaction_date DateTime     @db.Date
+  type             CashTxType
+  category         CashCategory
+  amount_paise     BigInt
+  description      String
+  source_type      String?      @db.VarChar(50)
+  source_id        String?      @db.Uuid
+  recorded_by      String       @db.Uuid
+  created_at       DateTime     @default(now()) @db.Timestamptz()
+
+  recorder users @relation(fields: [recorded_by], references: [id])
+
+  @@index([transaction_date], name: "idx_cash_tx_date")
+  @@index([type], name: "idx_cash_tx_type")
+  @@index([category], name: "idx_cash_tx_category")
+}
+
+/// Cash handover records between officers
+model cash_handover_records {
+  id                       String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  collection_officer_id    String             @db.Uuid
+  receiving_officer_id     String             @db.Uuid
+  handover_date            DateTime           @db.Date
+  total_amount_paise       BigInt
+  verification_status      VerificationStatus @default(pending)
+  discrepancy_amount_paise BigInt?
+  discrepancy_notes        String?
+  verified_at              DateTime?          @db.Timestamptz()
+  created_at               DateTime           @default(now()) @db.Timestamptz()
+
+  collection_officer users @relation("handover_officer", fields: [collection_officer_id], references: [id])
+  receiving_officer  users @relation("handover_receiver", fields: [receiving_officer_id], references: [id])
+
+  @@index([collection_officer_id], name: "idx_handover_officer")
+  @@index([handover_date], name: "idx_handover_date")
+  @@index([verification_status], name: "idx_handover_status")
+}
+
+/// Expense records with journal entry linkage
+model expenses {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  category         String   @db.VarChar(100)
+  amount_paise     BigInt
+  expense_date     DateTime @db.Date
+  description      String
+  document_file_id String?  @db.Uuid
+  journal_entry_id String   @db.Uuid
+  recorded_by      String   @db.Uuid
+  created_at       DateTime @default(now()) @db.Timestamptz()
+
+  document      file_metadata?  @relation(fields: [document_file_id], references: [id])
+  journal_entry journal_entries @relation(fields: [journal_entry_id], references: [id])
+  recorder      users           @relation(fields: [recorded_by], references: [id])
+
+  @@index([expense_date], name: "idx_expenses_date")
+  @@index([category], name: "idx_expenses_category")
+}
+
+/// Outbox messages for async SMS/notification dispatch
+model outbox_messages {
+  id                String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  event_type        NotificationEvent
+  recipient_mobile  String            @db.VarChar(15)
+  template_id       String?           @db.Uuid
+  message_body      String
+  variables         Json
+  status            OutboxStatus      @default(pending)
+  retry_count       Int               @default(0)
+  max_retries       Int               @default(3)
+  next_retry_at     DateTime?         @db.Timestamptz()
+  provider_response Json?
+  source_type       String            @db.VarChar(50)
+  source_id         String            @db.Uuid
+  created_at        DateTime          @default(now()) @db.Timestamptz()
+  processed_at      DateTime?         @db.Timestamptz()
+
+  template sms_templates? @relation(fields: [template_id], references: [id])
+
+  @@index([status], name: "idx_outbox_status")
+  @@index([next_retry_at], name: "idx_outbox_next_retry")
+  @@index([source_type, source_id], name: "idx_outbox_source")
+}
+
+/// SMS message templates with variable placeholders
+model sms_templates {
+  id            String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  event_type    NotificationEvent
+  language      String            @default("en") @db.VarChar(10)
+  template_body String
+  is_active     Boolean           @default(true)
+  created_at    DateTime          @default(now()) @db.Timestamptz()
+  updated_at    DateTime          @updatedAt @db.Timestamptz()
+
+  outbox_messages outbox_messages[]
+
+  @@unique([event_type, language], name: "idx_sms_templates_event_lang")
+}
+
+/// Append-only audit log — no UPDATE or DELETE permitted
+model audit_logs {
+  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  action_type   AuditAction
+  actor_id      String      @db.Uuid
+  actor_role    UserRole
+  target_entity String      @db.VarChar(50)
+  target_id     String      @db.Uuid
+  ip_address    String      @db.VarChar(45)
+  request_id    String      @db.Uuid
+  before_state  Json?
+  after_state   Json?
+  remarks       String?
+  approval_id   String?     @db.Uuid
+  created_at    DateTime    @default(now()) @db.Timestamptz()
+
+  actor users @relation(fields: [actor_id], references: [id])
+
+  @@index([target_entity, target_id], name: "idx_audit_target")
+  @@index([actor_id], name: "idx_audit_actor")
+  @@index([action_type], name: "idx_audit_action_type")
+  @@index([created_at], name: "idx_audit_created_at")
+  @@index([request_id], name: "idx_audit_request_id")
+}
+
+/// System configuration key-value store
+model settings {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  key         String   @unique @db.VarChar(100)
+  value       Json
+  description String?
+  updated_by  String?  @db.Uuid
+  updated_at  DateTime @updatedAt @db.Timestamptz()
+
+  updater users? @relation(fields: [updated_by], references: [id])
+}
+
+/// Idempotency key store for duplicate request prevention
+model idempotency_keys {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  key            String   @unique @db.VarChar(255)
+  operation_type String   @db.VarChar(50)
+  result_status  Int
+  result_body    Json
+  created_at     DateTime @default(now()) @db.Timestamptz()
+  expires_at     DateTime @db.Timestamptz()
+
+  @@index([expires_at], name: "idx_idempotency_expires")
+}
+
+/// File/document metadata for S3-stored objects
+model file_metadata {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  original_filename String   @db.VarChar(500)
+  stored_filename   String   @db.VarChar(500)
+  mime_type         String   @db.VarChar(100)
+  size_bytes        Int
+  bucket            String   @db.VarChar(100)
+  key               String   @db.VarChar(500)
+  uploaded_by       String   @db.Uuid
+  is_active         Boolean  @default(true)
+  created_at        DateTime @default(now()) @db.Timestamptz()
+
+  uploader           users                @relation(fields: [uploaded_by], references: [id])
+  customer_photos    customers[]
+  customer_documents customer_documents[]
+  guarantor_photos   guarantors[]
+  expense_documents  expenses[]
+
+  @@index([key], name: "idx_file_metadata_key")
+  @@index([uploaded_by], name: "idx_file_metadata_uploaded_by")
+}

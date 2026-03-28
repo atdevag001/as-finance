@@ -1,0 +1,61 @@
+import { describe, it, expect } from 'vitest';
+import { Decimal } from 'decimal.js';
+import { paiseToDec, decToPaise, formatINR } from '../money.js';
+
+describe('paiseToDec', () => {
+  it('converts 100 paise to 1.00 rupee', () => {
+    expect(paiseToDec(100).equals(new Decimal('1'))).toBe(true);
+  });
+
+  it('converts 12345 paise to 123.45 rupees', () => {
+    expect(paiseToDec(12345).equals(new Decimal('123.45'))).toBe(true);
+  });
+
+  it('converts 0 paise to 0 rupees', () => {
+    expect(paiseToDec(0).equals(new Decimal('0'))).toBe(true);
+  });
+});
+
+describe('decToPaise', () => {
+  it('converts 1.00 rupee to 100 paise', () => {
+    expect(decToPaise(new Decimal('1'))).toBe(100);
+  });
+
+  it('converts 123.45 rupees to 12345 paise', () => {
+    expect(decToPaise(new Decimal('123.45'))).toBe(12345);
+  });
+
+  it('rounds half-up: 1.005 rupees → 101 paise', () => {
+    expect(decToPaise(new Decimal('1.005'))).toBe(101);
+  });
+
+  it('rounds half-up: 1.004 rupees → 100 paise', () => {
+    expect(decToPaise(new Decimal('1.004'))).toBe(100);
+  });
+});
+
+describe('formatINR', () => {
+  it('formats small amount: 100 paise → ₹1.00', () => {
+    expect(formatINR(100)).toBe('₹1.00');
+  });
+
+  it('formats with Indian comma grouping: 12345678 paise → ₹1,23,456.78', () => {
+    expect(formatINR(12345678)).toBe('₹1,23,456.78');
+  });
+
+  it('formats zero: 0 paise → ₹0.00', () => {
+    expect(formatINR(0)).toBe('₹0.00');
+  });
+
+  it('formats amount under 1000 rupees: 99999 paise → ₹999.99', () => {
+    expect(formatINR(99999)).toBe('₹999.99');
+  });
+
+  it('formats large amount: 1000000000 paise → ₹1,00,00,000.00', () => {
+    expect(formatINR(1000000000)).toBe('₹1,00,00,000.00');
+  });
+
+  it('formats negative amount: -12345678 paise → -₹1,23,456.78', () => {
+    expect(formatINR(-12345678)).toBe('-₹1,23,456.78');
+  });
+});
