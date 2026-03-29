@@ -12,19 +12,19 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 interface CashbookSummary {
   date: string;
-  openingBalancePaise: number;
-  totalCollectionsPaise: number;
-  totalDisbursementsPaise: number;
-  totalExpensesPaise: number;
-  closingBalancePaise: number;
-  transactions: { id: string; type: string; description: string; amountPaise: number; time: string }[];
+  openingBalancePaise: string;
+  cashInflowsPaise: string;
+  cashOutflowsPaise: string;
+  closingBalancePaise: string;
+  hasDiscrepancy: boolean;
+  transactionCount: number;
 }
 
 export default function CashbookPage() {
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const { data, isLoading, error } = useQuery<CashbookSummary>({
     queryKey: ['cashbook', date],
-    queryFn: () => apiClient.get(`/cashbook?date=${date}`),
+    queryFn: () => apiClient.get(`/cashbook/daily-summary?date=${date}`),
   });
 
   return (
@@ -45,36 +45,17 @@ export default function CashbookPage() {
       {data && (
         <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <SummaryCard title="Opening" paise={data.openingBalancePaise} />
-            <SummaryCard title="Collections" paise={data.totalCollectionsPaise} />
-            <SummaryCard title="Disbursements" paise={data.totalDisbursementsPaise} />
-            <SummaryCard title="Closing" paise={data.closingBalancePaise} />
+            <SummaryCard title="Opening" paise={Number(data.openingBalancePaise)} />
+            <SummaryCard title="Inflows" paise={Number(data.cashInflowsPaise)} />
+            <SummaryCard title="Outflows" paise={Number(data.cashOutflowsPaise)} />
+            <SummaryCard title="Closing" paise={Number(data.closingBalancePaise)} />
           </div>
 
-          <div className="overflow-x-auto rounded-lg border">
-            <table className="w-full text-sm">
-              <thead className="border-b bg-muted/50">
-                <tr>
-                  <th className="px-4 py-3 text-left font-medium">Time</th>
-                  <th className="px-4 py-3 text-left font-medium">Type</th>
-                  <th className="px-4 py-3 text-left font-medium">Description</th>
-                  <th className="px-4 py-3 text-right font-medium">Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.transactions.map((tx) => (
-                  <tr key={tx.id} className="border-b last:border-0">
-                    <td className="px-4 py-3">{tx.time}</td>
-                    <td className="px-4 py-3 capitalize">{tx.type.replace(/_/g, ' ')}</td>
-                    <td className="px-4 py-3">{tx.description}</td>
-                    <td className="px-4 py-3 text-right"><MoneyDisplay paise={tx.amountPaise} /></td>
-                  </tr>
-                ))}
-                {data.transactions.length === 0 && (
-                  <tr><td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">No transactions for this date.</td></tr>
-                )}
-              </tbody>
-            </table>
+          <div className="rounded-lg border p-4 text-sm text-muted-foreground">
+            {data.transactionCount} transaction(s) on {data.date}
+            {data.hasDiscrepancy && (
+              <span className="ml-2 text-destructive font-medium">⚠ Discrepancy detected</span>
+            )}
           </div>
         </>
       )}

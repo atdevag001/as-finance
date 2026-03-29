@@ -5,42 +5,40 @@ import { apiClient } from '@/lib/api-client';
 
 export interface Collection {
   id: string;
-  loanId: string;
-  loanNumber?: string;
-  customerName?: string;
-  amountPaise: number;
-  paymentDate: string;
-  paymentMode: string;
+  loan_id: string;
+  loan_number?: string;
+  customer_name?: string;
+  amount_paise: number;
+  payment_date: string;
+  payment_mode: string;
   status: string;
-  receiptId?: string;
-  collectedBy?: string;
-  createdAt: string;
+  receipt_id?: string;
+  collected_by?: string;
+  created_at: string;
+  loan?: { loan_number: string; customer?: { full_name: string } };
 }
 
 export interface Receipt {
   id: string;
-  receiptNumber: string;
-  collectionId: string;
-  customerName: string;
-  loanNumber: string;
-  amountPaise: number;
-  principalPaise: number;
-  interestPaise: number;
-  penaltyPaise: number;
-  outstandingAfterPaise: number;
-  officerName: string;
-  paymentMode: string;
-  paymentDate: string;
+  receipt_number: string;
+  collection_id: string;
+  customer_name: string;
+  loan_number: string;
+  amount_paise: number;
+  principal_paise: number;
+  interest_paise: number;
+  penalty_paise: number;
+  outstanding_after_paise: number;
+  officer_name: string;
+  payment_mode: string;
+  payment_date: string;
   status: string;
-  createdAt: string;
+  created_at: string;
 }
 
 interface PaginatedResult<T> {
   data: T[];
   total: number;
-  page: number;
-  pageSize: number;
-  totalPages: number;
 }
 
 export function useCollections(params: { page?: number; loanId?: string } = {}) {

@@ -40,12 +40,12 @@ export default function CollectionsPage() {
               <tbody>
                 {data.data.map((c) => (
                   <tr key={c.id} className="border-b last:border-0 hover:bg-muted/30">
-                    <td className="px-4 py-3 font-medium">{c.loanNumber ?? c.loanId.slice(0, 8)}</td>
-                    <td className="px-4 py-3 hidden sm:table-cell">{c.customerName ?? '—'}</td>
-                    <td className="px-4 py-3 text-right"><MoneyDisplay paise={c.amountPaise} /></td>
-                    <td className="px-4 py-3 hidden md:table-cell capitalize">{c.paymentMode.replace(/_/g, ' ')}</td>
+                    <td className="px-4 py-3 font-medium">{c.loan?.loan_number ?? c.loan_id.slice(0, 8)}</td>
+                    <td className="px-4 py-3 hidden sm:table-cell">{c.loan?.customer?.full_name ?? '—'}</td>
+                    <td className="px-4 py-3 text-right"><MoneyDisplay paise={Number(c.amount_paise)} /></td>
+                    <td className="px-4 py-3 hidden md:table-cell capitalize">{c.payment_mode.replace(/_/g, ' ')}</td>
                     <td className="px-4 py-3"><StatusBadge status={c.status} type="collection" /></td>
-                    <td className="px-4 py-3 hidden md:table-cell">{c.paymentDate}</td>
+                    <td className="px-4 py-3 hidden md:table-cell">{String(c.payment_date).slice(0, 10)}</td>
                   </tr>
                 ))}
                 {data.data.length === 0 && (

@@ -10,14 +10,16 @@ import { Button } from '@/components/ui/button';
 
 interface Handover {
   id: string;
-  officerName: string;
-  amountPaise: number;
-  date: string;
+  officer_name?: string;
+  officer_id?: string;
+  amount_paise: number;
+  handover_date?: string;
+  created_at: string;
   status: string;
-  verifiedBy?: string;
+  verified_by?: string;
 }
 
-interface PaginatedResult { data: Handover[]; total: number; page: number; pageSize: number; totalPages: number; }
+interface PaginatedResult { data: Handover[]; total: number; }
 
 export default function HandoversPage() {
   const [page, setPage] = useState(1);
@@ -51,9 +53,9 @@ export default function HandoversPage() {
               <tbody>
                 {data.data.map((h) => (
                   <tr key={h.id} className="border-b last:border-0">
-                    <td className="px-4 py-3">{h.officerName}</td>
-                    <td className="px-4 py-3 text-right"><MoneyDisplay paise={h.amountPaise} /></td>
-                    <td className="px-4 py-3">{h.date}</td>
+                    <td className="px-4 py-3">{h.officer_name ?? h.officer_id?.slice(0, 8) ?? '—'}</td>
+                    <td className="px-4 py-3 text-right"><MoneyDisplay paise={Number(h.amount_paise)} /></td>
+                    <td className="px-4 py-3">{(h.handover_date ?? h.created_at)?.slice(0, 10)}</td>
                     <td className="px-4 py-3">
                       <StatusBadge status={h.status === 'verified' ? 'active' : h.status === 'pending' ? 'draft' : h.status} type="loan" label={h.status} />
                     </td>

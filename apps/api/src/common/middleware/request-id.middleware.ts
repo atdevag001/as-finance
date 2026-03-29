@@ -10,9 +10,9 @@ export interface RequestContext {
 /** Singleton async local storage for request-scoped context (e.g., requestId for logging). */
 export const requestContextStorage = new AsyncLocalStorage<RequestContext>();
 
-/** Convenience accessor — returns the current requestId or 'unknown'. */
+/** Convenience accessor — returns the current requestId or generates a new UUID fallback. */
 export function getRequestId(): string {
-  return requestContextStorage.getStore()?.requestId ?? 'unknown';
+  return requestContextStorage.getStore()?.requestId ?? randomUUID();
 }
 
 /**

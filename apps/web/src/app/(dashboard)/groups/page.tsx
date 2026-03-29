@@ -8,8 +8,8 @@ import { apiClient } from '@/lib/api-client';
 import { StatusBadge, LoadingSpinner, ErrorMessage, PaginationControls } from '@/components/shared';
 import { Button } from '@/components/ui/button';
 
-interface Group { id: string; name: string; status: string; memberCount: number; meetingDay?: string; createdAt: string; }
-interface PaginatedResult { data: Group[]; total: number; page: number; pageSize: number; totalPages: number; }
+interface Group { id: string; name: string; status: string; member_count?: number; memberCount?: number; meeting_day?: string; meetingDay?: string; created_at: string; }
+interface PaginatedResult { data: Group[]; total: number; }
 
 export default function GroupsPage() {
   const [page, setPage] = useState(1);
@@ -46,8 +46,8 @@ export default function GroupsPage() {
                     <td className="px-4 py-3">
                       <Link href={`/groups/${g.id}`} className="font-medium text-primary hover:underline">{g.name}</Link>
                     </td>
-                    <td className="px-4 py-3 text-right">{g.memberCount}</td>
-                    <td className="px-4 py-3 hidden sm:table-cell capitalize">{g.meetingDay ?? '—'}</td>
+                    <td className="px-4 py-3 text-right">{g.member_count ?? g.memberCount ?? 0}</td>
+                    <td className="px-4 py-3 hidden sm:table-cell capitalize">{g.meeting_day ?? g.meetingDay ?? '—'}</td>
                     <td className="px-4 py-3">
                       <StatusBadge status={g.status === 'active' ? 'active' : g.status === 'dissolved' ? 'closed' : 'draft'} type="loan" label={g.status} />
                     </td>

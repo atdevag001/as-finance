@@ -50,6 +50,21 @@ const LOAN_DETAIL_SELECT = {
       max_concurrent_loans: true,
     },
   },
+  schedules: {
+    select: {
+      id: true,
+      installment_number: true,
+      due_date: true,
+      principal_paise: true,
+      interest_paise: true,
+      total_paise: true,
+      principal_paid_paise: true,
+      interest_paid_paise: true,
+      penalty_paid_paise: true,
+      status: true,
+    },
+    orderBy: { installment_number: 'asc' as const },
+  },
   approvals: {
     select: {
       id: true,

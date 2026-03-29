@@ -8,16 +8,16 @@ import { Input } from '@/components/ui/input';
 
 interface AuditLog {
   id: string;
-  actionType: string;
-  actorName: string;
-  actorRole: string;
-  targetEntity: string;
-  targetId: string;
-  timestamp: string;
+  action_type: string;
+  actor_id: string;
+  actor_role: string;
+  target_entity: string;
+  target_id: string;
+  created_at: string;
   remarks?: string;
 }
 
-interface PaginatedResult { data: AuditLog[]; total: number; page: number; pageSize: number; totalPages: number; }
+interface PaginatedResult { data: AuditLog[]; total: number; }
 
 export default function AuditPage() {
   const [page, setPage] = useState(1);
@@ -61,15 +61,15 @@ export default function AuditPage() {
               <tbody>
                 {data.data.map((log) => (
                   <tr key={log.id} className="border-b last:border-0">
-                    <td className="px-4 py-3 whitespace-nowrap">{new Date(log.timestamp).toLocaleString('en-IN')}</td>
-                    <td className="px-4 py-3 capitalize">{log.actionType.replace(/_/g, ' ')}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">{new Date(log.created_at).toLocaleString('en-IN')}</td>
+                    <td className="px-4 py-3 capitalize">{log.action_type.replace(/_/g, ' ')}</td>
                     <td className="px-4 py-3 hidden sm:table-cell">
-                      <span>{log.actorName}</span>
-                      <span className="ml-1 text-xs text-muted-foreground">({log.actorRole.replace(/_/g, ' ')})</span>
+                      <span>{log.actor_id.slice(0, 8)}</span>
+                      <span className="ml-1 text-xs text-muted-foreground">({log.actor_role.replace(/_/g, ' ')})</span>
                     </td>
                     <td className="px-4 py-3 hidden md:table-cell">
-                      <span className="capitalize">{log.targetEntity.replace(/_/g, ' ')}</span>
-                      <span className="ml-1 text-xs text-muted-foreground">{log.targetId.slice(0, 8)}</span>
+                      <span className="capitalize">{log.target_entity.replace(/_/g, ' ')}</span>
+                      <span className="ml-1 text-xs text-muted-foreground">{log.target_id.slice(0, 8)}</span>
                     </td>
                     <td className="px-4 py-3 hidden lg:table-cell text-muted-foreground">{log.remarks ?? '—'}</td>
                   </tr>

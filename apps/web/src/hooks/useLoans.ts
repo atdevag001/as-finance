@@ -27,7 +27,7 @@ export interface LoanDetail extends Loan {
   last_due_date?: string;
   created_by: string;
   approved_by?: string;
-  schedule: Installment[];
+  schedules: Installment[];
 }
 
 export interface Installment {
