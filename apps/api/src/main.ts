@@ -7,6 +7,11 @@ import helmet from 'helmet';
 import { AppModule } from './app.module.js';
 import { validateEnv } from './config/env.validation.js';
 
+// Enable BigInt JSON serialization (Prisma returns BigInt for paise fields)
+(BigInt.prototype as unknown as { toJSON: () => number }).toJSON = function () {
+  return Number(this);
+};
+
 async function bootstrap() {
   // Fail-fast: validate environment before anything else
   const env = validateEnv();

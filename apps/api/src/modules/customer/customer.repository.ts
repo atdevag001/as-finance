@@ -286,7 +286,11 @@ export class CustomerRepository {
     remarks?: string;
   }) {
     return this.prisma['audit_logs'].create({
-      data: data as never,
+      data: {
+        ...data,
+        ip_address: data.ip_address ?? '0.0.0.0',
+        request_id: data.request_id ?? '00000000-0000-0000-0000-000000000000',
+      } as never,
     });
   }
 }

@@ -244,12 +244,62 @@ export class LoanRepository {
     actor_role: string;
     target_entity: string;
     target_id: string;
+    ip_address?: string;
+    request_id?: string;
     before_state?: unknown;
     after_state?: unknown;
     remarks?: string;
   }) {
     return this.prisma['audit_logs'].create({
-      data: data as never,
+      data: {
+        ...data,
+        ip_address: data.ip_address ?? '0.0.0.0',
+        request_id: data.request_id ?? '00000000-0000-0000-0000-000000000000',
+      } as never,
+    });
+  }
+
+  /**
+   * Persist generated schedule installments for a loan.
+   */
+  async createScheduleInstallments(
+    loanId: string,
+    installments: Array<{
+      installmentNumber: number;
+      dueDate: Date;
+      principalPaise: number;
+      interestPaise: number;
+      totalPaise: number;
+    }>,
+  ) {
+    for (const inst of installments) {
+      await this.prisma['loan_schedules'].create({
+        data: {
+          loan_id: loanId,
+          installment_number: inst.installmentNumber,
+          due_date: inst.dueDate,
+          principal_paise: inst.principalPaise,
+          interest_paise: inst.interestPaise,
+          total_paise: inst.totalPaise,
+          principal_paid_paise: 0,
+          interest_paid_paise: 0,
+          penalty_paid_paise: 0,
+          status: 'pending',
+        } as never,
+      });
+    }
+  }
+
+  /**
+   * Update loan with total interest and total payable amounts.
+   */
+  async updateLoanTotals(loanId: string, totalInterestPaise: number, totalPayablePaise: number) {
+    return this.prisma['loans'].update({
+      where: { id: loanId },
+      data: {
+        total_interest_paise: totalInterestPaise,
+        total_payable_paise: totalPayablePaise,
+      },
     });
   }
 

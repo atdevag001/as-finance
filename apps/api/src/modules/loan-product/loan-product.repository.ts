@@ -247,9 +247,15 @@ export class LoanProductRepository {
     before_state?: unknown;
     after_state?: unknown;
     remarks?: string;
+    ip_address?: string;
+    request_id?: string;
   }) {
     return this.prisma['audit_logs'].create({
-      data: data as never,
+      data: {
+        ...data,
+        ip_address: data.ip_address ?? '0.0.0.0',
+        request_id: data.request_id ?? '00000000-0000-0000-0000-000000000000',
+      } as never,
     });
   }
 }

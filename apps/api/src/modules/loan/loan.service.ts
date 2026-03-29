@@ -5,6 +5,7 @@ import { ApproveLoanDto } from './dto/approve-loan.dto';
 import { RejectLoanDto } from './dto/reject-loan.dto';
 import { LoanQueryDto } from './dto/loan-query.dto';
 import { BusinessRuleError, NotFoundError } from '../../common/errors';
+import { generateSchedule, type ScheduleParams } from '../schedule/schedule.service';
 
 /**
  * Allowed loan status transitions matrix.
@@ -319,6 +320,30 @@ export class LoanService {
     const updated = await this.loanRepository.updateStatus(loanId, 'approved', {
       approved_by: actorId,
     });
+
+    // Generate and persist the EMI schedule
+    if (loan.product_version) {
+      const pv = loan.product_version;
+      const schedule = generateSchedule({
+        principalPaise: Number(loan.principal_paise),
+        annualRateBps: pv.annual_rate_bps,
+        tenureMonths: loan.tenure_months,
+        interestType: pv.interest_type,
+        frequency: pv.repayment_frequency,
+        startDate: new Date(),
+        holidays: [],
+      } as ScheduleParams);
+
+      // Calculate total interest and total payable
+      const totalInterestPaise = schedule.reduce((sum, inst) => sum + inst.interestPaise, 0);
+      const totalPayablePaise = Number(loan.principal_paise) + totalInterestPaise;
+
+      // Persist schedule installments
+      await this.loanRepository.createScheduleInstallments(loanId, schedule);
+
+      // Update loan with total interest and total payable
+      await this.loanRepository.updateLoanTotals(loanId, totalInterestPaise, totalPayablePaise);
+    }
 
     await this.loanRepository.createStatusHistory({
       loan_id: loanId,

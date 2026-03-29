@@ -342,7 +342,7 @@ This plan implements the AS Finance LMS as a pnpm monorepo with a NestJS backend
     - Create DTOs: `DisburseDto`
     - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 3.5a, 12.4_
 
-- [ ] 17. Collection and allocation engine
+- [x] 17. Collection and allocation engine
   - [x] 17.1 Implement allocation engine (pure function)
     - Create `apps/api/src/modules/collection/allocation-engine.ts`
     - Implement `allocate(params: AllocationParams): AllocationResult` — pure function that takes payment amount, installment states (ordered by due date), pending penalties (ordered by date), and allocation order
@@ -397,7 +397,7 @@ This plan implements the AS Finance LMS as a pnpm monorepo with a NestJS backend
     - Use 1000 iterations (critical finance property)
     - **Validates: Requirements 6.12, 25.8**
 
-- [ ] 18. Collection reversal module
+- [x] 18. Collection reversal module
   - [x] 18.1 Implement reversal module (compensating entries, schedule rollback, ledger mirror)
     - Create `apps/api/src/modules/reversal/reversal.module.ts`, `reversal.service.ts`, `reversal.controller.ts`
     - Implement `POST /reversals` — require original collection ref, mandatory reason, Manager/Super_Admin role; execute atomically within `prisma.$transaction()`:
@@ -425,7 +425,7 @@ This plan implements the AS Finance LMS as a pnpm monorepo with a NestJS backend
     - File: `apps/api/src/modules/reversal/__tests__/reversal.property.spec.ts`
     - **Validates: Requirements 7.5, 7.6**
 
-- [ ] 19. Overdue tracking and penalty module
+- [x] 19. Overdue tracking and penalty module
   - [x] 19.1 Implement penalty module (overdue tracking, DPD calculation, penalty posting)
     - Create `apps/api/src/modules/penalty/penalty.module.ts`, `penalty.service.ts`, `penalty.controller.ts`, `penalty.repository.ts`
     - Implement DPD calculation: calendar days since earliest unpaid installment due date
@@ -447,7 +447,7 @@ This plan implements the AS Finance LMS as a pnpm monorepo with a NestJS backend
     - File: `apps/api/src/modules/penalty/__tests__/overdue.property.spec.ts`
     - **Validates: Requirements 8.5**
 
-- [ ] 20. Foreclosure module
+- [x] 20. Foreclosure module
   - [x] 20.1 Implement foreclosure module (quote, approval, settlement)
     - Create `apps/api/src/modules/foreclosure/foreclosure.module.ts`, `foreclosure.service.ts`, `foreclosure.controller.ts`
     - Implement `POST /foreclosures/quote` — calculate settlement: outstanding principal + accrued interest (pro-rata for flat, daily accrual for reducing balance) + pending penalties − rebate; itemize each component; create foreclosure record (status=quote, quote_expires_at=now+24h)
@@ -466,7 +466,7 @@ This plan implements the AS Finance LMS as a pnpm monorepo with a NestJS backend
     - File: `apps/api/src/modules/foreclosure/__tests__/foreclosure.property.spec.ts`
     - **Validates: Requirements 9.1, 9.2**
 
-- [ ] 21. Loan closure module
+- [x] 21. Loan closure module
   - [x] 21.1 Implement loan closure logic within loan service
     - Implement `POST /loans/:id/close` — verify prerequisites: all installments fully paid, all penalties settled or waived, no pending reversals, outstanding balance == 0 (or within 1 paisa tolerance)
     - Reject closure with typed error listing unmet prerequisites
@@ -478,7 +478,7 @@ This plan implements the AS Finance LMS as a pnpm monorepo with a NestJS backend
   - Ensure disbursement, collection, allocation, reversal, penalty, foreclosure, and closure flows work end-to-end. Verify atomic transactions (no partial state on failure), idempotency, ledger balance, outstanding accuracy. All property tests pass. Ask the user if questions arise.
 
 
-- [ ] 23. Group loan management module
+- [x] 23. Group loan management module
   - [x] 23.1 Implement group module (CRUD, member management, group collections)
     - Create `apps/api/src/modules/group/group.module.ts`, `group.service.ts`, `group.controller.ts`, `group.repository.ts`
     - Implement `POST /groups` — require group name, meeting day, branch/area, group leader (must be a customer); enforce group size 5-15 members
@@ -499,7 +499,7 @@ This plan implements the AS Finance LMS as a pnpm monorepo with a NestJS backend
     - File: `apps/api/src/modules/group/__tests__/group.property.spec.ts`
     - **Validates: Requirements 11.5**
 
-- [ ] 24. Cashbook and expense management module
+- [x] 24. Cashbook and expense management module
   - [x] 24.1 Implement cashbook module (expenses, handovers, daily reconciliation)
     - Create `apps/api/src/modules/cashbook/cashbook.module.ts`, `cashbook.service.ts`, `cashbook.controller.ts`, `cashbook.repository.ts`
     - Implement `POST /cashbook/expenses` — require category, amount (paise), date, description, optional document ref; create expense record and corresponding journal entry (DR Expense, CR Cash/Bank) atomically; create audit log
@@ -515,7 +515,7 @@ This plan implements the AS Finance LMS as a pnpm monorepo with a NestJS backend
     - File: `apps/api/src/modules/cashbook/__tests__/cashbook.property.spec.ts`
     - **Validates: Requirements 13.5, 25.11**
 
-- [ ] 25. Notification module (SMS outbox)
+- [x] 25. Notification module (SMS outbox)
   - [x] 25.1 Implement notification module (outbox pattern, SMS dispatch, retry)
     - Create `apps/api/src/modules/notification/notification.module.ts`, `notification.service.ts`, `notification.controller.ts`
     - Implement `enqueue(dto, tx?)` — create outbox message within the same database transaction as the finance operation; message includes event_type, recipient_mobile, rendered message body, template variables snapshot
@@ -537,14 +537,14 @@ This plan implements the AS Finance LMS as a pnpm monorepo with a NestJS backend
     - File: `apps/api/src/modules/notification/__tests__/notification.property.spec.ts`
     - **Validates: Requirements 18.5**
 
-- [ ] 26. Settings module (system settings, holiday calendar)
+- [x] 26. Settings module (system settings, holiday calendar)
   - [x] 26.1 Implement settings module
     - Create `apps/api/src/modules/settings/settings.module.ts`, `settings.service.ts`, `settings.controller.ts`
     - Implement `GET /settings`, `PATCH /settings/:key` (super_admin only)
     - Implement `GET /settings/holidays` and `PUT /settings/holidays` — manage holiday calendar as JSON array of ISO date strings
     - _Requirements: 4.8_
 
-- [ ] 27. Report module
+- [x] 27. Report module
   - [x] 27.1 Implement report module (20+ report types, RBAC-scoped, export)
     - Create `apps/api/src/modules/report/report.module.ts`, `report.service.ts`, `report.controller.ts`, `report.repository.ts`
     - Implement `GET /reports/:reportType` — support all 20 report types from design: Daily Collection, Overdue, Disbursement, Loan Portfolio, Customer, Repayment Schedule, Receipt Register, Cash Handover, Expense, Income, Trial Balance, P&L, Balance Sheet, Group Summary, Group Collection, Penalty, Foreclosure, Audit Trail, DPD Aging, Officer Performance
@@ -558,7 +558,7 @@ This plan implements the AS Finance LMS as a pnpm monorepo with a NestJS backend
   - Ensure group collections work with member-wise allocation and individual receipts, cashbook reconciliation is accurate, outbox pattern dispatches SMS without affecting finance transactions, all report types generate with correct RBAC scoping, export works. All property tests pass. Ask the user if questions arise.
 
 
-- [ ] 29. Next.js frontend scaffolding and shared UI
+- [x] 29. Next.js frontend scaffolding and shared UI
   - [x] 29.1 Initialize Next.js application in `apps/web`
     - Create `apps/web/package.json` with Next.js 14+, Tailwind CSS, shadcn/ui, React Hook Form, Zod, TanStack Query dependencies
     - Create `apps/web/tsconfig.json` extending shared config
@@ -580,7 +580,7 @@ This plan implements the AS Finance LMS as a pnpm monorepo with a NestJS backend
     - Create shared UI components: `StatusBadge` (loan status, overdue highlighting by DPD bucket), `MoneyDisplay` (INR formatting with Indian comma grouping), `ConfirmDialog` (for destructive/finance-affecting actions), `LoadingSpinner`, `ErrorMessage`, `PaginationControls`
     - _Requirements: 23.2, 23.3, 23.5, 23.6_
 
-- [ ] 30. Frontend — Customer management screens
+- [x] 30. Frontend — Customer management screens
   - [x] 30.1 Implement customer list and detail pages
     - Create `apps/web/src/app/(dashboard)/customers/page.tsx` — paginated customer list with search, risk level filter, status badges
     - Create `apps/web/src/app/(dashboard)/customers/[id]/page.tsx` — customer detail with KYC docs, family members, guarantors, loan history, Aadhaar masked display (XXXX-XXXX-1234)
@@ -588,7 +588,7 @@ This plan implements the AS Finance LMS as a pnpm monorepo with a NestJS backend
     - Create hooks: `useCustomers`, `useCustomer`, `useCreateCustomer`
     - _Requirements: 1.1, 1.2, 1.10, 23.9_
 
-- [ ] 31. Frontend — Loan management screens
+- [x] 31. Frontend — Loan management screens
   - [x] 31.1 Implement loan list, detail, and application pages
     - Create `apps/web/src/app/(dashboard)/loans/page.tsx` — paginated loan list with status filter, overdue highlighting (color-coded by DPD bucket), status badges
     - Create `apps/web/src/app/(dashboard)/loans/[id]/page.tsx` — loan detail with schedule view, collection history, allocation breakdown, outstanding balance, DPD/bucket display
@@ -597,7 +597,7 @@ This plan implements the AS Finance LMS as a pnpm monorepo with a NestJS backend
     - Create hooks: `useLoans`, `useLoan`, `useCreateLoan`, `useLoanActions`
     - _Requirements: 3.1, 3.2, 23.3, 23.4, 23.6_
 
-- [ ] 32. Frontend — Collection and receipt screens
+- [x] 32. Frontend — Collection and receipt screens
   - [x] 32.1 Implement collection posting and receipt screens
     - Create `apps/web/src/app/(dashboard)/collections/page.tsx` — collection list with date filter, officer filter
     - Create `apps/web/src/app/(dashboard)/collections/new/page.tsx` — collection posting form: loan selection, amount input (paise), payment date, payment mode; confirmation dialog before submission; generate idempotency key client-side; display allocation breakdown and receipt on success; no optimistic UI
@@ -607,7 +607,7 @@ This plan implements the AS Finance LMS as a pnpm monorepo with a NestJS backend
     - Create hooks: `useCollections`, `usePostCollection`, `useReceipt`
     - _Requirements: 6.1, 19.1, 19.5, 23.1, 23.2, 23.3, 23.4, 23.8_
 
-- [ ] 33. Frontend — Accounting, cashbook, and group screens
+- [x] 33. Frontend — Accounting, cashbook, and group screens
   - [x] 33.1 Implement accounting screens
     - Create `apps/web/src/app/(dashboard)/accounting/page.tsx` — chart of accounts view, daybook, journal entry list
     - Create `apps/web/src/app/(dashboard)/accounting/trial-balance/page.tsx`
@@ -627,7 +627,7 @@ This plan implements the AS Finance LMS as a pnpm monorepo with a NestJS backend
     - Create `apps/web/src/app/(dashboard)/groups/[id]/collect/page.tsx` — group collection form with member-wise breakdown input, total validation, confirmation dialog
     - _Requirements: 11.4, 11.8_
 
-- [ ] 34. Frontend — Dashboard, reports, and admin screens
+- [x] 34. Frontend — Dashboard, reports, and admin screens
   - [x] 34.1 Implement dashboard
     - Create `apps/web/src/app/(dashboard)/page.tsx` — KPI dashboard: total active loans count/value, total outstanding, today's collection target/actual, overdue portfolio by bucket, disbursements this month, collection efficiency percentage
     - Role-scoped data display
@@ -648,7 +648,7 @@ This plan implements the AS Finance LMS as a pnpm monorepo with a NestJS backend
   - Ensure all pages render correctly, auth flow works (login/logout/refresh), RBAC hides unauthorized elements, collection posting flow works end-to-end with receipt generation, mobile-responsive design verified, confirmation dialogs on finance actions, no optimistic UI for finance mutations. Ask the user if questions arise.
 
 
-- [ ] 36. Concurrency safety and data integrity hardening
+- [x] 36. Concurrency safety and data integrity hardening
   - [x] 36.1 Implement optimistic locking on loan and installment records
     - Add version check to all loan and installment update operations using `updateMany` with `where: { id, version: expectedVersion }` pattern
     - Return typed `CONFLICT_OPTIMISTIC_LOCK` error on stale version with retry guidance
@@ -663,7 +663,7 @@ This plan implements the AS Finance LMS as a pnpm monorepo with a NestJS backend
     - Configure rate limiting: 10 req/min per IP on auth endpoints, 100 req/min per authenticated user on API endpoints, 20 uploads/min per user, 5 report generations/min per user
     - _Requirements: 22.5_
 
-- [ ] 37. Security hardening
+- [x] 37. Security hardening
   - [x] 37.1 Implement security headers and IDOR prevention
     - Set CSP headers on Next.js responses
     - Implement SameSite cookie attributes and CSRF protection
@@ -678,7 +678,7 @@ This plan implements the AS Finance LMS as a pnpm monorepo with a NestJS backend
     - Store with randomized filenames, separate bucket prefixes
     - _Requirements: 22.4_
 
-- [ ] 38. OpenAPI documentation and environment validation
+- [x] 38. OpenAPI documentation and environment validation
   - [x] 38.1 Configure Swagger/OpenAPI auto-generation
     - Set up NestJS Swagger module with decorators on all controllers
     - Generate OpenAPI spec automatically
@@ -690,7 +690,7 @@ This plan implements the AS Finance LMS as a pnpm monorepo with a NestJS backend
     - Separate configs for development, test, production
     - _Requirements: 24.2_
 
-- [ ] 39. Integration tests for critical finance flows
+- [x] 39. Integration tests for critical finance flows
   - [x] 39.1 Write integration tests for loan lifecycle flow
     - Test: customer creation → loan application → submission → review → approval (maker-checker) → disbursement → active status
     - Verify schedule generation, journal entries, audit logs at each step
@@ -727,7 +727,7 @@ This plan implements the AS Finance LMS as a pnpm monorepo with a NestJS backend
     - Test: finance transaction enqueues outbox message → processor dispatches → SMS failure does not roll back finance transaction
     - _Requirements: 18.2, 18.4_
 
-- [ ] 40. Concurrency and negative tests
+- [x] 40. Concurrency and negative tests
   - [x] 40.1 Write concurrency tests
     - Test double-click payment submit (idempotency verification)
     - Test concurrent collection posting on same loan (serialization)

@@ -3,7 +3,6 @@
   "version": "0.1.0",
   "private": true,
   "description": "AS Finance LMS — NestJS backend API",
-  "type": "module",
   "scripts": {
     "build": "nest build",
     "dev": "nest start --watch",
@@ -45,7 +44,7 @@
     "zod": "^3.23.0"
   },
   "prisma": {
-    "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"
+    "seed": "npx tsx prisma/seed.ts"
   },
   "devDependencies": {
     "@as-finance/config": "workspace:*",
