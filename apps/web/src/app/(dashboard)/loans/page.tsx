@@ -52,13 +52,13 @@ export default function LoansPage() {
                 {data.data.map((l) => (
                   <tr key={l.id} className="border-b last:border-0 hover:bg-muted/30">
                     <td className="px-4 py-3">
-                      <Link href={`/loans/${l.id}`} className="font-medium text-primary hover:underline">{l.loanNumber}</Link>
+                      <Link href={`/loans/${l.id}`} className="font-medium text-primary hover:underline">{l.loan_number}</Link>
                     </td>
-                    <td className="px-4 py-3 hidden sm:table-cell">{l.customerName ?? '—'}</td>
-                    <td className="px-4 py-3 text-right"><MoneyDisplay paise={l.principalPaise} /></td>
+                    <td className="px-4 py-3 hidden sm:table-cell">{l.customer?.full_name ?? '—'}</td>
+                    <td className="px-4 py-3 text-right"><MoneyDisplay paise={l.principal_paise} /></td>
                     <td className="px-4 py-3"><StatusBadge status={l.status} type="loan" /></td>
                     <td className="px-4 py-3 text-right hidden md:table-cell">
-                      {l.cachedOutstandingPaise != null ? <MoneyDisplay paise={l.cachedOutstandingPaise} /> : '—'}
+                      {l.cached_outstanding_paise != null ? <MoneyDisplay paise={l.cached_outstanding_paise} /> : '—'}
                     </td>
                   </tr>
                 ))}
@@ -68,7 +68,7 @@ export default function LoansPage() {
               </tbody>
             </table>
           </div>
-          <PaginationControls page={page} totalPages={data.totalPages} onPageChange={setPage} />
+          <PaginationControls page={page} totalPages={Math.ceil((data.total || 0) / 20)} onPageChange={setPage} />
         </>
       )}
     </div>

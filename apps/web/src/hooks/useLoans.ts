@@ -5,55 +5,54 @@ import { apiClient } from '@/lib/api-client';
 
 export interface Loan {
   id: string;
-  loanNumber: string;
-  customerId: string;
-  customerName?: string;
-  principalPaise: number;
-  tenureMonths: number;
+  loan_number: string;
+  customer_id: string;
+  customer?: { full_name: string };
+  principal_paise: number;
+  tenure_months: number;
   status: string;
   dpd: number;
-  overdueBucket?: string;
-  cachedOutstandingPaise?: number;
-  disbursementDate?: string;
-  createdAt: string;
+  overdue_bucket?: string;
+  cached_outstanding_paise?: number;
+  disbursement_date?: string;
+  created_at: string;
 }
 
 export interface LoanDetail extends Loan {
   purpose: string;
-  totalInterestPaise?: number;
-  totalPayablePaise?: number;
-  processingFeePaise?: number;
-  firstDueDate?: string;
-  lastDueDate?: string;
-  createdBy: string;
-  approvedBy?: string;
+  total_interest_paise?: number;
+  total_payable_paise?: number;
+  processing_fee_paise?: number;
+  first_due_date?: string;
+  last_due_date?: string;
+  created_by: string;
+  approved_by?: string;
   schedule: Installment[];
 }
 
 export interface Installment {
   id: string;
-  installmentNumber: number;
-  dueDate: string;
-  principalPaise: number;
-  interestPaise: number;
-  totalPaise: number;
-  principalPaidPaise: number;
-  interestPaidPaise: number;
-  penaltyPaidPaise: number;
+  installment_number: number;
+  due_date: string;
+  principal_paise: number;
+  interest_paise: number;
+  total_paise: number;
+  principal_paid_paise: number;
+  interest_paid_paise: number;
+  penalty_paid_paise: number;
   status: string;
 }
 
 interface PaginatedResult<T> {
   data: T[];
   total: number;
-  page: number;
-  pageSize: number;
-  totalPages: number;
 }
 
 export function useLoans(params: { page?: number; status?: string } = {}) {
   const { page = 1, status } = params;
-  const query = new URLSearchParams({ page: String(page), pageSize: '20' });
+  const pageSize = 20;
+  const skip = (page - 1) * pageSize;
+  const query = new URLSearchParams({ skip: String(skip), take: String(pageSize) });
   if (status) query.set('status', status);
 
   return useQuery<PaginatedResult<Loan>>({

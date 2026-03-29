@@ -24,7 +24,7 @@ export default function AuditPage() {
   const [entity, setEntity] = useState('');
   const [startDate, setStartDate] = useState('');
 
-  const query = new URLSearchParams({ page: String(page), pageSize: '20' });
+  const query = new URLSearchParams({ skip: String((page - 1) * 20), take: '20' });
   if (entity) query.set('targetEntity', entity);
   if (startDate) query.set('startDate', startDate);
 
@@ -80,7 +80,7 @@ export default function AuditPage() {
               </tbody>
             </table>
           </div>
-          <PaginationControls page={page} totalPages={data.totalPages} onPageChange={setPage} />
+          <PaginationControls page={page} totalPages={Math.ceil((data.total || 0) / 20)} onPageChange={setPage} />
         </>
       )}
     </div>

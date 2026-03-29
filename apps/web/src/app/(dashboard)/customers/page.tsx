@@ -52,7 +52,7 @@ export default function CustomersPage() {
                   <tr key={c.id} className="border-b last:border-0 hover:bg-muted/30">
                     <td className="px-4 py-3">
                       <Link href={`/customers/${c.id}`} className="font-medium text-primary hover:underline">
-                        {c.fullName}
+                        {c.full_name}
                       </Link>
                     </td>
                     <td className="px-4 py-3 hidden sm:table-cell">{c.mobile}</td>
@@ -66,7 +66,7 @@ export default function CustomersPage() {
               </tbody>
             </table>
           </div>
-          <PaginationControls page={page} totalPages={data.totalPages} onPageChange={setPage} />
+          <PaginationControls page={page} totalPages={Math.ceil((data.total || 0) / 20)} onPageChange={setPage} />
         </>
       )}
     </div>

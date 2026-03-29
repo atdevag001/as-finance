@@ -5,46 +5,45 @@ import { apiClient } from '@/lib/api-client';
 
 export interface Customer {
   id: string;
-  fullName: string;
+  full_name: string;
   mobile: string;
-  aadhaarLastFour: string;
+  aadhaar_last_four: string;
   city: string;
   district: string;
   status: string;
-  riskLevel: string;
-  assignedOfficerId?: string;
-  createdAt: string;
+  risk_level: string;
+  assigned_officer_id?: string;
+  created_at: string;
 }
 
 export interface CustomerDetail extends Customer {
-  fatherOrHusbandName?: string;
-  alternateMobile?: string;
-  panLastFour?: string;
+  father_or_husband_name?: string;
+  alternate_mobile?: string;
+  pan_last_four?: string;
   dob?: string;
   age?: number;
   gender: string;
   occupation?: string;
-  monthlyIncomePaise?: number;
-  addressLine1: string;
-  addressLine2?: string;
+  monthly_income_paise?: number;
+  address_line1: string;
+  address_line2?: string;
   state: string;
   pincode: string;
   notes?: string;
-  familyMembers: { id: string; name: string; relationship: string; contactNumber?: string }[];
+  family_members: { id: string; name: string; relationship: string; contact_number?: string }[];
   guarantors: { id: string; name: string; relationship: string; mobile: string }[];
 }
 
 interface PaginatedResult<T> {
   data: T[];
   total: number;
-  page: number;
-  pageSize: number;
-  totalPages: number;
 }
 
 export function useCustomers(params: { page?: number; search?: string; status?: string } = {}) {
   const { page = 1, search, status } = params;
-  const query = new URLSearchParams({ page: String(page), pageSize: '20' });
+  const pageSize = 20;
+  const skip = (page - 1) * pageSize;
+  const query = new URLSearchParams({ skip: String(skip), take: String(pageSize) });
   if (search) query.set('search', search);
   if (status) query.set('status', status);
 

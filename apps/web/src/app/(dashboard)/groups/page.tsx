@@ -15,7 +15,7 @@ export default function GroupsPage() {
   const [page, setPage] = useState(1);
   const { data, isLoading, error } = useQuery<PaginatedResult>({
     queryKey: ['groups', page],
-    queryFn: () => apiClient.get(`/groups?page=${page}&pageSize=20`),
+    queryFn: () => apiClient.get(`/groups?skip=${(page - 1) * 20}&take=20`),
   });
 
   return (
@@ -59,7 +59,7 @@ export default function GroupsPage() {
               </tbody>
             </table>
           </div>
-          <PaginationControls page={page} totalPages={data.totalPages} onPageChange={setPage} />
+          <PaginationControls page={page} totalPages={Math.ceil((data.total || 0) / 20)} onPageChange={setPage} />
         </>
       )}
     </div>

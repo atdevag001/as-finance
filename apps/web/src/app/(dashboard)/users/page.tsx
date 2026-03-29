@@ -6,14 +6,14 @@ import { apiClient } from '@/lib/api-client';
 import { StatusBadge, LoadingSpinner, ErrorMessage, PaginationControls } from '@/components/shared';
 import { Button } from '@/components/ui/button';
 
-interface User { id: string; username: string; fullName: string; role: string; mobile: string; isActive: boolean; lastLoginAt?: string; }
-interface PaginatedResult { data: User[]; total: number; page: number; pageSize: number; totalPages: number; }
+interface User { id: string; username: string; full_name: string; role: string; mobile: string; is_active: boolean; last_login_at?: string; }
+interface PaginatedResult { data: User[]; total: number; }
 
 export default function UsersPage() {
   const [page, setPage] = useState(1);
   const { data, isLoading, error } = useQuery<PaginatedResult>({
     queryKey: ['users', page],
-    queryFn: () => apiClient.get(`/users?page=${page}&pageSize=20`),
+    queryFn: () => apiClient.get(`/users?skip=${(page - 1) * 20}&take=20`),
   });
 
   return (
@@ -41,12 +41,12 @@ export default function UsersPage() {
               <tbody>
                 {data.data.map((u) => (
                   <tr key={u.id} className="border-b last:border-0 hover:bg-muted/30">
-                    <td className="px-4 py-3 font-medium">{u.fullName}</td>
+                    <td className="px-4 py-3 font-medium">{u.full_name}</td>
                     <td className="px-4 py-3 hidden sm:table-cell">{u.username}</td>
                     <td className="px-4 py-3 capitalize">{u.role.replace(/_/g, ' ')}</td>
                     <td className="px-4 py-3 hidden md:table-cell">{u.mobile}</td>
                     <td className="px-4 py-3">
-                      <StatusBadge status={u.isActive ? 'active' : 'inactive'} type="customer" />
+                      <StatusBadge status={u.is_active ? 'active' : 'inactive'} type="customer" />
                     </td>
                   </tr>
                 ))}
@@ -56,7 +56,7 @@ export default function UsersPage() {
               </tbody>
             </table>
           </div>
-          <PaginationControls page={page} totalPages={data.totalPages} onPageChange={setPage} />
+          <PaginationControls page={page} totalPages={Math.ceil((data.total || 0) / 20)} onPageChange={setPage} />
         </>
       )}
     </div>

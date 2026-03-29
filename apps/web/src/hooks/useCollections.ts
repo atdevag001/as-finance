@@ -45,7 +45,9 @@ interface PaginatedResult<T> {
 
 export function useCollections(params: { page?: number; loanId?: string } = {}) {
   const { page = 1, loanId } = params;
-  const query = new URLSearchParams({ page: String(page), pageSize: '20' });
+  const pageSize = 20;
+  const skip = (page - 1) * pageSize;
+  const query = new URLSearchParams({ skip: String(skip), take: String(pageSize) });
   if (loanId) query.set('loanId', loanId);
 
   return useQuery<PaginatedResult<Collection>>({
