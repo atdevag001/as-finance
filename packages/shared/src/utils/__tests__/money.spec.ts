@@ -14,6 +14,20 @@ describe('paiseToDec', () => {
   it('converts 0 paise to 0 rupees', () => {
     expect(paiseToDec(0).equals(new Decimal('0'))).toBe(true);
   });
+
+  it('converts 1 paisa to 0.01 rupees', () => {
+    expect(paiseToDec(1).equals(new Decimal('0.01'))).toBe(true);
+  });
+
+  it('converts MAX_SAFE_INTEGER paise without precision loss', () => {
+    const maxSafe = Number.MAX_SAFE_INTEGER;
+    const result = paiseToDec(maxSafe);
+    expect(result.times(100).toNumber()).toBe(maxSafe);
+  });
+
+  it('converts negative paise correctly', () => {
+    expect(paiseToDec(-500).equals(new Decimal('-5'))).toBe(true);
+  });
 });
 
 describe('decToPaise', () => {
@@ -31,6 +45,18 @@ describe('decToPaise', () => {
 
   it('rounds half-up: 1.004 rupees → 100 paise', () => {
     expect(decToPaise(new Decimal('1.004'))).toBe(100);
+  });
+
+  it('converts 0 rupees to 0 paise', () => {
+    expect(decToPaise(new Decimal('0'))).toBe(0);
+  });
+
+  it('handles fractional amounts: 0.999 rupees → 100 paise (ROUND_HALF_UP)', () => {
+    expect(decToPaise(new Decimal('0.999'))).toBe(100);
+  });
+
+  it('handles very small fractional: 0.001 rupees → 0 paise', () => {
+    expect(decToPaise(new Decimal('0.001'))).toBe(0);
   });
 });
 
@@ -57,5 +83,13 @@ describe('formatINR', () => {
 
   it('formats negative amount: -12345678 paise → -₹1,23,456.78', () => {
     expect(formatINR(-12345678)).toBe('-₹1,23,456.78');
+  });
+
+  it('formats 1 paisa → ₹0.01', () => {
+    expect(formatINR(1)).toBe('₹0.01');
+  });
+
+  it('formats crore amount: 10000000000 paise → ₹10,00,00,000.00', () => {
+    expect(formatINR(10000000000)).toBe('₹10,00,00,000.00');
   });
 });

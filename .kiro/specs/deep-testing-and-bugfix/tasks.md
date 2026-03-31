@@ -43,7 +43,7 @@ This plan implements a comprehensive testing suite and bugfix workflow for the A
   - Ensure all tests pass, ask the user if questions arise.
 
 
-- [ ] 3. Phase 2 — Pure Function Unit Tests
+- [x] 3. Phase 2 — Pure Function Unit Tests
   - [x] 3.1 Write schedule generation unit tests in `apps/api/src/modules/schedule/__tests__/schedule.service.spec.ts`
     - Test `generateFlatSchedule()` for monthly, weekly, daily frequencies with known expected outputs
     - Test `generateReducingBalanceSchedule()` for monthly, weekly, daily frequencies with known expected outputs
@@ -99,7 +99,7 @@ This plan implements a comprehensive testing suite and bugfix workflow for the A
   - Ensure all tests pass, ask the user if questions arise.
 
 
-- [ ] 5. Phase 3 — Pure Function Property-Based Tests
+- [x] 5. Phase 3 — Pure Function Property-Based Tests
   - [x] 5.1 Write schedule generation PBTs in `apps/api/src/modules/schedule/__tests__/schedule.property.spec.ts`
     - **Property 1: Schedule Reconciliation — sum of all installment principal components equals loan principal**
     - **Property 2: Interest Reconciliation — sum of all installment interest components equals total interest**
@@ -171,7 +171,7 @@ This plan implements a comprehensive testing suite and bugfix workflow for the A
   - Ensure all tests pass, ask the user if questions arise.
 
 
-- [ ] 7. Phase 4 — Service Unit Tests (All 21 Backend Services)
+- [x] 7. Phase 4 — Service Unit Tests (All 21 Backend Services)
   - [x] 7.1 Write collection service unit tests in `apps/api/src/modules/collection/__tests__/collection.service.spec.ts`
     - Test `postCollection()`, `validateLoanStatus()`, `computeOutstanding()`, `buildJournalLines()`, `buildAllocationRecords()`, `updateInstallments()`, `computeDpdAndBucket()`
     - Test rejection for non-active/non-overdue loans, excess amount handling
@@ -290,27 +290,27 @@ This plan implements a comprehensive testing suite and bugfix workflow for the A
   - Ensure all tests pass, ask the user if questions arise.
 
 
-- [ ] 9. Phase 5 — Service Property-Based Tests
-  - [~] 9.1 Write reversal PBTs in `apps/api/src/modules/reversal/__tests__/reversal.property.spec.ts`
+- [x] 9. Phase 5 — Service Property-Based Tests
+  - [x] 9.1 Write reversal PBTs in `apps/api/src/modules/reversal/__tests__/reversal.property.spec.ts`
     - **Property 30: Mirror Journal — reversal journal entry is exact mirror (debits↔credits) of original**
     - **Property 31: Net Zero Ledger — net ledger effect of original + reversal = zero per account**
     - **Property 32: Installment Restoration — after reversal, paid amounts return to pre-collection values**
     - Minimum 1000 examples per property
     - **Validates: Requirements 8.1, 8.2, 8.3, 8.4**
 
-  - [~] 9.2 Write audit PBTs in `apps/api/src/modules/audit/__tests__/audit.property.spec.ts`
+  - [x] 9.2 Write audit PBTs in `apps/api/src/modules/audit/__tests__/audit.property.spec.ts`
     - **Property 33: Append-Only — audit log count never decreases after any operation**
     - **Property 34: Valid Action Types — every audit log entry has a valid AuditAction enum value**
     - Minimum 100 examples per property
     - **Validates: Requirements 34.1, 34.2, 34.3**
 
-  - [~] 9.3 Write idempotency PBTs in `apps/api/src/modules/idempotency/__tests__/idempotency.property.spec.ts`
+  - [x] 9.3 Write idempotency PBTs in `apps/api/src/modules/idempotency/__tests__/idempotency.property.spec.ts`
     - **Property 35: Idempotence — storing same key twice returns original cached result (f(x) = f(f(x)))**
     - **Property 36: Operation Independence — different operation types stored independently**
     - Minimum 100 examples per property
     - **Validates: Requirements 36.1, 36.2, 36.3**
 
-  - [~] 9.4 Write RBAC PBTs in `apps/api/src/common/guards/__tests__/rbac.property.spec.ts`
+  - [x] 9.4 Write RBAC PBTs in `apps/api/src/common/guards/__tests__/rbac.property.spec.ts`
     - **Property 37: No Orphaned Permissions — every permission has at least one role with access**
     - **Property 38: Super Admin Full Access — super_admin has access to every permission**
     - **Property 39: Viewer Read-Only — viewer_auditor has only read-level access**
@@ -318,39 +318,39 @@ This plan implements a comprehensive testing suite and bugfix workflow for the A
     - Minimum 100 examples per property
     - **Validates: Requirements 38.1, 38.2, 38.3, 38.4, 38.5**
 
-  - [~] 9.5 Write group collection PBTs in `apps/api/src/modules/group/__tests__/group.property.spec.ts`
+  - [x] 9.5 Write group collection PBTs in `apps/api/src/modules/group/__tests__/group.property.spec.ts`
     - Property tests for group collection batch consistency
     - **Validates: Requirements 28.4, 29.1**
 
-- [ ] 10. Phase 6 — Common Module Tests
-  - [~] 10.1 Write global exception filter tests in `apps/api/src/common/filters/__tests__/global-exception.filter.spec.ts`
+- [x] 10. Phase 6 — Common Module Tests
+  - [x] 10.1 Write global exception filter tests in `apps/api/src/common/filters/__tests__/global-exception.filter.spec.ts`
     - Test BusinessRuleError→422, NotFoundError→404, AuthorizationError→401/403, ValidationError→400, ConflictError→409, unhandled→500 (safe message), requestId in all responses
     - Mock: ArgumentsHost
     - _Requirements: 48.1–48.7_
 
-  - [~] 10.2 Write request ID middleware tests in `apps/api/src/common/middleware/__tests__/request-id.middleware.spec.ts`
+  - [x] 10.2 Write request ID middleware tests in `apps/api/src/common/middleware/__tests__/request-id.middleware.spec.ts`
     - Test UUID generation when none provided, use provided valid x-request-id, reject invalid x-request-id, availability to downstream handlers
     - Mock: Request, Response, NextFunction
     - _Requirements: 49.1–49.4_
 
-  - [~] 10.3 Write RBAC guard unit tests in `apps/api/src/common/guards/__tests__/rbac.guard.spec.ts`
+  - [x] 10.3 Write RBAC guard unit tests in `apps/api/src/common/guards/__tests__/rbac.guard.spec.ts`
     - Test allow when role in allowed roles, deny with ForbiddenException, open endpoints without @RequirePermission, unknown permission denial, missing role denial
     - Mock: Reflector, ExecutionContext
     - _Requirements: 37.1–37.5_
 
-  - [~] 10.4 Write JWT auth guard tests in `apps/api/src/common/guards/__tests__/jwt-auth.guard.spec.ts`
+  - [x] 10.4 Write JWT auth guard tests in `apps/api/src/common/guards/__tests__/jwt-auth.guard.spec.ts`
     - Test valid token acceptance, expired token rejection, tampered token rejection, missing token rejection
     - Mock: JwtService, ExecutionContext
     - _Requirements: 44.2, 44.3_
 
-  - [~] 10.5 Write throttler guard tests
+  - [x] 10.5 Write throttler guard tests
     - Test `getTracker()` returns user sub when
  JWT present, falls back to IP, returns 'unknown' when neither available
     - Test `throwThrottlingException()` throws ThrottlerException with correct message
     - Mock: ExecutionContext
     - _Requirements: 69.1–69.4_
 
-  - [~] 10.6 Write audit interceptor tests
+  - [x] 10.6 Write audit interceptor tests
     - Test logging of requestId, actorId, actorRole, method, URL, IP, duration for success/failure
     - Test anonymous request logging (actorId='anonymous', actorRole='unknown')
     - Test pass-through behavior (no request/response modification)
@@ -358,29 +358,29 @@ This plan implements a comprehensive testing suite and bugfix workflow for the A
     - Mock: ExecutionContext, CallHandler
     - _Requirements: 68.1–68.5_
 
-  - [~] 10.7 Write environment validation tests in `apps/api/src/config/__tests__/env.validation.spec.ts`
+  - [x] 10.7 Write environment validation tests in `apps/api/src/config/__tests__/env.validation.spec.ts`
     - Test missing DATABASE_URL, invalid DATABASE_URL, missing JWT_SECRET, short JWT_SECRET
     - Test optional fields (S3_ENDPOINT, SMS_API_KEY) don't cause failure
     - Test default values: JWT_EXPIRY='15m', REFRESH_TOKEN_EXPIRY='7d', S3_BUCKET='as-finance-docs', NODE_ENV='development', PORT=3001
     - Test NODE_ENV accepts only valid values, PORT coerced to positive integer
     - _Requirements: 70.1–70.8_
 
-  - [~] 10.8 Write error class tests in `apps/api/src/common/errors/__tests__/errors.spec.ts`
+  - [x] 10.8 Write error class tests in `apps/api/src/common/errors/__tests__/errors.spec.ts`
     - Test all custom error classes: AppError, BusinessRuleError, NotFoundError, AuthorizationError, ValidationError, ConflictError
     - _Requirements: 48.1–48.6_
 
-  - [~] 10.9 Write shared package unit tests
+  - [x] 10.9 Write shared package unit tests
     - Test password validation (valid/invalid patterns)
     - Test PII masking (Aadhaar XXXX-XXXX-1234, PAN XXXXXX1234, mobile masking)
     - Test PERMISSIONS constant covers all expected module.action combinations
     - Test enum values match Prisma schema definitions
     - _Requirements: 47.1–47.3, 47.6, 47.7_
 
-- [~] 11. Checkpoint — Verify all common module and shared package tests pass
+- [x] 11. Checkpoint — Verify all common module and shared package tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 12. Phase 7 — Integration Tests
-  - [~] 12.1 Write collection flow integration tests in `apps/api/src/modules/collection/__tests__/collection-allocation.integration.spec.ts`
+- [x] 12. Phase 7 — Integration Tests
+  - [x] 12.1 Write collection flow integration tests in `apps/api/src/modules/collection/__tests__/collection-allocation.integration.spec.ts`
     - Test full EMI payment: collection record, allocations, schedule update, journal balanced, receipt, outstanding update
     - Test partial payment with correct allocation
     - Test multiple sequential payments on same loan
@@ -389,12 +389,12 @@ This plan implements a comprehensive testing suite and bugfix workflow for the A
     - Test payment on overdue loan with pending penalties
     - _Requirements: 6.1–6.6_
 
-  - [~] 12.2 Write reversal flow integration tests in `apps/api/src/modules/reversal/__tests__/reversal-flow.integration.spec.ts`
+  - [x] 12.2 Write reversal flow integration tests in `apps/api/src/modules/reversal/__tests__/reversal-flow.integration.spec.ts`
     - Test full reversal: compensating collection, reverse allocations, installments restored, compensating journal, receipt reversed, compensating receipt, audit log
     - Test atomicity, double-reversal rejection, reversal-of-reversal rejection
     - _Requirements: 9.1–9.4_
 
-  - [~] 12.3 Write loan lifecycle integration tests in `apps/api/src/modules/loan/__tests__/loan-lifecycle.integration.spec.ts`
+  - [x] 12.3 Write loan lifecycle integration tests in `apps/api/src/modules/loan/__tests__/loan-lifecycle.integration.spec.ts`
     - Test happy path: draft → submit → review → approve → disburse → collect all → close
     - Test rejection path: create → submit → review → reject
     - Test overdue path: disburse → miss payment → verify overdue + DPD
@@ -402,28 +402,28 @@ This plan implements a comprehensive testing suite and bugfix workflow for the A
     - Test optimistic locking: concurrent updates detect version conflicts
     - _Requirements: 16.1–16.5_
 
-  - [~] 12.4 Write foreclosure flow integration tests in `apps/api/src/modules/foreclosure/__tests__/foreclosure-flow.integration.spec.ts`
+  - [x] 12.4 Write foreclosure flow integration tests in `apps/api/src/modules/foreclosure/__tests__/foreclosure-flow.integration.spec.ts`
     - Test full flow: create quote → approve → execute → loan closed, collection created, journal balanced, installments closed
     - Test atomicity, expired quote rejection, rebate with authorization
     - _Requirements: 13.1–13.4_
 
-  - [~] 12.5 Write cashbook integration tests in `apps/api/src/modules/cashbook/__tests__/cashbook-expense.integration.spec.ts`
+  - [x] 12.5 Write cashbook integration tests in `apps/api/src/modules/cashbook/__tests__/cashbook-expense.integration.spec.ts`
     - Test expense creation with journal entry, handover flow (create → verify → status update), daily summary accuracy
     - _Requirements: 27.1–27.3_
 
-  - [~] 12.6 Write group collection integration tests in `apps/api/src/modules/group/__tests__/group-collection.integration.spec.ts`
+  - [x] 12.6 Write group collection integration tests in `apps/api/src/modules/group/__tests__/group-collection.integration.spec.ts`
     - Test group collection: individual collections per member, allocations, receipts, journal entries
     - Test atomicity: one member failure → entire batch rollback
     - Test mixed member statuses (active + overdue)
     - _Requirements: 29.1–29.3_
 
-  - [~] 12.7 Write notification integration tests in `apps/api/src/modules/notification/__tests__/notification-outbox.integration.spec.ts`
+  - [x] 12.7 Write notification integration tests in `apps/api/src/modules/notification/__tests__/notification-outbox.integration.spec.ts`
     - Test collection succeeds + outbox message created even when SMS provider unavailable
     - Test notification enqueueing within same transaction as finance operation
     - Test finance operation succeeds even if notification service throws
     - _Requirements: 31.1–31.3_
 
-  - [~] 12.8 Write cross-module data integrity integration tests
+  - [x] 12.8 Write cross-module data integrity integration tests
     - Test cached_outstanding_paise = total_payable - sum of valid allocations
     - Test journal entry totals match collection amount
     - Test receipt amount matches collection amount
@@ -433,90 +433,90 @@ This plan implements a comprehensive testing suite and bugfix workflow for the A
     - Test collection + reversal net effect on outstanding = zero
     - _Requirements: 71.1–71.7_
 
-  - [~] 12.9 Write maker-checker integration test
+  - [x] 12.9 Write maker-checker integration test
     - Test full flow: field_officer creates loan → submits → manager reviews → manager approves → audit log records both actor IDs
     - _Requirements: 61.6_
 
-  - [~] 12.10 Write settings + schedule holiday integration test
+  - [x] 12.10 Write settings + schedule holiday integration test
     - Test due date falling on configured holiday is shifted to next business day
     - _Requirements: 58.9_
 
-- [~] 13. Checkpoint — Verify all integration tests pass with database isolation
+- [x] 13. Checkpoint — Verify all integration tests pass with database isolation
   - Ensure all tests pass, ask the user if questions arise.
 
 
-- [ ] 14. Phase 8 — API Contract Tests
-  - [~] 14.1 Write auth contract tests in `apps/api/test/contract/auth.contract.spec.ts`
+- [x] 14. Phase 8 — API Contract Tests
+  - [x] 14.1 Write auth contract tests in `apps/api/test/contract/auth.contract.spec.ts`
     - Test POST /auth/login, POST /auth/refresh, POST /auth/logout, POST /auth/change-password
     - Verify request/response shapes, validation errors (400), auth errors (401)
     - _Requirements: 40.1, 40.18, 40.19_
 
-  - [~] 14.2 Write customer contract tests in `apps/api/test/contract/customer.contract.spec.ts`
+  - [x] 14.2 Write customer contract tests in `apps/api/test/contract/customer.contract.spec.ts`
     - Test GET /customers, POST /customers, GET /customers/:id, PATCH /customers/:id, POST /customers/:id/blacklist, POST /customers/:id/reinstate, POST /customers/:id/family-members, POST /customers/:id/guarantors
     - _Requirements: 40.3, 40.18, 40.19_
 
-  - [~] 14.3 Write loan contract tests in `apps/api/test/contract/loan.contract.spec.ts`
+  - [x] 14.3 Write loan contract tests in `apps/api/test/contract/loan.contract.spec.ts`
     - Test GET /loans, POST /loans, GET /loans/:id, POST /loans/:id/submit, POST /loans/:id/approve, POST /loans/:id/reject, POST /loans/:id/close
     - _Requirements: 40.4, 40.18, 40.19_
 
-  - [~] 14.4 Write collection contract tests in `apps/api/test/contract/collection.contract.spec.ts`
+  - [x] 14.4 Write collection contract tests in `apps/api/test/contract/collection.contract.spec.ts`
     - Test GET /collections, POST /collections
     - _Requirements: 40.5, 40.18, 40.19_
 
-  - [~] 14.5 Write disbursement contract tests in `apps/api/test/contract/disbursement.contract.spec.ts`
+  - [x] 14.5 Write disbursement contract tests in `apps/api/test/contract/disbursement.contract.spec.ts`
     - Test POST /disbursements
     - _Requirements: 40.6, 40.18, 40.19_
 
-  - [~] 14.6 Write reversal contract tests in `apps/api/test/contract/reversal.contract.spec.ts`
+  - [x] 14.6 Write reversal contract tests in `apps/api/test/contract/reversal.contract.spec.ts`
     - Test POST /reversals
     - _Requirements: 40.7, 40.18, 40.19_
 
-  - [~] 14.7 Write penalty contract tests in `apps/api/test/contract/penalty.contract.spec.ts`
+  - [x] 14.7 Write penalty contract tests in `apps/api/test/contract/penalty.contract.spec.ts`
     - Test GET /penalties/loan/:loanId, POST /penalties/calculate, POST /penalties/:id/waive
     - _Requirements: 40.8, 40.18, 40.19_
 
-  - [~] 14.8 Write foreclosure contract tests in `apps/api/test/contract/foreclosure.contract.spec.ts`
+  - [x] 14.8 Write foreclosure contract tests in `apps/api/test/contract/foreclosure.contract.spec.ts`
     - Test POST /foreclosures/quote, POST /foreclosures/:id/execute, GET /foreclosures/:id
     - _Requirements: 40.9, 40.18, 40.19_
 
-  - [~] 14.9 Write receipt contract tests in `apps/api/test/contract/receipt.contract.spec.ts`
+  - [x] 14.9 Write receipt contract tests in `apps/api/test/contract/receipt.contract.spec.ts`
     - Test GET /receipts/:id, GET /receipts/:id/print, GET /receipts/loan/:loanId
     - _Requirements: 40.10, 40.18, 40.19_
 
-  - [~] 14.10 Write accounting contract tests in `apps/api/test/contract/accounting.contract.spec.ts`
+  - [x] 14.10 Write accounting contract tests in `apps/api/test/contract/accounting.contract.spec.ts`
     - Test GET /accounting/chart-of-accounts, GET /accounting/daybook, GET /accounting/trial-balance, GET /accounting/profit-and-loss, GET /accounting/balance-sheet
     - _Requirements: 40.11, 40.18, 40.19_
 
-  - [~] 14.11 Write cashbook contract tests in `apps/api/test/contract/cashbook.contract.spec.ts`
+  - [x] 14.11 Write cashbook contract tests in `apps/api/test/contract/cashbook.contract.spec.ts`
     - Test GET /cashbook/daily-summary, POST /cashbook/expenses, GET /cashbook/expenses, POST /cashbook/handovers, POST /cashbook/handovers/:id/verify
     - _Requirements: 40.12, 40.18, 40.19_
 
-  - [~] 14.12 Write group contract tests in `apps/api/test/contract/group.contract.spec.ts`
+  - [x] 14.12 Write group contract tests in `apps/api/test/contract/group.contract.spec.ts`
     - Test GET /groups, POST /groups, GET /groups/:id, POST /groups/:id/members, DELETE /groups/:id/members/:memberId, POST /groups/:id/collect
     - _Requirements: 40.13, 40.18, 40.19_
 
-  - [~] 14.13 Write report contract tests in `apps/api/test/contract/report.contract.spec.ts`
+  - [x] 14.13 Write report contract tests in `apps/api/test/contract/report.contract.spec.ts`
     - Test GET /reports, GET /reports/export
     - _Requirements: 40.14, 40.18, 40.19_
 
-  - [~] 14.14 Write audit contract tests in `apps/api/test/contract/audit.contract.spec.ts`
+  - [x] 14.14 Write audit contract tests in `apps/api/test/contract/audit.contract.spec.ts`
     - Test GET /audit-logs
     - _Requirements: 40.15, 40.18, 40.19_
 
-  - [~] 14.15 Write notification contract tests in `apps/api/test/contract/notification.contract.spec.ts`
+  - [x] 14.15 Write notification contract tests in `apps/api/test/contract/notification.contract.spec.ts`
     - Test GET /notifications, POST /notifications/:id/retry
     - _Requirements: 40.16, 40.18, 40.19_
 
-  - [~] 14.16 Write settings contract tests in `apps/api/test/contract/settings.contract.spec.ts`
+  - [x] 14.16 Write settings contract tests in `apps/api/test/contract/settings.contract.spec.ts`
     - Test GET /settings, PATCH /settings
     - _Requirements: 40.17, 40.18, 40.19_
 
-- [~] 15. Checkpoint — Verify all API contract tests pass
+- [x] 15. Checkpoint — Verify all API contract tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 
-- [ ] 16. Phase 9 — RBAC Matrix Tests (7 Roles × All Endpoints)
-  - [~] 16.1 Write RBAC matrix tests in `apps/api/test/rbac-matrix.spec.ts`
+- [x] 16. Phase 9 — RBAC Matrix Tests (7 Roles × All Endpoints)
+  - [x] 16.1 Write RBAC matrix tests in `apps/api/test/rbac-matrix.spec.ts`
     - Test all 7 roles (super_admin, manager, field_officer, collection_officer, accountant, office_staff, viewer_auditor) against every protected endpoint
     - Verify correct HTTP status: 200/201 for allowed, 403 for denied
     - Test unauthenticated requests → 401
@@ -526,28 +526,28 @@ This plan implements a comprehensive testing suite and bugfix workflow for the A
     - Test accountant can access: accounting.read, accounting.create_expense, accounting.manage_cashbook, report.read, report.export, handover.verify; cannot access: loan.approve, loan.disburse, customer.create, collection.create
     - _Requirements: 39.1–39.6_
 
-- [ ] 17. Phase 10 — Negative Tests
-  - [~] 17.1 Write invalid input negative tests in `apps/api/test/negative.spec.ts`
+- [x] 17. Phase 10 — Negative Tests
+  - [x] 17.1 Write invalid input negative tests in `apps/api/test/negative.spec.ts`
     - Test invalid Aadhaar (non-12-digit, non-numeric, empty), invalid PAN, invalid mobile, invalid email, invalid password
     - Test invalid loan amounts (zero, negative, below/above product bounds), invalid tenure, invalid interest rates
     - Test invalid dates, invalid UUIDs, missing required fields, extra/unknown fields
     - _Requirements: 42.1–42.12_
 
-  - [~] 17.2 Write state violation negative tests in `apps/api/test/negative.spec.ts`
+  - [x] 17.2 Write state violation negative tests in `apps/api/test/negative.spec.ts`
     - Test disbursement of non-approved loan, collection on non-active loan, approval of non-under_review loan
     - Test closing loan with outstanding > 0, closing with unpaid penalties, reversing already-reversed collection
     - Test expired foreclosure quote, modifying loan terms after approval, adding members to dissolved group
     - Test loan for blacklisted customer, duplicate penalty posting
     - _Requirements: 43.1–43.11_
 
-  - [~] 17.3 Write authorization violation negative tests in `apps/api/test/negative.spec.ts`
+  - [x] 17.3 Write authorization violation negative tests in `apps/api/test/negative.spec.ts`
     - Test unauthenticated → 401, expired JWT → 401, tampered JWT → 401
     - Test IDOR: field_officer accessing other officer's customers, collection_officer posting for unassigned loans
     - Test viewer_auditor cannot perform write operations
     - _Requirements: 44.1–44.6_
 
-- [ ] 18. Phase 11 — Concurrency Tests
-  - [~] 18.1 Write concurrency tests in `apps/api/test/concurrency.spec.ts`
+- [x] 18. Phase 11 — Concurrency Tests
+  - [x] 18.1 Write concurrency tests in `apps/api/test/concurrency.spec.ts`
     - Test double-click payment (idempotency key prevents duplicate)
     - Test concurrent collection posting on same loan (both succeed or one safely rejected)
     - Test concurrent disbursement (only one succeeds)
@@ -558,8 +558,8 @@ This plan implements a comprehensive testing suite and bugfix workflow for the A
     - Test same idempotency key concurrent requests return same result
     - _Requirements: 45.1–45.8_
 
-- [ ] 19. Phase 12 — Security Tests
-  - [~] 19.1 Write security tests in `apps/api/test/security.spec.ts`
+- [x] 19. Phase 12 — Security Tests
+  - [x] 19.1 Write security tests in `apps/api/test/security.spec.ts`
     - Test SQL injection via query params and request bodies neutralized by Prisma
     - Test auth endpoint rate limiting (10 req/min/IP)
     - Test API endpoint rate limiting (100 req/min/user)
@@ -570,47 +570,47 @@ This plan implements a comprehensive testing suite and bugfix workflow for the A
     - Test pagination max page size enforced (100 items)
     - _Requirements: 46.1–46.8_
 
-- [~] 20. Checkpoint — Verify RBAC, negative, concurrency, and security tests pass
+- [x] 20. Checkpoint — Verify RBAC, negative, concurrency, and security tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 
-- [ ] 21. Phase 13 — E2E Business Flow Tests
-  - [~] 21.1 Write onboarding E2E test
+- [x] 21. Phase 13 — E2E Business Flow Tests
+  - [x] 21.1 Write onboarding E2E test
     - Create customer → upload documents → create loan → submit → approve → disburse → verify all database state
     - _Requirements: 50.1_
 
-  - [~] 21.2 Write collection E2E test
+  - [x] 21.2 Write collection E2E test
     - Post collection → verify allocation → verify schedule update → verify receipt → verify journal entry → verify outstanding update
     - Test partial payment collection, collection on overdue loan with penalties
     - _Requirements: 50.2, 52.1, 52.3, 52.4_
 
-  - [~] 21.3 Write reversal E2E test
+  - [x] 21.3 Write reversal E2E test
     - Post collection → reverse → verify compensating entries → verify schedule restored → verify receipt reversed
     - _Requirements: 50.3_
 
-  - [~] 21.4 Write overdue + penalty E2E test
+  - [x] 21.4 Write overdue + penalty E2E test
     - Disburse loan → wait past due date → calculate penalty → post penalty → verify outstanding includes penalty → collect with penalty-first allocation
     - _Requirements: 50.4_
 
-  - [~] 21.5 Write foreclosure E2E test
+  - [x] 21.5 Write foreclosure E2E test
     - Create quote → approve → execute → verify loan closed → verify settlement collection → verify journal entries
     - _Requirements: 50.5_
 
-  - [~] 21.6 Write group collection E2E test
+  - [x] 21.6 Write group collection E2E test
     - Create group → add members → post group collection → verify individual collections for each member
     - _Requirements: 50.6_
 
-  - [~] 21.7 Write full loan lifecycle E2E test
+  - [x] 21.7 Write full loan lifecycle E2E test
     - Create → submit → approve → disburse → collect all EMIs → close → verify final outstanding = 0
     - _Requirements: 50.7_
 
-  - [~] 21.8 Write untested flow verification tests
+  - [x] 21.8 Write untested flow verification tests
     - Verify reversal, penalty, foreclosure, group collection, receipt generation, all report types, notification outbox, document upload (MinIO mock), idempotency key handling end-to-end
     - Fix any bugs discovered, create regression tests
     - _Requirements: 53.1–53.9_
 
-- [ ] 22. Phase 14 — Frontend-API Compatibility Tests + Bug Fixes
-  - [~] 22.1 Write frontend-API field name compatibility tests
+- [x] 22. Phase 14 — Frontend-API Compatibility Tests + Bug Fixes
+  - [x] 22.1 Write frontend-API field name compatibility tests
     - Test login page sends `username`/`password` matching LoginDto
     - Test customer creation form field names match CreateCustomerDto
     - Test loan creation form field names match CreateLoanDto
@@ -625,27 +625,27 @@ This plan implements a comprehensive testing suite and bugfix workflow for the A
     - Fix any mismatches discovered, create regression tests
     - _Requirements: 41.1–41.12_
 
-  - [~] 22.2 Write frontend snake_case compatibility verification tests
+  - [x] 22.2 Write frontend snake_case compatibility verification tests
     - Test notifications, reports, receipts, audit logs, settings, groups pages render API fields correctly
     - Fix any "undefined" or missing data due to field name mismatch
     - _Requirements: 54.1–54.7_
 
-  - [~] 22.3 Write frontend RBAC UI element tests
+  - [x] 22.3 Write frontend RBAC UI element tests
     - Test auditor does not see write buttons (e.g., "New Customer")
     - Fix any RBAC UI gaps discovered
     - _Requirements: 44.7, 51.4_
 
-  - [~] 22.4 Fix all discovered bugs with regression tests
+  - [x] 22.4 Fix all discovered bugs with regression tests
     - Fix pagination mismatch, field name mismatch, disbursement 500 error, cashbook wrong endpoint, loan detail missing schedule, Next.js params incompatibility
     - Each fix includes @regression tagged test with BUG-{number} comment block
     - _Requirements: 51.1–51.8_
 
-- [~] 23. Checkpoint — Verify all E2E and frontend compatibility tests pass
+- [x] 23. Checkpoint — Verify all E2E and frontend compatibility tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 
-- [ ] 24. Phase 15 — Edge Case Tests
-  - [~] 24.1 Write boundary condition edge case tests
+- [x] 24. Phase 15 — Edge Case Tests
+  - [x] 24.1 Write boundary condition edge case tests
     - Test zero-amount collection (rejection or correct handling)
     - Test one-paisa collection, exact outstanding payoff
     - Test Number.MAX_SAFE_INTEGER paise in money fields
@@ -660,7 +660,7 @@ This plan implements a comprehensive testing suite and bugfix workflow for the A
     - Test concurrent receipt number generation sequence integrity
     - _Requirements: 55.1–55.14_
 
-  - [~] 24.2 Write BigInt/Number conversion safety tests
+  - [x] 24.2 Write BigInt/Number conversion safety tests
     - Test BigInt within MAX_SAFE_INTEGER converts without precision loss
     - Test BigInt serialization in JSON API responses
     - Test Decimal.js intermediate calculations produce correct integer paise after ROUND_HALF_UP
@@ -669,7 +669,7 @@ This plan implements a comprehensive testing suite and bugfix workflow for the A
     - Test handling of values exceeding MAX_SAFE_INTEGER
     - _Requirements: 62.1–62.6_
 
-  - [~] 24.3 Write timezone and date handling tests
+  - [x] 24.3 Write timezone and date handling tests
     - Test business date derivation when UTC is 00:00–05:30 (previous day in IST)
     - Test due date generation across month boundaries (Jan 31 → Feb 28/29)
     - Test DPD uses date-only comparison (no off-by-one at midnight)
@@ -678,7 +678,7 @@ This plan implements a comprehensive testing suite and bugfix workflow for the A
     - Test holiday-shifted due date evaluated in IST context
     - _Requirements: 63.1–63.6_
 
-  - [~] 24.4 Write optimistic locking tests
+  - [x] 24.4 Write optimistic locking tests
     - Test stale version on customer update → ConflictError
     - Test stale version on loan update → ConflictError
     - Test version auto-increment on successful update
@@ -687,7 +687,7 @@ This plan implements a comprehensive testing suite and bugfix workflow for the A
     - Test schedule installment version checks during collection posting
     - _Requirements: 64.1–64.6_
 
-  - [~] 24.5 Write pagination edge case tests
+  - [x] 24.5 Write pagination edge case tests
     - Test skip > total count → empty data with correct total
     - Test take=0 → rejection or empty data
     - Test negative skip/take → validation error
@@ -696,7 +696,7 @@ This plan implements a comprehensive testing suite and bugfix workflow for the A
     - Test skip + take near total count → correct partial page
     - _Requirements: 73.1–73.7_
 
-  - [~] 24.6 Write loan product constraint validation tests
+  - [x] 24.6 Write loan product constraint validation tests
     - Test principal at min/max bounds → accepted
     - Test principal below min / above max → ValidationError
     - Test tenure at min/max bounds → accepted
@@ -704,58 +704,58 @@ This plan implements a comprehensive testing suite and bugfix workflow for the A
     - Test deactivated product → BusinessRuleError
     - _Requirements: 74.1–74.8_
 
-  - [~] 24.7 Write loan number generation integration tests
+  - [x] 24.7 Write loan number generation integration tests
     - Test concurrent loan creation produces no duplicate loan numbers (PostgreSQL sequence)
     - Test loan_number unique constraint rejects duplicates at DB level
     - _Requirements: 65.3, 65.5_
 
-  - [~] 24.8 Write soft delete behavior tests
+  - [x] 24.8 Write soft delete behavior tests
     - Test soft-deleted documents excluded from listing, accessible via direct ID for compliance
     - Test softDelete sets is_active=false, retains file in S3
     - Test no cascade deletion on finance records when related entities soft-deleted
     - Test upload creates records with is_active=true by default
     - _Requirements: 76.1–76.6_
 
-  - [~] 24.9 Write migration safety tests
+  - [x] 24.9 Write migration safety tests
     - Test all migrations apply successfully in sequence
     - Test seed script executes without errors after migrations
     - Test NOT NULL column additions include default/backfill
     - Test migration_lock.toml specifies postgresql provider
     - _Requirements: 72.1–72.5_
 
-  - [~] 24.10 Write processing fee journal entry integration test
+  - [x] 24.10 Write processing fee journal entry integration test
     - Test disbursement with configured fee creates correct journal entry (Debit Cash/Bank, Credit Processing_Fee_Income)
     - _Requirements: 66.7_
 
-- [~] 25. Checkpoint — Verify all edge case tests pass
+- [x] 25. Checkpoint — Verify all edge case tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 26. Phase 16 — Coverage Verification + Regression Test Index
-  - [~] 26.1 Write outstanding balance drift detection tests
+- [x] 26. Phase 16 — Coverage Verification + Regression Test Index
+  - [x] 26.1 Write outstanding balance drift detection tests
     - Test cached_outstanding recomputable from total_payable minus valid allocations
     - Test after collections + reversals, cached matches independently computed outstanding
     - Test transactional update of cached_outstanding within same DB transaction
     - _Requirements: 75.1, 75.2, 75.4_
 
-  - [~] 26.2 Write outstanding drift PBT
+  - [x] 26.2 Write outstanding drift PBT
     - **Property 41: Outstanding Drift — for any valid sequence of collection/reversal operations, cached_outstanding = total_payable - net allocated payments**
     - Minimum 1000 examples
     - **Validates: Requirements 75.3, 75.6**
 
-  - [~] 26.3 Configure coverage thresholds and verify targets met
+  - [x] 26.3 Configure coverage thresholds and verify targets met
     - Verify: schedule.service.ts ≥ 95%, allocation-engine.ts ≥ 95%, collection.service.ts ≥ 85%, reversal.service.ts ≥ 90%, rbac.guard.ts ≥ 90%, domain services ≥ 85%, controllers ≥ 80%, repositories ≥ 70%, overall ≥ 75%
     - _Requirements: 56.5_
 
-  - [~] 26.4 Create regression test index
+  - [x] 26.4 Create regression test index
     - Create `apps/api/test/regression-index.md` documenting each bug: number, description, root cause, fix, regression test file path
     - Tag all regression tests with `@regression` marker
     - _Requirements: 51.8, 56.8_
 
-- [~] 27. Final Checkpoint — Full test suite green, coverage targets met
+- [x] 27. Final Checkpoint — Full test suite green, coverage targets met
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 28. Phase 17 — Existing Test Audit and Deduplication
-  - [~] 28.1 Audit existing test files against new tasks to avoid duplication
+- [x] 28. Phase 17 — Existing Test Audit and Deduplication
+  - [x] 28.1 Audit existing test files against new tasks to avoid duplication
     - Review existing E2E tests in `apps/api/test/e2e/` (auth, customer-onboarding, loan-lifecycle, collection, disbursement, reversal, foreclosure, group-loan, cashbook-expense, notification-outbox, report, settings-holiday, emi-schedule, loan-product, user-management, family-guarantor, health-check, request-id, env-validation, audit-log, accounting-ledger, business-flows, overdue-penalty, loan-closure)
     - Review existing PBT tests in `apps/api/test/pbt/` (schedule, allocation, advance-payment, journal-balance, rbac-matrix, receipt-sequentiality, reversal-neutrality)
     - Review existing unit tests in `apps/api/src/modules/*/__tests__/` (all service specs, property specs, integration specs)
@@ -764,14 +764,14 @@ This plan implements a comprehensive testing suite and bugfix workflow for the A
     - For partially covered requirements, extend the existing test file rather than creating a new one
     - _Requirements: 56.7 (no shared mutable state between test files)_
 
-  - [~] 28.2 Fix existing test files that reference wrong API field names or endpoints
+  - [x] 28.2 Fix existing test files that reference wrong API field names or endpoints
     - Scan all existing E2E and PBT test files for camelCase field references that should be snake_case
     - Scan for wrong API endpoint paths (e.g., `/cashbook?date=` instead of `/cashbook/daily-summary?date=`)
     - Scan for `page`/`pageSize` query params that should be `skip`/`take`
     - Fix all mismatches found and verify tests pass
     - _Requirements: 41.12, 51.3_
 
-  - [~] 28.3 Verify existing test infrastructure compatibility
+  - [x] 28.3 Verify existing test infrastructure compatibility
     - Verify `apps/api/test/helpers/factories.ts` produces entities compatible with current Prisma schema
     - Verify `apps/api/test/helpers/auth-client.ts` generates valid JWT tokens for all 7 roles
     - Verify `apps/api/test/helpers/cleanup.ts` correctly tracks and cleans up all entity types
@@ -780,8 +780,8 @@ This plan implements a comprehensive testing suite and bugfix workflow for the A
     - Fix any incompatibilities found
     - _Requirements: 56.4, 56.6_
 
-- [ ] 29. Phase 18 — Shared Package Validation Schema Tests
-  - [~] 29.1 Write/extend Zod validation schema tests in `packages/shared/src/validation/__tests__/schemas.spec.ts`
+- [x] 29. Phase 18 — Shared Package Validation Schema Tests
+  - [x] 29.1 Write/extend Zod validation schema tests in `packages/shared/src/validation/__tests__/schemas.spec.ts`
     - Test `aadhaarSchema` accepts valid 12-digit strings, rejects non-12-digit, non-numeric, empty
     - Test `panSchema` accepts valid PAN format [A-Z]{5}[0-9]{4}[A-Z]{1}, rejects invalid formats
     - Test `mobileSchema` accepts valid 10-digit starting with 6-9, rejects invalid
@@ -790,30 +790,30 @@ This plan implements a comprehensive testing suite and bugfix workflow for the A
     - Test `passwordSchema` accepts valid passwords, rejects too short/missing uppercase/lowercase/digit
     - _Requirements: 42.1, 42.2, 42.3, 47.1, 47.2_
 
-  - [~] 29.2 Write/extend money utility tests in `packages/shared/src/utils/__tests__/money.spec.ts`
+  - [x] 29.2 Write/extend money utility tests in `packages/shared/src/utils/__tests__/money.spec.ts`
     - Test `paiseToDec()` for edge cases: 0, 1, MAX_SAFE_INTEGER, negative values
     - Test `decToPaise()` for edge cases: 0, fractional amounts, ROUND_HALF_UP behavior
     - Test `formatINR()` for Indian numbering system (lakhs, crores), zero, negative, large amounts
     - _Requirements: 62.3, 62.5_
 
-- [ ] 30. Phase 19 — User Contract Tests (Missing from Phase 8)
-  - [~] 30.1 Write user contract tests in `apps/api/test/contract/user.contract.spec.ts`
+- [x] 30. Phase 19 — User Contract Tests (Missing from Phase 8)
+  - [x] 30.1 Write user contract tests in `apps/api/test/contract/user.contract.spec.ts`
     - Test GET /users, POST /users, GET /users/:id, PATCH /users/:id, POST /users/:id/area-assignments, DELETE /users/:id/area-assignments/:areaId
     - Verify request/response shapes, validation errors (400), auth errors (401/403)
     - _Requirements: 40.2, 40.18, 40.19_
 
-  - [~] 30.2 Write document contract tests in `apps/api/test/contract/document.contract.spec.ts`
+  - [x] 30.2 Write document contract tests in `apps/api/test/contract/document.contract.spec.ts`
     - Test POST /documents/upload, GET /documents/:id/url, DELETE /documents/:id
     - Verify multipart upload handling, signed URL response, soft delete response
     - _Requirements: 40.18, 40.19, 57.6, 57.8, 57.9_
 
-  - [~] 30.3 Write health contract tests in `apps/api/test/contract/health.contract.spec.ts`
+  - [x] 30.3 Write health contract tests in `apps/api/test/contract/health.contract.spec.ts`
     - Test GET /health/live, GET /health/ready
     - Verify response shapes, public access (no auth), skip throttle
     - _Requirements: 59.1, 59.2, 59.4, 59.5_
 
-- [ ] 31. Phase 20 — Loan Closure Specific Tests (Gap in Phase 4)
-  - [~] 31.1 Write loan closure unit tests in `apps/api/src/modules/loan/__tests__/loan-closure.spec.ts`
+- [x] 31. Phase 20 — Loan Closure Specific Tests (Gap in Phase 4)
+  - [x] 31.1 Write loan closure unit tests in `apps/api/src/modules/loan/__tests__/loan-closure.spec.ts`
     - Test closure prerequisites: outstanding = 0, no pending penalties, no pending reversals
     - Test closure with outstanding > 0 → BusinessRuleError
     - Test closure with unpaid penalties → BusinessRuleError
@@ -821,13 +821,13 @@ This plan implements a comprehensive testing suite and bugfix workflow for the A
     - Test closure transitions loan to terminal state (no further transitions allowed)
     - _Requirements: 15.7, 43.4, 43.5_
 
-  - [~] 31.2 Write concurrent loan operations tests
+  - [x] 31.2 Write concurrent loan operations tests
     - Test concurrent max_concurrent_loans enforcement (product version limit)
     - Test concurrent loan creation for same customer respects product limit
     - _Requirements: 45.5, 74.8_
 
-- [ ] 32. Phase 21 — Document Upload Integration Tests
-  - [~] 32.1 Write document upload integration tests with S3 mock
+- [x] 32. Phase 21 — Document Upload Integration Tests
+  - [x] 32.1 Write document upload integration tests with S3 mock
     - Test full upload flow: validate MIME → validate size → scan scripts → upload to S3 → create metadata record
     - Test signed URL generation with 15-minute expiry
     - Test soft delete flow: set is_active=false, verify file retained in S3
@@ -835,18 +835,18 @@ This plan implements a comprehensive testing suite and bugfix workflow for the A
     - Mock S3StorageService for tests without MinIO
     - _Requirements: 53.8, 57.6, 57.7, 57.8, 57.9, 76.3_
 
-- [ ] 33. Phase 22 — Rate Limiting Integration Tests (Gap in Phase 12)
-  - [~] 33.1 Write rate limiting integration tests
+- [x] 33. Phase 22 — Rate Limiting Integration Tests (Gap in Phase 12)
+  - [x] 33.1 Write rate limiting integration tests
     - Test auth endpoint rate limit: send 11 requests to POST /auth/login within 1 minute, verify 11th returns 429
     - Test API endpoint rate limit: send 101 authenticated requests within 1 minute, verify 101st returns 429
     - Test rate limit headers present: X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset
     - Test rate limit reset after window expires
     - _Requirements: 46.2, 46.3, 69.5, 69.6_
 
-- [~] 34. Checkpoint — Verify all gap-filling tasks pass
+- [x] 34. Checkpoint — Verify all gap-filling tasks pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [~] 35. Final Comprehensive Checkpoint — All 76 requirements verified
+- [x] 35. Final Comprehensive Checkpoint — All 76 requirements verified
   - Run full test suite across all tiers
   - Verify coverage thresholds met
   - Verify regression test index complete

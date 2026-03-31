@@ -8,17 +8,39 @@ import {
   passwordSchema,
 } from '../schemas.js';
 
+/**
+ * Extended Zod validation schema tests (Task 29.1)
+ *
+ * Validates: Requirements 42.1, 42.2, 42.3, 47.1, 47.2
+ */
+
 describe('aadhaarSchema', () => {
   it('accepts valid 12-digit Aadhaar', () => {
     expect(aadhaarSchema.safeParse('123456789012').success).toBe(true);
+  });
+
+  it('accepts all-zeros 12-digit', () => {
+    expect(aadhaarSchema.safeParse('000000000000').success).toBe(true);
   });
 
   it('rejects 11-digit string', () => {
     expect(aadhaarSchema.safeParse('12345678901').success).toBe(false);
   });
 
+  it('rejects 13-digit string', () => {
+    expect(aadhaarSchema.safeParse('1234567890123').success).toBe(false);
+  });
+
   it('rejects string with letters', () => {
     expect(aadhaarSchema.safeParse('12345678901a').success).toBe(false);
+  });
+
+  it('rejects empty string', () => {
+    expect(aadhaarSchema.safeParse('').success).toBe(false);
+  });
+
+  it('rejects non-numeric characters', () => {
+    expect(aadhaarSchema.safeParse('12345678901!').success).toBe(false);
   });
 });
 
@@ -27,12 +49,24 @@ describe('panSchema', () => {
     expect(panSchema.safeParse('ABCDE1234F').success).toBe(true);
   });
 
+  it('accepts another valid PAN', () => {
+    expect(panSchema.safeParse('ZZZZZ9999Z').success).toBe(true);
+  });
+
   it('rejects lowercase letters', () => {
     expect(panSchema.safeParse('abcde1234f').success).toBe(false);
   });
 
   it('rejects wrong length', () => {
     expect(panSchema.safeParse('ABCDE123F').success).toBe(false);
+  });
+
+  it('rejects digits in letter positions', () => {
+    expect(panSchema.safeParse('12345ABCDE').success).toBe(false);
+  });
+
+  it('rejects empty string', () => {
+    expect(panSchema.safeParse('').success).toBe(false);
   });
 });
 
@@ -83,12 +117,24 @@ describe('paiseSchema', () => {
 });
 
 describe('passwordSchema', () => {
-  it('accepts valid password', () => {
+  it('accepts valid password with mixed case and digit', () => {
     expect(passwordSchema.safeParse('Abcdef1g').success).toBe(true);
   });
 
-  it('rejects too short', () => {
-    expect(passwordSchema.safeParse('Ab1').success).toBe(false);
+  it('accepts password with special characters', () => {
+    expect(passwordSchema.safeParse('Abcdef1!@#').success).toBe(true);
+  });
+
+  it('accepts exactly 8 character valid password', () => {
+    expect(passwordSchema.safeParse('Abcdefg1').success).toBe(true);
+  });
+
+  it('rejects empty string', () => {
+    expect(passwordSchema.safeParse('').success).toBe(false);
+  });
+
+  it('rejects too short (7 chars)', () => {
+    expect(passwordSchema.safeParse('Ab1cdef').success).toBe(false);
   });
 
   it('rejects no uppercase', () => {
@@ -101,5 +147,17 @@ describe('passwordSchema', () => {
 
   it('rejects no digit', () => {
     expect(passwordSchema.safeParse('Abcdefgh').success).toBe(false);
+  });
+
+  it('rejects only digits', () => {
+    expect(passwordSchema.safeParse('12345678').success).toBe(false);
+  });
+
+  it('rejects only lowercase', () => {
+    expect(passwordSchema.safeParse('abcdefgh').success).toBe(false);
+  });
+
+  it('rejects only uppercase', () => {
+    expect(passwordSchema.safeParse('ABCDEFGH').success).toBe(false);
   });
 });

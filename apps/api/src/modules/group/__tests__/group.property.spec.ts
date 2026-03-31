@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import * as fc from 'fast-check';
 import { GroupService } from '../group.service';
 import { BusinessRuleError } from '../../../common/errors';
@@ -21,6 +21,27 @@ import { BusinessRuleError } from '../../../common/errors';
  * Any discrepancy SHALL cause rejection of the entire group collection.
  *
  * **Validates: Requirements 11.5**
+ */
+
+/**
+ * Property 41: Batch Collection Per-Member Dispatch
+ *
+ * For any valid group collection with N members in the breakdown,
+ * postCollection() SHALL be called exactly N times — once per member —
+ * with the correct loanId and amountPaise from the breakdown.
+ * The sum of all dispatched amounts equals the total group collection amount.
+ *
+ * **Validates: Requirements 28.4**
+ */
+
+/**
+ * Property 42: Batch Collection Atomicity
+ *
+ * If any individual member's collection fails during a group collection,
+ * the entire batch SHALL fail (transaction rollback). No partial group
+ * collection record or individual collection results SHALL persist.
+ *
+ * **Validates: Requirements 29.1**
  */
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -391,6 +412,339 @@ describe('Property 31: Group Collection Sum Integrity', () => {
         },
       ),
       { numRuns: 200 },
+    );
+  });
+});
+
+
+// ── Generators for batch consistency tests ───────────────────────────────────
+
+interface BreakdownItem {
+  loanId: string;
+  amountPaise: number;
+}
+
+/**
+ * Generates a member breakdown with unique loan IDs (no duplicates).
+ * Each member has a distinct loanId and a positive amountPaise.
+ */
+const uniqueMemberBreakdownArb: fc.Arbitrary<BreakdownItem[]> = fc
+  .uniqueArray(
+    fc.record({
+      loanId: uuidArb,
+      amountPaise: amountPaiseArb,
+    }),
+    { minLength: 1, maxLength: 15, selector: (item) => item.loanId },
+  );
+
+// ── Property 41: Batch Collection Per-Member Dispatch ────────────────────────
+
+describe('Property 41: Batch Collection Per-Member Dispatch', () => {
+  /**
+   * **Validates: Requirements 28.4**
+   *
+   * For any valid group collection, postCollection is called exactly once
+   * per member in the breakdown with the correct loanId and amountPaise.
+   */
+  it('postCollection is called exactly once per member with correct loanId and amountPaise', async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        uniqueMemberBreakdownArb,
+        uuidArb,
+        async (breakdown: BreakdownItem[], groupId: string) => {
+          const { service, mockGroupRepository, mockIdempotencyService, mockCollectionService } = createMocks();
+
+          const correctSum = breakdown.reduce((sum: number, m: BreakdownItem) => sum + m.amountPaise, 0);
+
+          mockIdempotencyService.find.mockResolvedValue(null);
+          mockGroupRepository.findById.mockResolvedValue({ id: groupId, status: 'active' });
+          mockGroupRepository.getGroupMemberLoans.mockResolvedValue(
+            breakdown.map((m: BreakdownItem) => ({ id: m.loanId, loan_number: `LN-${m.loanId}` })),
+          );
+          mockGroupRepository.createGroupCollection.mockResolvedValue({ id: 'gc-1' });
+          mockCollectionService.postCollection.mockResolvedValue({
+            statusCode: 201,
+            data: { collectionId: 'c-1' },
+          });
+          mockIdempotencyService.store.mockResolvedValue({});
+
+          await service.postGroupCollection(
+            groupId,
+            {
+              totalAmountPaise: correctSum,
+              collectionDate: '2024-06-15',
+              paymentMode: 'cash' as never,
+              idempotencyKey: `key-${crypto.randomUUID()}`,
+              memberBreakdown: breakdown,
+            },
+            'actor1',
+            'collection_officer',
+          );
+
+          // Exactly N calls — one per member
+          expect(mockCollectionService.postCollection).toHaveBeenCalledTimes(breakdown.length);
+
+          // Each member's loanId and amountPaise appear in exactly one call
+          const calls = mockCollectionService.postCollection.mock.calls;
+          for (const member of breakdown) {
+            const matchingCall = calls.find(
+              (c: unknown[]) =>
+                (c[0] as { loanId: string; amountPaise: number }).loanId === member.loanId &&
+                (c[0] as { loanId: string; amountPaise: number }).amountPaise === member.amountPaise,
+            );
+            expect(matchingCall).toBeDefined();
+          }
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+
+  /**
+   * **Validates: Requirements 28.4**
+   *
+   * The sum of all individual postCollection amountPaise values equals
+   * the total group collection amount.
+   */
+  it('sum of dispatched individual amounts equals total group collection amount', async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        uniqueMemberBreakdownArb,
+        uuidArb,
+        async (breakdown: BreakdownItem[], groupId: string) => {
+          const { service, mockGroupRepository, mockIdempotencyService, mockCollectionService } = createMocks();
+
+          const correctSum = breakdown.reduce((sum: number, m: BreakdownItem) => sum + m.amountPaise, 0);
+
+          mockIdempotencyService.find.mockResolvedValue(null);
+          mockGroupRepository.findById.mockResolvedValue({ id: groupId, status: 'active' });
+          mockGroupRepository.getGroupMemberLoans.mockResolvedValue(
+            breakdown.map((m: BreakdownItem) => ({ id: m.loanId, loan_number: `LN-${m.loanId}` })),
+          );
+          mockGroupRepository.createGroupCollection.mockResolvedValue({ id: 'gc-1' });
+          mockCollectionService.postCollection.mockResolvedValue({
+            statusCode: 201,
+            data: { collectionId: 'c-1' },
+          });
+          mockIdempotencyService.store.mockResolvedValue({});
+
+          await service.postGroupCollection(
+            groupId,
+            {
+              totalAmountPaise: correctSum,
+              collectionDate: '2024-06-15',
+              paymentMode: 'cash' as never,
+              idempotencyKey: `key-${crypto.randomUUID()}`,
+              memberBreakdown: breakdown,
+            },
+            'actor1',
+            'collection_officer',
+          );
+
+          // Sum of all dispatched amounts must equal total
+          const calls = mockCollectionService.postCollection.mock.calls;
+          const dispatchedSum = calls.reduce(
+            (sum: number, c: unknown[]) => sum + (c[0] as { amountPaise: number }).amountPaise,
+            0,
+          );
+          expect(dispatchedSum).toBe(correctSum);
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+
+  /**
+   * **Validates: Requirements 28.4**
+   *
+   * Each member collection uses a deterministic idempotency key derived
+   * from the group collection's idempotency key and the member's loanId.
+   */
+  it('each member collection receives a deterministic idempotency key', async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        uniqueMemberBreakdownArb,
+        uuidArb,
+        fc.string({ minLength: 1, maxLength: 50 }),
+        async (breakdown: BreakdownItem[], groupId: string, baseKey: string) => {
+          const { service, mockGroupRepository, mockIdempotencyService, mockCollectionService } = createMocks();
+
+          const correctSum = breakdown.reduce((sum: number, m: BreakdownItem) => sum + m.amountPaise, 0);
+
+          mockIdempotencyService.find.mockResolvedValue(null);
+          mockGroupRepository.findById.mockResolvedValue({ id: groupId, status: 'active' });
+          mockGroupRepository.getGroupMemberLoans.mockResolvedValue(
+            breakdown.map((m: BreakdownItem) => ({ id: m.loanId, loan_number: `LN-${m.loanId}` })),
+          );
+          mockGroupRepository.createGroupCollection.mockResolvedValue({ id: 'gc-1' });
+          mockCollectionService.postCollection.mockResolvedValue({
+            statusCode: 201,
+            data: { collectionId: 'c-1' },
+          });
+          mockIdempotencyService.store.mockResolvedValue({});
+
+          await service.postGroupCollection(
+            groupId,
+            {
+              totalAmountPaise: correctSum,
+              collectionDate: '2024-06-15',
+              paymentMode: 'cash' as never,
+              idempotencyKey: baseKey,
+              memberBreakdown: breakdown,
+            },
+            'actor1',
+            'collection_officer',
+          );
+
+          // Each member's idempotency key follows the pattern: {baseKey}__member__{loanId}
+          const calls = mockCollectionService.postCollection.mock.calls;
+          for (const member of breakdown) {
+            const expectedKey = `${baseKey}__member__${member.loanId}`;
+            const matchingCall = calls.find(
+              (c: unknown[]) =>
+                (c[0] as { idempotencyKey: string }).idempotencyKey === expectedKey,
+            );
+            expect(matchingCall).toBeDefined();
+          }
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+});
+
+// ── Property 42: Batch Collection Atomicity ──────────────────────────────────
+
+describe('Property 42: Batch Collection Atomicity', () => {
+  /**
+   * **Validates: Requirements 29.1**
+   *
+   * If any individual member's collection fails, the entire group collection
+   * transaction rejects. The transaction wrapper ensures atomicity.
+   */
+  it('if any member collection fails, the entire group collection fails', async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        uniqueMemberBreakdownArb.filter((b: BreakdownItem[]) => b.length >= 2),
+        uuidArb,
+        fc.integer({ min: 0, max: 14 }),
+        async (breakdown: BreakdownItem[], groupId: string, failIndexRaw: number) => {
+          const failIndex = failIndexRaw % breakdown.length;
+          const { service, mockGroupRepository, mockIdempotencyService, mockCollectionService, mockPrisma } = createMocks();
+
+          const correctSum = breakdown.reduce((sum: number, m: BreakdownItem) => sum + m.amountPaise, 0);
+
+          // Make the transaction propagate errors (simulating real Prisma $transaction)
+          mockPrisma.$transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => {
+            return fn({});
+          });
+
+          mockIdempotencyService.find.mockResolvedValue(null);
+          mockGroupRepository.findById.mockResolvedValue({ id: groupId, status: 'active' });
+          mockGroupRepository.getGroupMemberLoans.mockResolvedValue(
+            breakdown.map((m: BreakdownItem) => ({ id: m.loanId, loan_number: `LN-${m.loanId}` })),
+          );
+          mockGroupRepository.createGroupCollection.mockResolvedValue({ id: 'gc-1' });
+          mockIdempotencyService.store.mockResolvedValue({});
+
+          // Make the Nth member's collection fail
+          let callCount = 0;
+          mockCollectionService.postCollection.mockImplementation(async () => {
+            const currentCall = callCount++;
+            if (currentCall === failIndex) {
+              throw new Error('Simulated member collection failure');
+            }
+            return { statusCode: 201, data: { collectionId: `c-${currentCall}` } };
+          });
+
+          // The entire group collection should fail
+          await expect(
+            service.postGroupCollection(
+              groupId,
+              {
+                totalAmountPaise: correctSum,
+                collectionDate: '2024-06-15',
+                paymentMode: 'cash' as never,
+                idempotencyKey: `key-${crypto.randomUUID()}`,
+                memberBreakdown: breakdown,
+              },
+              'actor1',
+              'collection_officer',
+            ),
+          ).rejects.toThrow();
+
+          // Idempotency store should NOT have been called (transaction rolled back)
+          expect(mockIdempotencyService.store).not.toHaveBeenCalled();
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+
+  /**
+   * **Validates: Requirements 29.1**
+   *
+   * When all member collections succeed, the group collection record is
+   * created and the result contains all member results with correct amounts.
+   */
+  it('successful batch creates group collection record with all member results', async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        uniqueMemberBreakdownArb,
+        uuidArb,
+        async (breakdown: BreakdownItem[], groupId: string) => {
+          const { service, mockGroupRepository, mockIdempotencyService, mockCollectionService } = createMocks();
+
+          const correctSum = breakdown.reduce((sum: number, m: BreakdownItem) => sum + m.amountPaise, 0);
+
+          mockIdempotencyService.find.mockResolvedValue(null);
+          mockGroupRepository.findById.mockResolvedValue({ id: groupId, status: 'active' });
+          mockGroupRepository.getGroupMemberLoans.mockResolvedValue(
+            breakdown.map((m: BreakdownItem) => ({ id: m.loanId, loan_number: `LN-${m.loanId}` })),
+          );
+          mockGroupRepository.createGroupCollection.mockResolvedValue({ id: 'gc-1' });
+          mockCollectionService.postCollection.mockResolvedValue({
+            statusCode: 201,
+            data: { collectionId: 'c-1' },
+          });
+          mockIdempotencyService.store.mockResolvedValue({});
+
+          const result = await service.postGroupCollection(
+            groupId,
+            {
+              totalAmountPaise: correctSum,
+              collectionDate: '2024-06-15',
+              paymentMode: 'cash' as never,
+              idempotencyKey: `key-${crypto.randomUUID()}`,
+              memberBreakdown: breakdown,
+            },
+            'actor1',
+            'collection_officer',
+          );
+
+          // Group collection record was created
+          expect(mockGroupRepository.createGroupCollection).toHaveBeenCalledOnce();
+
+          // Result contains all member results
+          expect(result.statusCode).toBe(201);
+          const data = result.data as {
+            memberResults: Array<{ loanId: string; amountPaise: number }>;
+            totalAmountPaise: number;
+          };
+          expect(data.memberResults).toHaveLength(breakdown.length);
+          expect(data.totalAmountPaise).toBe(correctSum);
+
+          // Each member result has the correct loanId and amountPaise
+          for (const member of breakdown) {
+            const memberResult = data.memberResults.find(
+              (r) => r.loanId === member.loanId,
+            );
+            expect(memberResult).toBeDefined();
+            expect(memberResult!.amountPaise).toBe(member.amountPaise);
+          }
+        },
+      ),
+      { numRuns: 100 },
     );
   });
 });

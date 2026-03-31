@@ -131,3 +131,97 @@ describe('Property 29: RBAC Permission Enforcement', () => {
     );
   });
 });
+
+
+/**
+ * Property 37: No Orphaned Permissions — every permission has at least one role with access
+ * Property 38: Super Admin Full Access — super_admin has access to every permission
+ * Property 39: Viewer Read-Only — viewer_auditor has only read-level access
+ * Property 40: No Duplicate Roles — no duplicate role entries per permission
+ *
+ * **Validates: Requirements 38.1, 38.2, 38.3, 38.4, 38.5**
+ */
+
+describe('Property 37: No Orphaned Permissions', () => {
+  it('every permission in the matrix has at least one role with access', () => {
+    fc.assert(
+      fc.property(permissionArb, (permission) => {
+        const roles = PERMISSIONS[permission] as readonly UserRole[] | undefined;
+        expect(roles).toBeDefined();
+        expect(roles!.length).toBeGreaterThanOrEqual(1);
+      }),
+      { numRuns: 100 },
+    );
+  });
+});
+
+describe('Property 38: Super Admin Full Access', () => {
+  it('super_admin has access to every permission in the matrix', () => {
+    fc.assert(
+      fc.property(permissionArb, (permission) => {
+        const allowedRoles = PERMISSIONS[permission] as readonly string[];
+        expect(allowedRoles).toContain(UserRole.SUPER_ADMIN);
+      }),
+      { numRuns: 100 },
+    );
+  });
+});
+
+describe('Property 39: Viewer Read-Only', () => {
+  /** Actions that are write/mutate operations — viewer_auditor must NOT have these */
+  const WRITE_ACTIONS = [
+    'create',
+    'update',
+    'delete',
+    'approve',
+    'reject',
+    'reverse',
+    'disburse',
+    'close',
+    'submit',
+    'blacklist',
+    'upload_doc',
+    'calculate',
+    'waive',
+    'quote',
+    'execute',
+    'change_role',
+    'manage_members',
+    'collect',
+    'create_expense',
+    'manage_cashbook',
+    'export',
+    'print',
+    'verify',
+    'retry',
+  ];
+
+  it('viewer_auditor has only read-level access (no write/mutate permissions)', () => {
+    fc.assert(
+      fc.property(permissionArb, (permission) => {
+        const allowedRoles = PERMISSIONS[permission] as readonly string[];
+        const action = permission.split('.')[1] ?? '';
+        const viewerHasAccess = allowedRoles.includes(UserRole.VIEWER_AUDITOR);
+
+        if (WRITE_ACTIONS.includes(action)) {
+          expect(viewerHasAccess).toBe(false);
+        }
+        // read-level permissions may or may not include viewer — no assertion needed
+      }),
+      { numRuns: 100 },
+    );
+  });
+});
+
+describe('Property 40: No Duplicate Roles', () => {
+  it('no permission has duplicate role entries in its allowed roles array', () => {
+    fc.assert(
+      fc.property(permissionArb, (permission) => {
+        const roles = PERMISSIONS[permission] as readonly UserRole[];
+        const uniqueRoles = new Set(roles);
+        expect(uniqueRoles.size).toBe(roles.length);
+      }),
+      { numRuns: 100 },
+    );
+  });
+});

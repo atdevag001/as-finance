@@ -23,6 +23,7 @@ export default defineConfig({
       concurrent: false,
     },
     globalSetup: ['test/setup/global-setup.ts'],
+    setupFiles: ['test/setup/worker-setup.ts'],
     reporters: ['verbose'],
     coverage: {
       provider: 'v8',
