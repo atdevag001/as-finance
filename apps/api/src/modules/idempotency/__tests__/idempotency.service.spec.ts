@@ -6,7 +6,7 @@ import { PrismaService } from '../../../database/prisma.service';
 /**
  * Unit tests for IdempotencyService.
  *
- * Validates: Requirements 20.1, 5.5, 6.4
+ * Validates: Requirements 35.1, 35.2, 35.3, 35.4, 35.5
  */
 describe('IdempotencyService', () => {
   let service: IdempotencyService;

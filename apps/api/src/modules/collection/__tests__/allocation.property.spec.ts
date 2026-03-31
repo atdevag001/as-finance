@@ -6,16 +6,12 @@ import {
   type PenaltyState,
   type ComponentOrder,
 } from '../allocation-engine';
+import { allocationParamsArb } from '@as-finance/testing';
 
 // ─── Shared Generators ─────────────────────────────────────────────────────
 
 /** Generate a valid paise amount: 1 paisa to ₹10,00,000 */
 const paiseArb = fc.integer({ min: 1, max: 10_000_000 });
-
-/** Generate a valid paid amount that is between 0 and the total amount */
-function paidArb(total: number): fc.Arbitrary<number> {
-  return fc.integer({ min: 0, max: total });
-}
 
 /** Generate a single installment with random outstanding amounts */
 const installmentArb = (index: number): fc.Arbitrary<InstallmentState> =>
@@ -66,24 +62,15 @@ const penaltiesArb: fc.Arbitrary<PenaltyState[]> = fc
 /** Default allocation order */
 const DEFAULT_ORDER: ComponentOrder[] = ['penalty', 'interest', 'principal'];
 
-/**
- * Compute total outstanding across installments and penalties.
- * Used to generate payment amounts that are within valid range.
- */
-function totalOutstanding(
-  installments: InstallmentState[],
-  penalties: PenaltyState[],
-): number {
-  let total = 0;
-  for (const inst of installments) {
-    total += inst.principalPaise - inst.principalPaidPaise;
-    total += inst.interestPaise - inst.interestPaidPaise;
-  }
-  for (const pen of penalties) {
-    total += pen.amountPaise - pen.paidPaise;
-  }
-  return total;
-}
+/** All possible allocation orders (permutations of the 3 components) */
+const allocationOrderArb: fc.Arbitrary<ComponentOrder[]> = fc.constantFrom(
+  ['penalty', 'interest', 'principal'] as ComponentOrder[],
+  ['penalty', 'principal', 'interest'] as ComponentOrder[],
+  ['interest', 'penalty', 'principal'] as ComponentOrder[],
+  ['interest', 'principal', 'penalty'] as ComponentOrder[],
+  ['principal', 'penalty', 'interest'] as ComponentOrder[],
+  ['principal', 'interest', 'penalty'] as ComponentOrder[],
+);
 
 // ─── Property 6: Allocation Preservation ────────────────────────────────────
 
@@ -326,6 +313,253 @@ describe('Property 7: Allocation Order Correctness', () => {
           }
         },
       ),
+      { numRuns: 1000 },
+    );
+  });
+});
+
+
+// ─── Property 9: Money Conservation ─────────────────────────────────────────
+
+/**
+ * Property 9: Money Conservation
+ *
+ * For all valid AllocationParams, the sum of allocated penalty, interest,
+ * principal, and excess equals the input amountPaise exactly.
+ * No money is created or lost during allocation.
+ *
+ * **Validates: Requirements 4.1**
+ */
+describe('Property 9: Money Conservation', () => {
+  it('totalPenalty + totalInterest + totalPrincipal + excess = input amount', () => {
+    fc.assert(
+      fc.property(allocationParamsArb, ({ installments, penalties, amountPaise }) => {
+        const result = allocate({
+          amountPaise,
+          installments,
+          pendingPenalties: penalties,
+          allocationOrder: DEFAULT_ORDER,
+        });
+
+        const totalAllocated =
+          result.totalPenaltyAllocated +
+          result.totalInterestAllocated +
+          result.totalPrincipalAllocated +
+          result.excessAmount;
+
+        expect(totalAllocated).toBe(amountPaise);
+      }),
+      { numRuns: 1000 },
+    );
+  });
+});
+
+
+// ─── Property 10: No Over-Allocation ────────────────────────────────────────
+
+/**
+ * Property 10: No Over-Allocation
+ *
+ * No individual allocation line exceeds the outstanding amount for its
+ * target component (penalty outstanding, interest outstanding, or principal
+ * outstanding per installment).
+ *
+ * **Validates: Requirements 4.2**
+ */
+describe('Property 10: No Over-Allocation', () => {
+  it('no allocation line exceeds outstanding for its component', () => {
+    fc.assert(
+      fc.property(allocationParamsArb, ({ installments, penalties, amountPaise }) => {
+        const result = allocate({
+          amountPaise,
+          installments,
+          pendingPenalties: penalties,
+          allocationOrder: DEFAULT_ORDER,
+        });
+
+        // Build maps of outstanding per component
+        const penaltyOutstanding = new Map<string, number>();
+        for (const p of penalties) {
+          penaltyOutstanding.set(p.penaltyId, p.amountPaise - p.paidPaise);
+        }
+
+        const interestOutstanding = new Map<string, number>();
+        const principalOutstanding = new Map<string, number>();
+        for (const inst of installments) {
+          interestOutstanding.set(inst.installmentId, inst.interestPaise - inst.interestPaidPaise);
+          principalOutstanding.set(inst.installmentId, inst.principalPaise - inst.principalPaidPaise);
+        }
+
+        for (const line of result.allocations) {
+          if (line.component === 'penalty' && line.penaltyId) {
+            expect(line.amountPaise).toBeLessThanOrEqual(penaltyOutstanding.get(line.penaltyId)!);
+          }
+          if (line.component === 'interest' && line.installmentId) {
+            expect(line.amountPaise).toBeLessThanOrEqual(interestOutstanding.get(line.installmentId)!);
+          }
+          if (line.component === 'principal' && line.installmentId) {
+            expect(line.amountPaise).toBeLessThanOrEqual(principalOutstanding.get(line.installmentId)!);
+          }
+        }
+      }),
+      { numRuns: 1000 },
+    );
+  });
+});
+
+
+// ─── Property 11: Non-Negative Allocations ──────────────────────────────────
+
+/**
+ * Property 11: Non-Negative Allocations
+ *
+ * All allocation amounts (line items, component totals, and excess) are
+ * non-negative integers. No fractional paise, no negative values.
+ *
+ * **Validates: Requirements 4.3**
+ */
+describe('Property 11: Non-Negative Allocations', () => {
+  it('all allocation amounts are non-negative integers', () => {
+    fc.assert(
+      fc.property(allocationParamsArb, ({ installments, penalties, amountPaise }) => {
+        const result = allocate({
+          amountPaise,
+          installments,
+          pendingPenalties: penalties,
+          allocationOrder: DEFAULT_ORDER,
+        });
+
+        // Component totals are non-negative integers
+        expect(result.totalPenaltyAllocated).toBeGreaterThanOrEqual(0);
+        expect(result.totalInterestAllocated).toBeGreaterThanOrEqual(0);
+        expect(result.totalPrincipalAllocated).toBeGreaterThanOrEqual(0);
+        expect(result.excessAmount).toBeGreaterThanOrEqual(0);
+
+        expect(Number.isInteger(result.totalPenaltyAllocated)).toBe(true);
+        expect(Number.isInteger(result.totalInterestAllocated)).toBe(true);
+        expect(Number.isInteger(result.totalPrincipalAllocated)).toBe(true);
+        expect(Number.isInteger(result.excessAmount)).toBe(true);
+
+        // Every allocation line amount is a positive integer
+        for (const line of result.allocations) {
+          expect(line.amountPaise).toBeGreaterThan(0);
+          expect(Number.isInteger(line.amountPaise)).toBe(true);
+        }
+      }),
+      { numRuns: 1000 },
+    );
+  });
+});
+
+
+// ─── Property 12: Order Respect ─────────────────────────────────────────────
+
+/**
+ * Property 12: Order Respect
+ *
+ * The allocation order of component types in the result respects the
+ * configured allocationOrder parameter. For any permutation of
+ * ['penalty', 'interest', 'principal'], the allocation lines appear
+ * in that configured order.
+ *
+ * **Validates: Requirements 4.4**
+ */
+describe('Property 12: Order Respect', () => {
+  it('allocation order respects configured allocationOrder parameter', () => {
+    fc.assert(
+      fc.property(
+        allocationParamsArb,
+        allocationOrderArb,
+        ({ installments, penalties, amountPaise }, order) => {
+          const result = allocate({
+            amountPaise,
+            installments,
+            pendingPenalties: penalties,
+            allocationOrder: order,
+          });
+
+          // Extract the unique component sequence from allocation lines
+          const seenComponents: ComponentOrder[] = [];
+          for (const line of result.allocations) {
+            if (seenComponents.length === 0 || seenComponents[seenComponents.length - 1] !== line.component) {
+              seenComponents.push(line.component);
+            }
+          }
+
+          // seenComponents must be a subsequence of the configured order
+          let orderIdx = 0;
+          for (const comp of seenComponents) {
+            while (orderIdx < order.length && order[orderIdx] !== comp) {
+              orderIdx++;
+            }
+            expect(orderIdx).toBeLessThan(order.length);
+            orderIdx++;
+          }
+        },
+      ),
+      { numRuns: 1000 },
+    );
+  });
+});
+
+
+// ─── Property 13: Non-Negative Outstanding ──────────────────────────────────
+
+/**
+ * Property 13: Non-Negative Outstanding
+ *
+ * After allocation, the outstanding balance for every installment component
+ * (interest and principal) and every penalty is non-negative. The allocation
+ * engine never over-allocates beyond what is owed.
+ *
+ * **Validates: Requirements 4.5, 4.6**
+ */
+describe('Property 13: Non-Negative Outstanding', () => {
+  it('outstanding after allocation is non-negative per component', () => {
+    fc.assert(
+      fc.property(allocationParamsArb, ({ installments, penalties, amountPaise }) => {
+        const result = allocate({
+          amountPaise,
+          installments,
+          pendingPenalties: penalties,
+          allocationOrder: DEFAULT_ORDER,
+        });
+
+        // Build allocated-per-target maps
+        const penaltyAllocMap = new Map<string, number>();
+        const interestAllocMap = new Map<string, number>();
+        const principalAllocMap = new Map<string, number>();
+
+        for (const line of result.allocations) {
+          if (line.component === 'penalty' && line.penaltyId) {
+            penaltyAllocMap.set(line.penaltyId, (penaltyAllocMap.get(line.penaltyId) ?? 0) + line.amountPaise);
+          }
+          if (line.component === 'interest' && line.installmentId) {
+            interestAllocMap.set(line.installmentId, (interestAllocMap.get(line.installmentId) ?? 0) + line.amountPaise);
+          }
+          if (line.component === 'principal' && line.installmentId) {
+            principalAllocMap.set(line.installmentId, (principalAllocMap.get(line.installmentId) ?? 0) + line.amountPaise);
+          }
+        }
+
+        // Verify non-negative outstanding for each penalty
+        for (const p of penalties) {
+          const allocated = penaltyAllocMap.get(p.penaltyId) ?? 0;
+          const remaining = (p.amountPaise - p.paidPaise) - allocated;
+          expect(remaining).toBeGreaterThanOrEqual(0);
+        }
+
+        // Verify non-negative outstanding for each installment component
+        for (const inst of installments) {
+          const intAllocated = interestAllocMap.get(inst.installmentId) ?? 0;
+          const intRemaining = (inst.interestPaise - inst.interestPaidPaise) - intAllocated;
+          expect(intRemaining).toBeGreaterThanOrEqual(0);
+
+          const princAllocated = principalAllocMap.get(inst.installmentId) ?? 0;
+          const princRemaining = (inst.principalPaise - inst.principalPaidPaise) - princAllocated;
+          expect(princRemaining).toBeGreaterThanOrEqual(0);
+        }
+      }),
       { numRuns: 1000 },
     );
   });

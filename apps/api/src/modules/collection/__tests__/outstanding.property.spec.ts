@@ -100,7 +100,7 @@ function computeTotalPayable(
 }
 
 /**
- * Apply an allocation result to installments and penalties in-place,
+ * Apply an allocation result to installments and penalties,
  * returning deep-copied updated state.
  */
 function applyAllocation(
@@ -108,7 +108,6 @@ function applyAllocation(
   penalties: PenaltyState[],
   result: ReturnType<typeof allocate>,
 ): { installments: InstallmentState[]; penalties: PenaltyState[] } {
-  // Deep copy
   const newInstallments = installments.map((inst) => ({ ...inst }));
   const newPenalties = penalties.map((pen) => ({ ...pen }));
 
@@ -130,18 +129,77 @@ function applyAllocation(
   return { installments: newInstallments, penalties: newPenalties };
 }
 
+/**
+ * Reverse an allocation: subtract paid amounts that were added by the allocation.
+ * Returns deep-copied updated state.
+ */
+function reverseAllocation(
+  installments: InstallmentState[],
+  penalties: PenaltyState[],
+  result: ReturnType<typeof allocate>,
+): { installments: InstallmentState[]; penalties: PenaltyState[] } {
+  const newInstallments = installments.map((inst) => ({ ...inst }));
+  const newPenalties = penalties.map((pen) => ({ ...pen }));
+
+  for (const line of result.allocations) {
+    if (line.component === 'penalty' && line.penaltyId) {
+      const pen = newPenalties.find((p) => p.penaltyId === line.penaltyId);
+      if (pen) pen.paidPaise -= line.amountPaise;
+    }
+    if (line.component === 'interest' && line.installmentId) {
+      const inst = newInstallments.find((i) => i.installmentId === line.installmentId);
+      if (inst) inst.interestPaidPaise -= line.amountPaise;
+    }
+    if (line.component === 'principal' && line.installmentId) {
+      const inst = newInstallments.find((i) => i.installmentId === line.installmentId);
+      if (inst) inst.principalPaidPaise -= line.amountPaise;
+    }
+  }
+
+  return { installments: newInstallments, penalties: newPenalties };
+}
+
+// ─── Operation Sequence Generator for Collection + Reversal ─────────────────
+
+type Operation =
+  | { type: 'collect'; fraction: number }
+  | { type: 'reverse'; targetIndex: number };
+
+/**
+ * Generate a sequence of 2–8 operations mixing collections and reversals.
+ * Collections use a fraction of current outstanding; reversals target a
+ * previous non-reversed collection by index (modulo available).
+ */
+const operationSequenceArb: fc.Arbitrary<Operation[]> = fc
+  .integer({ min: 2, max: 8 })
+  .chain((count) =>
+    fc.array(
+      fc.oneof(
+        {
+          weight: 3,
+          arbitrary: fc
+            .double({ min: 0.05, max: 0.6, noNaN: true })
+            .map((fraction): Operation => ({ type: 'collect', fraction })),
+        },
+        {
+          weight: 1,
+          arbitrary: fc
+            .nat({ max: 20 })
+            .map((targetIndex): Operation => ({ type: 'reverse', targetIndex })),
+        },
+      ),
+      { minLength: count, maxLength: count },
+    ),
+  );
+
 // ─── Property 8: Outstanding Balance Accuracy ───────────────────────────────
 
 /**
  * Feature: as-finance-loan-management-system, Property 8: Outstanding Balance Accuracy
  *
- * For all valid sequences of collections/reversals, outstanding == total_payable
+ * For all valid sequences of collections, outstanding == total_payable
  * - sum(valid_allocated_payments) at every point. Outstanding SHALL never
  * silently drift from this derived value.
- *
- * We generate a loan with random installments and penalties, then apply a
- * sequence of random valid payments using the pure allocate() function.
- * After each payment, we verify the invariant holds.
  *
  * **Validates: Requirements 6.11, 25.2**
  */
@@ -154,7 +212,7 @@ describe('Property 8: Outstanding Balance Accuracy', () => {
         paymentFractionsArb,
         (installments, penalties, fractions) => {
           const totalPayable = computeTotalPayable(installments, penalties);
-          if (totalPayable === 0) return; // skip degenerate case
+          if (totalPayable === 0) return;
 
           let currentInstallments = installments.map((i) => ({ ...i }));
           let currentPenalties = penalties.map((p) => ({ ...p }));
@@ -165,9 +223,8 @@ describe('Property 8: Outstanding Balance Accuracy', () => {
               currentInstallments,
               currentPenalties,
             );
-            if (currentOutstanding <= 0) break; // fully paid
+            if (currentOutstanding <= 0) break;
 
-            // Payment is a fraction of current outstanding (always valid — won't exceed)
             const paymentAmount = Math.max(1, Math.floor(currentOutstanding * fraction));
 
             const result = allocate({
@@ -177,7 +234,6 @@ describe('Property 8: Outstanding Balance Accuracy', () => {
               allocationOrder: DEFAULT_ORDER,
             });
 
-            // Sum of allocated (excluding excess) is what actually reduced outstanding
             const allocated =
               result.totalPenaltyAllocated +
               result.totalInterestAllocated +
@@ -185,7 +241,6 @@ describe('Property 8: Outstanding Balance Accuracy', () => {
 
             sumAllocated += allocated;
 
-            // Apply allocation to state
             const updated = applyAllocation(
               currentInstallments,
               currentPenalties,
@@ -230,11 +285,9 @@ describe('Property 8: Outstanding Balance Accuracy', () => {
             result.totalInterestAllocated +
             result.totalPrincipalAllocated;
 
-          // Full payment should allocate everything with zero excess
           expect(allocated).toBe(totalPayable);
           expect(result.excessAmount).toBe(0);
 
-          // After applying, outstanding should be exactly zero
           const updated = applyAllocation(installments, penalties, result);
           const remaining = computeTotalOutstanding(
             updated.installments,
@@ -253,10 +306,9 @@ describe('Property 8: Outstanding Balance Accuracy', () => {
 /**
  * Feature: as-finance-loan-management-system, Property 9: Non-Negative Outstanding
  *
- * For all loan states after any valid operation sequence, outstanding ≥ 0.
- * Collections causing negative outstanding are rejected. At the allocation
- * engine level, any payment exceeding total outstanding is tracked as
- * excessAmount — the allocated portion never exceeds what's owed.
+ * For all loan states after any valid operation sequence, outstanding >= 0.
+ * At the allocation engine level, any payment exceeding total outstanding
+ * is tracked as excessAmount — the allocated portion never exceeds what's owed.
  *
  * **Validates: Requirements 6.12, 25.8**
  */
@@ -290,7 +342,6 @@ describe('Property 9: Non-Negative Outstanding', () => {
               allocationOrder: DEFAULT_ORDER,
             });
 
-            // Apply allocation
             const updated = applyAllocation(
               currentInstallments,
               currentPenalties,
@@ -299,7 +350,6 @@ describe('Property 9: Non-Negative Outstanding', () => {
             currentInstallments = updated.installments;
             currentPenalties = updated.penalties;
 
-            // INVARIANT: outstanding >= 0 after every payment
             const outstanding = computeTotalOutstanding(
               currentInstallments,
               currentPenalties,
@@ -322,7 +372,6 @@ describe('Property 9: Non-Negative Outstanding', () => {
           const totalPayable = computeTotalPayable(installments, penalties);
           if (totalPayable === 0) return;
 
-          // Pay more than total outstanding
           const overpayment = totalPayable + extraPaise;
 
           const result = allocate({
@@ -337,14 +386,10 @@ describe('Property 9: Non-Negative Outstanding', () => {
             result.totalInterestAllocated +
             result.totalPrincipalAllocated;
 
-          // Allocated portion must not exceed total payable
           expect(allocated).toBeLessThanOrEqual(totalPayable);
-
-          // Excess captures the overpayment
           expect(result.excessAmount).toBe(overpayment - allocated);
           expect(result.excessAmount).toBeGreaterThan(0);
 
-          // After applying allocation, outstanding must be >= 0
           const updated = applyAllocation(installments, penalties, result);
           const remaining = computeTotalOutstanding(
             updated.installments,
@@ -394,16 +439,330 @@ describe('Property 9: Non-Negative Outstanding', () => {
             currentInstallments = updated.installments;
             currentPenalties = updated.penalties;
 
-            // INVARIANT: no installment's paid exceeds its owed
             for (const inst of currentInstallments) {
               expect(inst.principalPaidPaise).toBeLessThanOrEqual(inst.principalPaise);
               expect(inst.interestPaidPaise).toBeLessThanOrEqual(inst.interestPaise);
             }
 
-            // INVARIANT: no penalty's paid exceeds its amount
             for (const pen of currentPenalties) {
               expect(pen.paidPaise).toBeLessThanOrEqual(pen.amountPaise);
             }
+          }
+        },
+      ),
+      { numRuns: 1000 },
+    );
+  });
+});
+
+// ─── Property 14: Outstanding Drift ─────────────────────────────────────────
+
+/**
+ * Property 14: Outstanding Drift
+ *
+ * For any valid sequence of collection and reversal operations on a loan,
+ * the cached_outstanding equals total_payable minus net allocated payments.
+ * Net allocated = sum of all collection allocations minus sum of all reversed
+ * collection allocations. This ensures outstanding never silently drifts
+ * even when reversals are interleaved with collections.
+ *
+ * **Validates: Requirements 75.3, 75.5, 75.6**
+ */
+describe('Property 14: Outstanding Drift', () => {
+  it('cached_outstanding equals total_payable minus net allocated payments for any valid operation sequence', () => {
+    fc.assert(
+      fc.property(
+        freshInstallmentsArb,
+        freshPenaltiesArb,
+        operationSequenceArb,
+        (installments, penalties, operations) => {
+          const totalPayable = computeTotalPayable(installments, penalties);
+          if (totalPayable === 0) return;
+
+          let currentInstallments = installments.map((i) => ({ ...i }));
+          let currentPenalties = penalties.map((p) => ({ ...p }));
+          let netAllocated = 0;
+
+          // Track collection results for potential reversal
+          const collectionHistory: {
+            result: ReturnType<typeof allocate>;
+            allocated: number;
+            reversed: boolean;
+          }[] = [];
+
+          for (const op of operations) {
+            if (op.type === 'collect') {
+              const currentOutstanding = computeTotalOutstanding(
+                currentInstallments,
+                currentPenalties,
+              );
+              if (currentOutstanding <= 0) continue;
+
+              const paymentAmount = Math.max(
+                1,
+                Math.floor(currentOutstanding * op.fraction),
+              );
+
+              const result = allocate({
+                amountPaise: paymentAmount,
+                installments: currentInstallments,
+                pendingPenalties: currentPenalties,
+                allocationOrder: DEFAULT_ORDER,
+              });
+
+              const allocated =
+                result.totalPenaltyAllocated +
+                result.totalInterestAllocated +
+                result.totalPrincipalAllocated;
+
+              netAllocated += allocated;
+
+              const updated = applyAllocation(
+                currentInstallments,
+                currentPenalties,
+                result,
+              );
+              currentInstallments = updated.installments;
+              currentPenalties = updated.penalties;
+
+              collectionHistory.push({ result, allocated, reversed: false });
+            } else {
+              // Reverse a previous non-reversed collection
+              const nonReversed = collectionHistory.filter((c) => !c.reversed);
+              if (nonReversed.length === 0) continue;
+
+              const targetIdx = op.targetIndex % nonReversed.length;
+              const target = nonReversed[targetIdx]!;
+
+              const restored = reverseAllocation(
+                currentInstallments,
+                currentPenalties,
+                target.result,
+              );
+              currentInstallments = restored.installments;
+              currentPenalties = restored.penalties;
+
+              netAllocated -= target.allocated;
+              target.reversed = true;
+            }
+
+            // INVARIANT: outstanding == total_payable - net_allocated
+            const derivedOutstanding = totalPayable - netAllocated;
+            const actualOutstanding = computeTotalOutstanding(
+              currentInstallments,
+              currentPenalties,
+            );
+
+            expect(actualOutstanding).toBe(derivedOutstanding);
+          }
+        },
+      ),
+      { numRuns: 1000 },
+    );
+  });
+
+  it('full collection then full reversal restores original outstanding', () => {
+    fc.assert(
+      fc.property(
+        freshInstallmentsArb,
+        freshPenaltiesArb,
+        (installments, penalties) => {
+          const totalPayable = computeTotalPayable(installments, penalties);
+          if (totalPayable === 0) return;
+
+          const result = allocate({
+            amountPaise: totalPayable,
+            installments,
+            pendingPenalties: penalties,
+            allocationOrder: DEFAULT_ORDER,
+          });
+
+          const afterCollect = applyAllocation(installments, penalties, result);
+          expect(
+            computeTotalOutstanding(afterCollect.installments, afterCollect.penalties),
+          ).toBe(0);
+
+          // Reverse the collection — outstanding should restore to original
+          const afterReverse = reverseAllocation(
+            afterCollect.installments,
+            afterCollect.penalties,
+            result,
+          );
+
+          const restoredOutstanding = computeTotalOutstanding(
+            afterReverse.installments,
+            afterReverse.penalties,
+          );
+          expect(restoredOutstanding).toBe(totalPayable);
+        },
+      ),
+      { numRuns: 1000 },
+    );
+  });
+});
+
+// ─── Property 15: Non-Negative Outstanding (Collection + Reversal) ──────────
+
+/**
+ * Property 15: Non-Negative Outstanding
+ *
+ * Outstanding never becomes negative after any valid sequence of collection
+ * and reversal operations. Collections reduce outstanding (capped at zero
+ * via excess), and reversals restore it. At no point should outstanding
+ * drop below zero.
+ *
+ * **Validates: Requirements 75.3, 75.5, 75.6**
+ */
+describe('Property 15: Non-Negative Outstanding (Collection + Reversal)', () => {
+  it('outstanding never becomes negative after valid collection and reversal operations', () => {
+    fc.assert(
+      fc.property(
+        freshInstallmentsArb,
+        freshPenaltiesArb,
+        operationSequenceArb,
+        (installments, penalties, operations) => {
+          const totalPayable = computeTotalPayable(installments, penalties);
+          if (totalPayable === 0) return;
+
+          let currentInstallments = installments.map((i) => ({ ...i }));
+          let currentPenalties = penalties.map((p) => ({ ...p }));
+
+          const collectionHistory: {
+            result: ReturnType<typeof allocate>;
+            reversed: boolean;
+          }[] = [];
+
+          for (const op of operations) {
+            if (op.type === 'collect') {
+              const currentOutstanding = computeTotalOutstanding(
+                currentInstallments,
+                currentPenalties,
+              );
+              if (currentOutstanding <= 0) continue;
+
+              const paymentAmount = Math.max(
+                1,
+                Math.floor(currentOutstanding * op.fraction),
+              );
+
+              const result = allocate({
+                amountPaise: paymentAmount,
+                installments: currentInstallments,
+                pendingPenalties: currentPenalties,
+                allocationOrder: DEFAULT_ORDER,
+              });
+
+              const updated = applyAllocation(
+                currentInstallments,
+                currentPenalties,
+                result,
+              );
+              currentInstallments = updated.installments;
+              currentPenalties = updated.penalties;
+
+              collectionHistory.push({ result, reversed: false });
+            } else {
+              const nonReversed = collectionHistory.filter((c) => !c.reversed);
+              if (nonReversed.length === 0) continue;
+
+              const targetIdx = op.targetIndex % nonReversed.length;
+              const target = nonReversed[targetIdx]!;
+
+              const restored = reverseAllocation(
+                currentInstallments,
+                currentPenalties,
+                target.result,
+              );
+              currentInstallments = restored.installments;
+              currentPenalties = restored.penalties;
+
+              target.reversed = true;
+            }
+
+            // INVARIANT: outstanding >= 0 after every operation
+            const outstanding = computeTotalOutstanding(
+              currentInstallments,
+              currentPenalties,
+            );
+            expect(outstanding).toBeGreaterThanOrEqual(0);
+          }
+        },
+      ),
+      { numRuns: 1000 },
+    );
+  });
+
+  it('outstanding never exceeds total_payable after any operation sequence', () => {
+    fc.assert(
+      fc.property(
+        freshInstallmentsArb,
+        freshPenaltiesArb,
+        operationSequenceArb,
+        (installments, penalties, operations) => {
+          const totalPayable = computeTotalPayable(installments, penalties);
+          if (totalPayable === 0) return;
+
+          let currentInstallments = installments.map((i) => ({ ...i }));
+          let currentPenalties = penalties.map((p) => ({ ...p }));
+
+          const collectionHistory: {
+            result: ReturnType<typeof allocate>;
+            reversed: boolean;
+          }[] = [];
+
+          for (const op of operations) {
+            if (op.type === 'collect') {
+              const currentOutstanding = computeTotalOutstanding(
+                currentInstallments,
+                currentPenalties,
+              );
+              if (currentOutstanding <= 0) continue;
+
+              const paymentAmount = Math.max(
+                1,
+                Math.floor(currentOutstanding * op.fraction),
+              );
+
+              const result = allocate({
+                amountPaise: paymentAmount,
+                installments: currentInstallments,
+                pendingPenalties: currentPenalties,
+                allocationOrder: DEFAULT_ORDER,
+              });
+
+              const updated = applyAllocation(
+                currentInstallments,
+                currentPenalties,
+                result,
+              );
+              currentInstallments = updated.installments;
+              currentPenalties = updated.penalties;
+
+              collectionHistory.push({ result, reversed: false });
+            } else {
+              const nonReversed = collectionHistory.filter((c) => !c.reversed);
+              if (nonReversed.length === 0) continue;
+
+              const targetIdx = op.targetIndex % nonReversed.length;
+              const target = nonReversed[targetIdx]!;
+
+              const restored = reverseAllocation(
+                currentInstallments,
+                currentPenalties,
+                target.result,
+              );
+              currentInstallments = restored.installments;
+              currentPenalties = restored.penalties;
+
+              target.reversed = true;
+            }
+
+            // INVARIANT: outstanding <= total_payable (can't owe more than original)
+            const outstanding = computeTotalOutstanding(
+              currentInstallments,
+              currentPenalties,
+            );
+            expect(outstanding).toBeLessThanOrEqual(totalPayable);
           }
         },
       ),

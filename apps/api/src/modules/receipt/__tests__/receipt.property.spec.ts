@@ -4,14 +4,23 @@ import { ReceiptService, GenerateReceiptInput } from '../receipt.service';
 import { ReceiptRepository } from '../receipt.repository';
 
 /**
- * Property 18: Receipt Immutability
+ * Property 18: Receipt Reconciliation
+ *
+ * For any valid receipt, penalty_component + interest_component +
+ * principal_component SHALL equal the receipt amountPaise.
+ *
+ * **Validates: Requirements 24.1**
+ *
+ * ---
+ *
+ * Receipt Immutability (supplementary)
  *
  * For all receipts, reading the receipt at any time after creation SHALL return
  * identical content (amount, components, customer name, loan number, receipt
  * number, officer name). Receipt content fields are snapshot values that never
  * change.
  *
- * **Validates: Requirements 19.3, 25.7**
+ * **Validates: Requirements 23.4**
  *
  * ---
  *
@@ -21,7 +30,7 @@ import { ReceiptRepository } from '../receipt.repository';
  * receipts R1 and R2 where R1 was created before R2, the numeric portion of
  * R1's receipt number SHALL be less than R2's.
  *
- * **Validates: Requirements 19.2**
+ * **Validates: Requirements 24.2, 24.3**
  */
 
 // --- Generators ---
@@ -176,7 +185,80 @@ function createServiceWithInMemoryStore() {
 
 // --- Property Tests ---
 
-describe('Property 18: Receipt Immutability', () => {
+describe('Property 18: Receipt Reconciliation — penalty + interest + principal = receipt amount', () => {
+  /**
+   * **Validates: Requirements 24.1**
+   *
+   * For any valid receipt input where components are generated independently,
+   * the service must persist a receipt whose penalty + interest + principal
+   * components exactly equal the receipt amountPaise.
+   */
+  it('for all valid receipt inputs, penalty + interest + principal components equal amountPaise', async () => {
+    await fc.assert(
+      fc.asyncProperty(receiptInputArb, async (input) => {
+        const { service } = createServiceWithInMemoryStore();
+
+        const receipt = await service.generateReceipt(input as GenerateReceiptInput);
+
+        const penalty = Number(receipt.penalty_component_paise);
+        const interest = Number(receipt.interest_component_paise);
+        const principal = Number(receipt.principal_component_paise);
+        const total = Number(receipt.amount_paise);
+
+        expect(penalty + interest + principal).toBe(total);
+      }),
+      { numRuns: 200 },
+    );
+  });
+
+  it('for all valid receipt inputs, components are non-negative integers', async () => {
+    await fc.assert(
+      fc.asyncProperty(receiptInputArb, async (input) => {
+        const { service } = createServiceWithInMemoryStore();
+
+        const receipt = await service.generateReceipt(input as GenerateReceiptInput);
+
+        const penalty = Number(receipt.penalty_component_paise);
+        const interest = Number(receipt.interest_component_paise);
+        const principal = Number(receipt.principal_component_paise);
+        const total = Number(receipt.amount_paise);
+
+        expect(penalty).toBeGreaterThanOrEqual(0);
+        expect(interest).toBeGreaterThanOrEqual(0);
+        expect(principal).toBeGreaterThanOrEqual(0);
+        expect(total).toBeGreaterThanOrEqual(0);
+
+        // All values must be integers (paise)
+        expect(Number.isInteger(penalty)).toBe(true);
+        expect(Number.isInteger(interest)).toBe(true);
+        expect(Number.isInteger(principal)).toBe(true);
+        expect(Number.isInteger(total)).toBe(true);
+      }),
+      { numRuns: 200 },
+    );
+  });
+
+  it('reconciliation holds after reading back from store', async () => {
+    await fc.assert(
+      fc.asyncProperty(receiptInputArb, async (input) => {
+        const { service } = createServiceWithInMemoryStore();
+
+        const created = await service.generateReceipt(input as GenerateReceiptInput);
+        const readBack = await service.getReceiptById(created.id);
+
+        const penalty = Number(readBack.penalty_component_paise);
+        const interest = Number(readBack.interest_component_paise);
+        const principal = Number(readBack.principal_component_paise);
+        const total = Number(readBack.amount_paise);
+
+        expect(penalty + interest + principal).toBe(total);
+      }),
+      { numRuns: 200 },
+    );
+  });
+});
+
+describe('Receipt Immutability (supplementary)', () => {
   it('for all valid receipt inputs, reading a receipt after creation returns identical content fields', async () => {
     await fc.assert(
       fc.asyncProperty(receiptInputArb, async (input) => {

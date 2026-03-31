@@ -244,12 +244,63 @@ describe('CustomerService', () => {
       ).rejects.toThrow(ValidationError);
     });
 
+    it('should reject Aadhaar with letters', async () => {
+      const invalidDto = { ...validCreateDto, aadhaarNumber: '12345678ABCD' };
+
+      await expect(
+        service.create(invalidDto as never, mockActorId, UserRole.FIELD_OFFICER),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it('should reject 11-digit Aadhaar', async () => {
+      const invalidDto = { ...validCreateDto, aadhaarNumber: '12345678901' };
+
+      await expect(
+        service.create(invalidDto as never, mockActorId, UserRole.FIELD_OFFICER),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it('should reject 13-digit Aadhaar', async () => {
+      const invalidDto = { ...validCreateDto, aadhaarNumber: '1234567890123' };
+
+      await expect(
+        service.create(invalidDto as never, mockActorId, UserRole.FIELD_OFFICER),
+      ).rejects.toThrow(ValidationError);
+    });
+
     it('should reject invalid PAN format', async () => {
       const invalidDto = { ...validCreateDto, panNumber: 'INVALID' };
 
       await expect(
         service.create(invalidDto as never, mockActorId, UserRole.FIELD_OFFICER),
       ).rejects.toThrow(ValidationError);
+    });
+
+    it('should reject PAN with lowercase letters', async () => {
+      const invalidDto = { ...validCreateDto, panNumber: 'abcde1234f' };
+
+      await expect(
+        service.create(invalidDto as never, mockActorId, UserRole.FIELD_OFFICER),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it('should reject PAN with wrong structure', async () => {
+      const invalidDto = { ...validCreateDto, panNumber: '12345ABCDE' };
+
+      await expect(
+        service.create(invalidDto as never, mockActorId, UserRole.FIELD_OFFICER),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it('should accept valid PAN format ABCDE1234F', async () => {
+      const dtoWithPan = { ...validCreateDto, panNumber: 'ABCDE1234F' };
+      mockRepo.findByAadhaarLastFour.mockResolvedValue([]);
+      mockRepo.findByMobile.mockResolvedValue([]);
+      mockRepo.create.mockResolvedValue(mockCustomer);
+      mockRepo.createAuditLog.mockResolvedValue({});
+
+      const result = await service.create(dtoWithPan as never, mockActorId, UserRole.FIELD_OFFICER);
+      expect(result.customer).toBeDefined();
     });
   });
 
@@ -308,6 +359,90 @@ describe('CustomerService', () => {
       expect(mockRepo.findAll).toHaveBeenCalledWith(
         expect.objectContaining({
           assignedOfficerId: undefined,
+        }),
+      );
+    });
+
+    it('should not scope accountant', async () => {
+      mockRepo.findAll.mockResolvedValue({ data: [], total: 0 });
+
+      await service.findAll({}, mockActorId, UserRole.ACCOUNTANT);
+
+      expect(mockRepo.findAll).toHaveBeenCalledWith(
+        expect.objectContaining({
+          assignedOfficerId: undefined,
+        }),
+      );
+    });
+
+    it('should not scope office_staff', async () => {
+      mockRepo.findAll.mockResolvedValue({ data: [], total: 0 });
+
+      await service.findAll({}, mockActorId, UserRole.OFFICE_STAFF);
+
+      expect(mockRepo.findAll).toHaveBeenCalledWith(
+        expect.objectContaining({
+          assignedOfficerId: undefined,
+        }),
+      );
+    });
+
+    it('should not scope viewer_auditor', async () => {
+      mockRepo.findAll.mockResolvedValue({ data: [], total: 0 });
+
+      await service.findAll({}, mockActorId, UserRole.VIEWER_AUDITOR);
+
+      expect(mockRepo.findAll).toHaveBeenCalledWith(
+        expect.objectContaining({
+          assignedOfficerId: undefined,
+        }),
+      );
+    });
+
+    it('should not scope collection_officer', async () => {
+      mockRepo.findAll.mockResolvedValue({ data: [], total: 0 });
+
+      await service.findAll({}, mockActorId, UserRole.COLLECTION_OFFICER);
+
+      expect(mockRepo.findAll).toHaveBeenCalledWith(
+        expect.objectContaining({
+          assignedOfficerId: undefined,
+        }),
+      );
+    });
+
+    it('should pass status filter to repository', async () => {
+      mockRepo.findAll.mockResolvedValue({ data: [], total: 0 });
+
+      await service.findAll({ status: 'active' }, mockActorId, UserRole.MANAGER);
+
+      expect(mockRepo.findAll).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'active',
+        }),
+      );
+    });
+
+    it('should pass search filter to repository', async () => {
+      mockRepo.findAll.mockResolvedValue({ data: [], total: 0 });
+
+      await service.findAll({ search: 'Rajesh' }, mockActorId, UserRole.MANAGER);
+
+      expect(mockRepo.findAll).toHaveBeenCalledWith(
+        expect.objectContaining({
+          search: 'Rajesh',
+        }),
+      );
+    });
+
+    it('should pass riskLevel filter to repository', async () => {
+      mockRepo.findAll.mockResolvedValue({ data: [], total: 0 });
+
+      await service.findAll({ riskLevel: 'high' }, mockActorId, UserRole.MANAGER);
+
+      expect(mockRepo.findAll).toHaveBeenCalledWith(
+        expect.objectContaining({
+          riskLevel: 'high',
         }),
       );
     });
@@ -492,6 +627,71 @@ describe('CustomerService', () => {
       expect(result.relationship).toBe('spouse');
     });
 
+    it('should add a family member with all optional fields', async () => {
+      mockRepo.findById.mockResolvedValue(mockCustomer);
+      const familyMember = {
+        id: 'fm-2',
+        customer_id: mockCustomerId,
+        name: 'Amit Kumar',
+        relationship: 'child',
+        contact_number: '9876543222',
+        occupation: 'Student',
+        income_contribution: 'None',
+        created_at: new Date(),
+      };
+      mockRepo.createFamilyMember.mockResolvedValue(familyMember);
+
+      const result = await service.addFamilyMember(mockCustomerId, {
+        name: 'Amit Kumar',
+        relationship: 'child',
+        contactNumber: '9876543222',
+        occupation: 'Student',
+        incomeContribution: 'None',
+      });
+
+      expect(result.name).toBe('Amit Kumar');
+      expect(result.occupation).toBe('Student');
+      expect(mockRepo.createFamilyMember).toHaveBeenCalledWith(
+        expect.objectContaining({
+          customer_id: mockCustomerId,
+          name: 'Amit Kumar',
+          relationship: 'child',
+          contact_number: '9876543222',
+          occupation: 'Student',
+          income_contribution: 'None',
+        }),
+      );
+    });
+
+    it('should add a family member without optional fields', async () => {
+      mockRepo.findById.mockResolvedValue(mockCustomer);
+      const familyMember = {
+        id: 'fm-3',
+        customer_id: mockCustomerId,
+        name: 'Ravi Kumar',
+        relationship: 'father',
+        contact_number: undefined,
+        occupation: undefined,
+        income_contribution: undefined,
+        created_at: new Date(),
+      };
+      mockRepo.createFamilyMember.mockResolvedValue(familyMember);
+
+      const result = await service.addFamilyMember(mockCustomerId, {
+        name: 'Ravi Kumar',
+        relationship: 'father',
+      });
+
+      expect(result.name).toBe('Ravi Kumar');
+      expect(mockRepo.createFamilyMember).toHaveBeenCalledWith(
+        expect.objectContaining({
+          customer_id: mockCustomerId,
+          name: 'Ravi Kumar',
+          relationship: 'father',
+        }),
+      );
+    });
+
     it('should throw NotFoundError for non-existent customer', async () => {
       mockRepo.findById.mockResolvedValue(null);
 
@@ -537,6 +737,38 @@ describe('CustomerService', () => {
       );
     });
 
+    it('should add a guarantor with photo file ID', async () => {
+      mockRepo.findById.mockResolvedValue(mockCustomer);
+      const guarantor = {
+        id: 'g-2',
+        customer_id: mockCustomerId,
+        name: 'Sita Devi',
+        relationship: 'relative',
+        mobile: '9876543213',
+        aadhaar_last_four: '9012',
+        address: '789 Third St',
+        photo_file_id: 'photo-uuid-123',
+        created_at: new Date(),
+      };
+      mockRepo.createGuarantor.mockResolvedValue(guarantor);
+
+      const result = await service.addGuarantor(mockCustomerId, {
+        name: 'Sita Devi',
+        relationship: 'relative',
+        mobile: '9876543213',
+        aadhaarNumber: '345678909012',
+        address: '789 Third St',
+        photoFileId: 'photo-uuid-123',
+      });
+
+      expect(result.photo_file_id).toBe('photo-uuid-123');
+      expect(mockRepo.createGuarantor).toHaveBeenCalledWith(
+        expect.objectContaining({
+          photo_file_id: 'photo-uuid-123',
+        }),
+      );
+    });
+
     it('should throw NotFoundError for non-existent customer', async () => {
       mockRepo.findById.mockResolvedValue(null);
 
@@ -560,6 +792,20 @@ describe('CustomerService', () => {
           relationship: 'friend',
           mobile: '9876543212',
           aadhaarNumber: '12345',
+          address: '456 Other St',
+        }),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it('should reject Aadhaar with letters for guarantor', async () => {
+      mockRepo.findById.mockResolvedValue(mockCustomer);
+
+      await expect(
+        service.addGuarantor(mockCustomerId, {
+          name: 'Test',
+          relationship: 'friend',
+          mobile: '9876543212',
+          aadhaarNumber: 'ABCDEF123456',
           address: '456 Other St',
         }),
       ).rejects.toThrow(ValidationError);
@@ -590,6 +836,19 @@ describe('CustomerService', () => {
       expect(result.matches[0]?.field).toBe('aadhaar');
     });
 
+    it('should return duplicates when mobile matches', async () => {
+      mockRepo.findByAadhaarLastFour.mockResolvedValue([]);
+      mockRepo.findByMobile.mockResolvedValue([
+        { id: 'existing-id', full_name: 'Existing', mobile: '9876543210', aadhaar_last_four: '5678', status: 'active' },
+      ]);
+
+      const result = await service.checkDuplicate(undefined, '9876543210');
+
+      expect(result.hasDuplicates).toBe(true);
+      expect(result.matches).toHaveLength(1);
+      expect(result.matches[0]?.field).toBe('mobile');
+    });
+
     it('should deduplicate when same customer matches both Aadhaar and mobile', async () => {
       const existingCustomer = { id: 'existing-id', full_name: 'Existing', mobile: '9876543210', aadhaar_last_four: '1234', status: 'active' };
       mockRepo.findByAadhaarLastFour.mockResolvedValue([existingCustomer]);
@@ -599,6 +858,44 @@ describe('CustomerService', () => {
 
       expect(result.hasDuplicates).toBe(true);
       expect(result.matches).toHaveLength(1);
+    });
+
+    it('should return no duplicates when neither param provided', async () => {
+      const result = await service.checkDuplicate();
+
+      expect(result.hasDuplicates).toBe(false);
+      expect(result.matches).toHaveLength(0);
+    });
+  });
+
+  describe('blacklisted customer status visibility', () => {
+    it('should return blacklisted status via findById for loan rejection checks', async () => {
+      const blacklistedCustomer = {
+        ...mockCustomer,
+        status: 'blacklisted',
+        blacklist_reason: 'Fraud detected',
+        blacklisted_at: new Date(),
+      };
+      mockRepo.findById.mockResolvedValue(blacklistedCustomer);
+
+      const result = await service.findById(mockCustomerId);
+
+      expect(result.status).toBe('blacklisted');
+      expect(result.blacklist_reason).toBe('Fraud detected');
+    });
+
+    it('should include blacklisted customers in findAll results for managers', async () => {
+      const blacklistedCustomer = { ...mockCustomer, status: 'blacklisted' };
+      mockRepo.findAll.mockResolvedValue({ data: [blacklistedCustomer], total: 1 });
+
+      const result = await service.findAll(
+        { status: 'blacklisted' },
+        mockActorId,
+        UserRole.MANAGER,
+      );
+
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0]?.status).toBe('blacklisted');
     });
   });
 });

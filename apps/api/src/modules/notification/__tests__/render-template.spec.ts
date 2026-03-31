@@ -63,4 +63,31 @@ describe('renderTemplate', () => {
       'Dear Rajesh Kumar, payment of Rs.5,000 received for loan LN-2024-00015. Receipt: RCP-2024-00042. Outstanding: Rs.45,000. Thank you - AS Finance.',
     );
   });
+
+  it('should ignore extra keys in the variable map not referenced in the template', () => {
+    const template = 'Dear {{customerName}}, your loan is approved.';
+    const variables = {
+      customerName: 'Rajesh',
+      loanNumber: 'LN-2024-00001',
+      amount: '50,000',
+      unusedKey: 'some-value',
+    };
+
+    const result = renderTemplate(template, variables);
+
+    expect(result).toBe('Dear Rajesh, your loan is approved.');
+  });
+
+  it('should handle mixed: some keys present, some missing, some extra', () => {
+    const template = 'Hello {{name}}, balance: Rs.{{balance}}, due: {{dueDate}}';
+    const variables = {
+      name: 'Suresh',
+      extraKey: 'ignored',
+      // balance and dueDate are missing
+    };
+
+    const result = renderTemplate(template, variables);
+
+    expect(result).toBe('Hello Suresh, balance: Rs., due: ');
+  });
 });

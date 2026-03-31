@@ -1,5 +1,6 @@
 // Factories
 export {
+  // Helpers
   buildEntity,
   randomPaise,
   randomInt,
@@ -7,6 +8,7 @@ export {
   randomPan,
   randomMobile,
   randomPincode,
+  // create* factories (existing)
   createUser,
   createCustomer,
   createLoanProduct,
@@ -15,6 +17,23 @@ export {
   createInstallment,
   createGroup,
   createJournalEntry,
+  // build* factories (new)
+  buildScheduleParams,
+  buildInstallmentState,
+  buildPenaltyState,
+  buildCollectionInput,
+  buildReceiptData,
+  buildDailySummaryInput,
+  buildAuditLogEntry,
+  buildIdempotencyRecord,
+  buildSmsTemplate,
+  buildUser,
+  buildCustomer,
+  buildLoan,
+  buildLoanProduct,
+  buildJournalEntry,
+  buildJournalLine,
+  // Types (existing)
   type TestUser,
   type TestCustomer,
   type TestLoanProduct,
@@ -25,7 +44,50 @@ export {
   type TestGroup,
   type TestJournalEntry,
   type TestJournalLine,
+  // Types (new)
+  type ScheduleParams,
+  type InstallmentState,
+  type PenaltyState,
+  type CollectionInput,
+  type ReceiptData,
+  type DailySummaryInput,
+  type AuditLogEntry,
+  type IdempotencyRecord,
+  type SmsTemplate,
+  type JournalEntry,
+  type JournalLine,
 } from './factories/index.js';
+
+// Arbitraries
+export {
+  paiseArb,
+  bigPaiseArb,
+  annualRateBpsArb,
+  tenureMonthsArb,
+  scheduleParamsArb,
+  installmentStateArb,
+  allocationParamsArb,
+  journalEntryArb,
+  journalLineArb,
+  penaltyConfigArb,
+  dueDateArb,
+  receiptDataArb,
+  dailySummaryInputArb,
+  roleArb,
+  permissionKeyArb,
+  idempotencyKeyArb,
+  operationTypeArb,
+  templateArb,
+  variableMapArb,
+  type PenaltyConfig,
+} from './arbitraries/index.js';
+
+// Helpers
+export {
+  expectBalanced,
+  expectNonNegativePaise,
+  expectMonotonicallyIncreasing,
+} from './helpers/index.js';
 
 // Fixtures
 export {

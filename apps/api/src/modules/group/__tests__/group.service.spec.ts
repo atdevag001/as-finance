@@ -205,6 +205,47 @@ describe('GroupService', () => {
         service.removeMember('g1', 'm1', 'user1', 'manager'),
       ).rejects.toThrow('already inactive');
     });
+
+    it('should perform soft removal by calling deactivateMember (sets left_at and is_active=false)', async () => {
+      mockGroupRepository.findById.mockResolvedValue(activeGroup);
+      mockGroupRepository.findMemberById.mockResolvedValue(activeMember);
+      mockGroupRepository.countActiveMembers.mockResolvedValue(8);
+      mockGroupRepository.hasActiveGroupLoans.mockResolvedValue(false);
+      mockGroupRepository.deactivateMember.mockResolvedValue({
+        ...activeMember,
+        is_active: false,
+        left_at: new Date(),
+      });
+      mockAuditService.createAuditLog.mockResolvedValue({});
+
+      await service.removeMember('g1', 'm1', 'user1', 'manager');
+
+      expect(mockGroupRepository.deactivateMember).toHaveBeenCalledWith('m1');
+      // Audit log captures before/after state reflecting soft removal
+      expect(mockAuditService.createAuditLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          before_state: expect.objectContaining({ active: true }),
+          after_state: expect.objectContaining({ active: false }),
+        }),
+      );
+    });
+
+    it('should reject when group is not found', async () => {
+      mockGroupRepository.findById.mockResolvedValue(null);
+
+      await expect(
+        service.removeMember('g1', 'm1', 'user1', 'manager'),
+      ).rejects.toThrow('Group not found');
+    });
+
+    it('should reject when member is not found in group', async () => {
+      mockGroupRepository.findById.mockResolvedValue(activeGroup);
+      mockGroupRepository.findMemberById.mockResolvedValue(null);
+
+      await expect(
+        service.removeMember('g1', 'm1', 'user1', 'manager'),
+      ).rejects.toThrow('Member not found in group');
+    });
   });
 
   // ── postGroupCollection ──────────────────────────────────────────────────
@@ -423,6 +464,109 @@ describe('GroupService', () => {
       mockGroupRepository.getGroupSummaryData.mockResolvedValue(null);
 
       await expect(service.getGroupSummary('bad-id')).rejects.toThrow('Group not found');
+    });
+
+    it('should return non-delinquent summary when all members are current', async () => {
+      mockGroupRepository.getGroupSummaryData.mockResolvedValue({
+        id: 'g1',
+        name: 'Good Group',
+        status: 'active',
+        meeting_day: 'wednesday',
+        branch_area: 'Area 2',
+        leader: { id: 'c1', full_name: 'Leader' },
+        members: [
+          {
+            id: 'm1',
+            customer: {
+              id: 'c1',
+              full_name: 'Member 1',
+              loans: [
+                {
+                  id: 'l1',
+                  loan_number: 'LN-1',
+                  status: 'active',
+                  cached_outstanding_paise: 40000n,
+                  dpd: 0,
+                  overdue_bucket: 'bucket_0',
+                  total_payable_paise: 100000n,
+                },
+              ],
+            },
+          },
+        ],
+        group_collections: [],
+      });
+
+      const summary = await service.getGroupSummary('g1');
+
+      expect(summary.isGroupDelinquent).toBe(false);
+      expect(summary.totalCollectedPaise).toBe(0);
+      expect(summary.totalOutstandingPaise).toBe(40000);
+      expect(summary.members[0]!.isDelinquent).toBe(false);
+      expect(summary.members[0]!.maxDpd).toBe(0);
+    });
+  });
+
+  // ── findById ─────────────────────────────────────────────────────────────
+
+  describe('findById', () => {
+    it('should return group when found', async () => {
+      const group = { id: 'g1', name: 'Test', status: 'active' };
+      mockGroupRepository.findById.mockResolvedValue(group);
+
+      const result = await service.findById('g1');
+      expect(result).toEqual(group);
+    });
+
+    it('should throw NotFoundError when group does not exist', async () => {
+      mockGroupRepository.findById.mockResolvedValue(null);
+
+      await expect(service.findById('bad-id')).rejects.toThrow('Group not found');
+    });
+  });
+
+  // ── findAll ──────────────────────────────────────────────────────────────
+
+  describe('findAll', () => {
+    it('should delegate to repository with pagination params', async () => {
+      const expected = { data: [{ id: 'g1' }], total: 1 };
+      mockGroupRepository.findAll.mockResolvedValue(expected);
+
+      const result = await service.findAll({ skip: 0, take: 10, status: 'active' });
+      expect(result).toEqual(expected);
+      expect(mockGroupRepository.findAll).toHaveBeenCalledWith({ skip: 0, take: 10, status: 'active' });
+    });
+  });
+
+  // ── Dissolved group rejection (Requirement 28.6) ─────────────────────────
+
+  describe('dissolved group rejection', () => {
+    it('should reject addMember for a dissolved group', async () => {
+      mockGroupRepository.findById.mockResolvedValue({ id: 'g1', status: 'dissolved', members: [] });
+
+      await expect(
+        service.addMember('g1', { customerId: 'c2' }, 'user1', 'field_officer'),
+      ).rejects.toThrow("Cannot add members to a group with status 'dissolved'");
+    });
+
+    it('should reject postGroupCollection for a dissolved group', async () => {
+      mockIdempotencyService.find.mockResolvedValue(null);
+      mockGroupRepository.findById.mockResolvedValue({ id: 'g1', status: 'dissolved', members: [] });
+
+      await expect(
+        service.postGroupCollection(
+          'g1',
+          {
+            totalAmountPaise: 5000,
+            collectionDate: '2024-06-15',
+            paymentMode: 'cash' as never,
+            idempotencyKey: 'key1',
+            memberBreakdown: [{ loanId: 'l1', amountPaise: 5000 }],
+          },
+          'user1',
+          'collection_officer',
+        ),
+      ).rejects.toThrow("Cannot post collection for group with status 'dissolved'");
     });
   });
 });

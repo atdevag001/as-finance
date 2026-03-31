@@ -197,6 +197,33 @@ describe('UserService', () => {
         take: 10,
       });
     });
+
+    it('should pass role filter to repository', async () => {
+      const mockResult = { data: [mockUser], total: 1 };
+      mockRepo.findAll.mockResolvedValue(mockResult);
+
+      const result = await service.findAll({
+        skip: 0,
+        take: 20,
+        role: UserRole.FIELD_OFFICER,
+      });
+
+      expect(result).toEqual(mockResult);
+      expect(mockRepo.findAll).toHaveBeenCalledWith({
+        skip: 0,
+        take: 20,
+        role: UserRole.FIELD_OFFICER,
+      });
+    });
+
+    it('should return empty list when no users match', async () => {
+      const mockResult = { data: [], total: 0 };
+      mockRepo.findAll.mockResolvedValue(mockResult);
+
+      const result = await service.findAll({ role: UserRole.SUPER_ADMIN });
+      expect(result.data).toHaveLength(0);
+      expect(result.total).toBe(0);
+    });
   });
 
   describe('updateUser', () => {
@@ -298,6 +325,95 @@ describe('UserService', () => {
           UserRole.SUPER_ADMIN,
         ),
       ).resolves.toBeDefined();
+    });
+
+    it('should check email uniqueness on update', async () => {
+      mockRepo.findById.mockResolvedValue({ ...mockUser, email: 'old@example.com' });
+      mockRepo.findByEmail.mockResolvedValue({ id: 'other-user-id' });
+
+      await expect(
+        service.updateUser(
+          mockUserId,
+          { email: 'taken@example.com' },
+          mockActorId,
+          UserRole.SUPER_ADMIN,
+        ),
+      ).rejects.toThrow(ConflictError);
+    });
+
+    it('should allow same email if it belongs to the same user', async () => {
+      mockRepo.findById.mockResolvedValue({ ...mockUser, email: 'me@example.com' });
+      mockRepo.findByEmail.mockResolvedValue({ id: mockUserId });
+      mockRepo.update.mockResolvedValue({ ...mockUser, email: 'me@example.com' });
+
+      await expect(
+        service.updateUser(
+          mockUserId,
+          { email: 'me@example.com' },
+          mockActorId,
+          UserRole.SUPER_ADMIN,
+        ),
+      ).resolves.toBeDefined();
+    });
+
+    it('should pass isActive=false for deactivation', async () => {
+      mockRepo.findById.mockResolvedValue(mockUser);
+      mockRepo.update.mockResolvedValue({ ...mockUser, is_active: false });
+
+      const result = await service.updateUser(
+        mockUserId,
+        { isActive: false },
+        mockActorId,
+        UserRole.SUPER_ADMIN,
+      );
+
+      expect(result.is_active).toBe(false);
+      expect(mockRepo.update).toHaveBeenCalledWith(
+        mockUserId,
+        expect.objectContaining({ is_active: false }),
+      );
+    });
+
+    it('should allow manager to change role to collection_officer', async () => {
+      mockRepo.findById.mockResolvedValue(mockUser);
+      mockRepo.update.mockResolvedValue({ ...mockUser, role: 'collection_officer' });
+
+      const result = await service.updateUser(
+        mockUserId,
+        { role: UserRole.COLLECTION_OFFICER },
+        mockActorId,
+        UserRole.MANAGER,
+      );
+
+      expect(result.role).toBe('collection_officer');
+    });
+
+    it('should prevent non-admin/non-manager from assigning roles', async () => {
+      mockRepo.findById.mockResolvedValue(mockUser);
+
+      await expect(
+        service.updateUser(
+          mockUserId,
+          { role: UserRole.ACCOUNTANT },
+          mockActorId,
+          UserRole.FIELD_OFFICER,
+        ),
+      ).rejects.toThrow(AuthorizationError);
+    });
+
+    it('should not trigger role validation when role is unchanged', async () => {
+      mockRepo.findById.mockResolvedValue(mockUser);
+      mockRepo.update.mockResolvedValue({ ...mockUser, full_name: 'New Name' });
+
+      // Same role as current — should not trigger validateRoleAssignment
+      const result = await service.updateUser(
+        mockUserId,
+        { role: UserRole.FIELD_OFFICER, fullName: 'New Name' },
+        mockActorId,
+        UserRole.FIELD_OFFICER,
+      );
+
+      expect(result.full_name).toBe('New Name');
     });
   });
 
@@ -452,6 +568,106 @@ describe('UserService', () => {
       await expect(
         service.removeAreaAssignment(mockUserId, 'nonexistent'),
       ).rejects.toThrow(NotFoundError);
+    });
+  });
+
+  describe('deactivation', () => {
+    it('should deactivate a user via updateUser', async () => {
+      mockRepo.findById.mockResolvedValue(mockUser);
+      mockRepo.update.mockResolvedValue({ ...mockUser, is_active: false });
+
+      const result = await service.updateUser(
+        mockUserId,
+        { isActive: false },
+        mockActorId,
+        UserRole.SUPER_ADMIN,
+      );
+
+      expect(result.is_active).toBe(false);
+    });
+
+    it('should reactivate a deactivated user', async () => {
+      mockRepo.findById.mockResolvedValue({ ...mockUser, is_active: false });
+      mockRepo.update.mockResolvedValue({ ...mockUser, is_active: true });
+
+      const result = await service.updateUser(
+        mockUserId,
+        { isActive: true },
+        mockActorId,
+        UserRole.SUPER_ADMIN,
+      );
+
+      expect(result.is_active).toBe(true);
+    });
+  });
+
+  describe('role change authorization', () => {
+    it('should allow super_admin to assign manager role', async () => {
+      mockRepo.findById.mockResolvedValue(mockUser);
+      mockRepo.update.mockResolvedValue({ ...mockUser, role: 'manager' });
+
+      const result = await service.updateUser(
+        mockUserId,
+        { role: UserRole.MANAGER },
+        mockActorId,
+        UserRole.SUPER_ADMIN,
+      );
+
+      expect(result.role).toBe('manager');
+    });
+
+    it('should allow manager to assign accountant role', async () => {
+      mockRepo.findById.mockResolvedValue(mockUser);
+      mockRepo.update.mockResolvedValue({ ...mockUser, role: 'accountant' });
+
+      const result = await service.updateUser(
+        mockUserId,
+        { role: UserRole.ACCOUNTANT },
+        mockActorId,
+        UserRole.MANAGER,
+      );
+
+      expect(result.role).toBe('accountant');
+    });
+
+    it('should allow manager to assign viewer_auditor role', async () => {
+      mockRepo.findById.mockResolvedValue(mockUser);
+      mockRepo.update.mockResolvedValue({ ...mockUser, role: 'viewer_auditor' });
+
+      const result = await service.updateUser(
+        mockUserId,
+        { role: UserRole.VIEWER_AUDITOR },
+        mockActorId,
+        UserRole.MANAGER,
+      );
+
+      expect(result.role).toBe('viewer_auditor');
+    });
+
+    it('should prevent manager from assigning manager role', async () => {
+      mockRepo.findById.mockResolvedValue(mockUser);
+
+      await expect(
+        service.updateUser(
+          mockUserId,
+          { role: UserRole.MANAGER },
+          mockActorId,
+          UserRole.MANAGER,
+        ),
+      ).rejects.toThrow(AuthorizationError);
+    });
+
+    it('should prevent accountant from assigning any role', async () => {
+      mockRepo.findById.mockResolvedValue(mockUser);
+
+      await expect(
+        service.updateUser(
+          mockUserId,
+          { role: UserRole.OFFICE_STAFF },
+          mockActorId,
+          UserRole.ACCOUNTANT,
+        ),
+      ).rejects.toThrow(AuthorizationError);
     });
   });
 });

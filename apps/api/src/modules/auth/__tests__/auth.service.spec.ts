@@ -72,8 +72,11 @@ describe('AuthService', () => {
     service = new AuthService(mockPrisma as never);
   });
 
+  // ─── login() ──────────────────────────────────────────────────────────
+
   describe('login', () => {
-    it('should return access token and user on valid credentials', async () => {
+    /** Validates: Requirements 17.1 */
+    it('should return access token, refresh token, and user data on valid credentials', async () => {
       mockPrisma.users.findUnique.mockResolvedValue(mockUser);
       (bcrypt.compare as ReturnType<typeof vi.fn>).mockResolvedValue(true);
       (bcrypt.hash as ReturnType<typeof vi.fn>).mockResolvedValue('hashed-refresh');
@@ -88,11 +91,13 @@ describe('AuthService', () => {
       });
 
       expect(result.accessToken).toBe('mock-access-token');
-      expect(result.user.id).toBe(mockUserId);
-      expect(result.user.username).toBe('testuser');
-      expect(result.user.fullName).toBe('Test User');
-      expect(result.user.role).toBe('manager');
       expect(result.refreshToken).toBe('mock-refresh-token-hex');
+      expect(result.user).toEqual({
+        id: mockUserId,
+        username: 'testuser',
+        fullName: 'Test User',
+        role: 'manager',
+      });
 
       // Verify failed attempts were reset
       expect(mockPrisma.users.update).toHaveBeenCalledWith(
@@ -105,6 +110,7 @@ describe('AuthService', () => {
       );
     });
 
+    /** Validates: Requirements 17.2 */
     it('should throw AuthorizationError for non-existent user', async () => {
       mockPrisma.users.findUnique.mockResolvedValue(null);
 
@@ -113,32 +119,8 @@ describe('AuthService', () => {
       ).rejects.toThrow(AuthorizationError);
     });
 
-    it('should throw AuthorizationError for inactive user', async () => {
-      mockPrisma.users.findUnique.mockResolvedValue({
-        ...mockUser,
-        is_active: false,
-      });
-
-      await expect(
-        service.login({ username: 'testuser', password: 'pass' }),
-      ).rejects.toThrow(AuthorizationError);
-    });
-
-    it('should throw BusinessRuleError for locked account', async () => {
-      const futureDate = new Date();
-      futureDate.setMinutes(futureDate.getMinutes() + 10);
-
-      mockPrisma.users.findUnique.mockResolvedValue({
-        ...mockUser,
-        locked_until: futureDate,
-      });
-
-      await expect(
-        service.login({ username: 'testuser', password: 'pass' }),
-      ).rejects.toThrow(BusinessRuleError);
-    });
-
-    it('should increment failed attempts on wrong password', async () => {
+    /** Validates: Requirements 17.3 */
+    it('should throw AuthorizationError for invalid password', async () => {
       mockPrisma.users.findUnique.mockResolvedValue(mockUser);
       (bcrypt.compare as ReturnType<typeof vi.fn>).mockResolvedValue(false);
       mockPrisma.users.update.mockResolvedValue(mockUser);
@@ -148,6 +130,7 @@ describe('AuthService', () => {
         service.login({ username: 'testuser', password: 'wrong' }),
       ).rejects.toThrow(AuthorizationError);
 
+      // Verify failed attempts incremented
       expect(mockPrisma.users.update).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
@@ -157,6 +140,7 @@ describe('AuthService', () => {
       );
     });
 
+    /** Validates: Requirements 17.4 */
     it('should lock account after 5 failed attempts', async () => {
       mockPrisma.users.findUnique.mockResolvedValue({
         ...mockUser,
@@ -189,6 +173,22 @@ describe('AuthService', () => {
       );
     });
 
+    /** Validates: Requirements 17.5 */
+    it('should throw BusinessRuleError for locked account', async () => {
+      const futureDate = new Date();
+      futureDate.setMinutes(futureDate.getMinutes() + 10);
+
+      mockPrisma.users.findUnique.mockResolvedValue({
+        ...mockUser,
+        locked_until: futureDate,
+      });
+
+      await expect(
+        service.login({ username: 'testuser', password: 'pass' }),
+      ).rejects.toThrow(BusinessRuleError);
+    });
+
+    /** Validates: Requirements 17.5 */
     it('should allow login when lockout has expired', async () => {
       const pastDate = new Date();
       pastDate.setMinutes(pastDate.getMinutes() - 5);
@@ -212,21 +212,82 @@ describe('AuthService', () => {
 
       expect(result.accessToken).toBe('mock-access-token');
     });
+
+    /** Validates: Requirements 17.6 */
+    it('should throw AuthorizationError for inactive user', async () => {
+      mockPrisma.users.findUnique.mockResolvedValue({
+        ...mockUser,
+        is_active: false,
+      });
+
+      await expect(
+        service.login({ username: 'testuser', password: 'pass' }),
+      ).rejects.toThrow(AuthorizationError);
+    });
+
+    /** Validates: Requirements 17.13 */
+    it('should create audit log on successful login', async () => {
+      mockPrisma.users.findUnique.mockResolvedValue(mockUser);
+      (bcrypt.compare as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+      (bcrypt.hash as ReturnType<typeof vi.fn>).mockResolvedValue('hashed-refresh');
+      (jwt.sign as ReturnType<typeof vi.fn>).mockReturnValue('mock-access-token');
+      mockPrisma.users.update.mockResolvedValue(mockUser);
+      mockPrisma.refresh_tokens.create.mockResolvedValue({});
+      mockPrisma.audit_logs.create.mockResolvedValue({});
+
+      await service.login({ username: 'testuser', password: 'ValidPass1' });
+
+      expect(mockPrisma.audit_logs.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            action_type: 'login_success',
+            actor_id: mockUserId,
+            target_entity: 'users',
+            target_id: mockUserId,
+          }),
+        }),
+      );
+    });
+
+    /** Validates: Requirements 17.13 */
+    it('should create audit log on failed login', async () => {
+      mockPrisma.users.findUnique.mockResolvedValue(mockUser);
+      (bcrypt.compare as ReturnType<typeof vi.fn>).mockResolvedValue(false);
+      mockPrisma.users.update.mockResolvedValue(mockUser);
+      mockPrisma.audit_logs.create.mockResolvedValue({});
+
+      await expect(
+        service.login({ username: 'testuser', password: 'wrong' }),
+      ).rejects.toThrow(AuthorizationError);
+
+      expect(mockPrisma.audit_logs.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            action_type: 'login_failed',
+            actor_id: mockUserId,
+            target_entity: 'users',
+          }),
+        }),
+      );
+    });
   });
 
-  describe('refreshToken', () => {
-    it('should rotate refresh token and issue new access token', async () => {
-      const mockTokenRecord = {
-        id: 'token-id-1',
-        user_id: mockUserId,
-        token_hash: 'hashed-token',
-        expires_at: new Date(Date.now() + 86400000),
-        is_revoked: false,
-        created_at: new Date(),
-        user: mockUser,
-      };
+  // ─── refreshToken() ───────────────────────────────────────────────────
 
-      mockPrisma.refresh_tokens.findMany.mockResolvedValue([mockTokenRecord]);
+  describe('refreshToken', () => {
+    const validTokenRecord = {
+      id: 'token-id-1',
+      user_id: mockUserId,
+      token_hash: 'hashed-token',
+      expires_at: new Date(Date.now() + 86400000), // +24h
+      is_revoked: false,
+      created_at: new Date(),
+      user: mockUser,
+    };
+
+    /** Validates: Requirements 17.7 */
+    it('should rotate refresh token and issue new access token', async () => {
+      mockPrisma.refresh_tokens.findMany.mockResolvedValue([validTokenRecord]);
       (bcrypt.compare as ReturnType<typeof vi.fn>).mockResolvedValue(true);
       mockPrisma.refresh_tokens.update.mockResolvedValue({});
       (jwt.sign as ReturnType<typeof vi.fn>).mockReturnValue('new-access-token');
@@ -248,26 +309,45 @@ describe('AuthService', () => {
       expect(mockPrisma.refresh_tokens.create).toHaveBeenCalled();
     });
 
-    it('should throw AuthorizationError for invalid refresh token', async () => {
+    /** Validates: Requirements 17.8 */
+    it('should throw AuthorizationError when no valid (non-revoked) tokens match', async () => {
+      // findMany with is_revoked: false returns empty — all tokens are revoked
       mockPrisma.refresh_tokens.findMany.mockResolvedValue([]);
 
       await expect(
-        service.refreshToken('invalid-token'),
+        service.refreshToken('revoked-token'),
       ).rejects.toThrow(AuthorizationError);
     });
 
-    it('should throw AuthorizationError for inactive user', async () => {
-      const mockTokenRecord = {
-        id: 'token-id-1',
-        user_id: mockUserId,
-        token_hash: 'hashed-token',
-        expires_at: new Date(Date.now() + 86400000),
-        is_revoked: false,
-        created_at: new Date(),
+    /** Validates: Requirements 17.8 */
+    it('should throw AuthorizationError when token hash does not match any record', async () => {
+      mockPrisma.refresh_tokens.findMany.mockResolvedValue([validTokenRecord]);
+      // bcrypt.compare returns false for all tokens — none match
+      (bcrypt.compare as ReturnType<typeof vi.fn>).mockResolvedValue(false);
+
+      await expect(
+        service.refreshToken('wrong-token'),
+      ).rejects.toThrow(AuthorizationError);
+    });
+
+    /** Validates: Requirements 17.9 */
+    it('should throw AuthorizationError for expired refresh token', async () => {
+      // findMany filters by expires_at > now, so expired tokens won't appear
+      // Simulate: no tokens returned because all are expired
+      mockPrisma.refresh_tokens.findMany.mockResolvedValue([]);
+
+      await expect(
+        service.refreshToken('expired-token'),
+      ).rejects.toThrow(AuthorizationError);
+    });
+
+    it('should throw AuthorizationError for inactive user on refresh', async () => {
+      const inactiveUserToken = {
+        ...validTokenRecord,
         user: { ...mockUser, is_active: false },
       };
 
-      mockPrisma.refresh_tokens.findMany.mockResolvedValue([mockTokenRecord]);
+      mockPrisma.refresh_tokens.findMany.mockResolvedValue([inactiveUserToken]);
       (bcrypt.compare as ReturnType<typeof vi.fn>).mockResolvedValue(true);
 
       await expect(
@@ -276,7 +356,10 @@ describe('AuthService', () => {
     });
   });
 
+  // ─── logout() ─────────────────────────────────────────────────────────
+
   describe('logout', () => {
+    /** Validates: Requirements 17.10 */
     it('should revoke all refresh tokens for user', async () => {
       mockPrisma.refresh_tokens.updateMany.mockResolvedValue({ count: 2 });
       mockPrisma.audit_logs.create.mockResolvedValue({});
@@ -288,9 +371,31 @@ describe('AuthService', () => {
         data: { is_revoked: true },
       });
     });
+
+    /** Validates: Requirements 17.13 */
+    it('should create audit log on logout', async () => {
+      mockPrisma.refresh_tokens.updateMany.mockResolvedValue({ count: 1 });
+      mockPrisma.audit_logs.create.mockResolvedValue({});
+
+      await service.logout(mockUserId);
+
+      expect(mockPrisma.audit_logs.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            action_type: 'logout',
+            actor_id: mockUserId,
+            target_entity: 'users',
+            target_id: mockUserId,
+          }),
+        }),
+      );
+    });
   });
 
+  // ─── changePassword() ─────────────────────────────────────────────────
+
   describe('changePassword', () => {
+    /** Validates: Requirements 17.11 */
     it('should change password and revoke all sessions', async () => {
       mockPrisma.users.findUnique.mockResolvedValue(mockUser);
       (bcrypt.compare as ReturnType<typeof vi.fn>).mockResolvedValue(true);
@@ -306,10 +411,11 @@ describe('AuthService', () => {
       // Verify bcrypt hash was called with cost 12
       expect(bcrypt.hash).toHaveBeenCalledWith('NewPass1', 12);
 
-      // Verify transaction was used
+      // Verify transaction was used for atomic password update + session invalidation
       expect(mockPrisma.$transaction).toHaveBeenCalled();
     });
 
+    /** Validates: Requirements 17.12 */
     it('should throw AuthorizationError for wrong current password', async () => {
       mockPrisma.users.findUnique.mockResolvedValue(mockUser);
       (bcrypt.compare as ReturnType<typeof vi.fn>).mockResolvedValue(false);
@@ -331,6 +437,31 @@ describe('AuthService', () => {
           newPassword: 'NewPass1',
         }),
       ).rejects.toThrow(AuthorizationError);
+    });
+
+    /** Validates: Requirements 17.13 */
+    it('should create audit log on password change', async () => {
+      mockPrisma.users.findUnique.mockResolvedValue(mockUser);
+      (bcrypt.compare as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+      (bcrypt.hash as ReturnType<typeof vi.fn>).mockResolvedValue('new-hashed-password');
+      mockPrisma.$transaction.mockResolvedValue([{}, {}]);
+      mockPrisma.audit_logs.create.mockResolvedValue({});
+
+      await service.changePassword(mockUserId, {
+        currentPassword: 'OldPass1',
+        newPassword: 'NewPass1',
+      });
+
+      expect(mockPrisma.audit_logs.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            action_type: 'password_changed',
+            actor_id: mockUserId,
+            target_entity: 'users',
+            target_id: mockUserId,
+          }),
+        }),
+      );
     });
   });
 });

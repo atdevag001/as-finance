@@ -10,6 +10,7 @@ import {
   type ScheduleParams,
 } from '../schedule.service';
 import { InterestType, Frequency } from '@as-finance/shared';
+import { buildScheduleParams } from '@as-finance/testing';
 import Decimal from 'decimal.js';
 
 describe('Schedule Service — Unit Tests', () => {
@@ -26,6 +27,30 @@ describe('Schedule Service — Unit Tests', () => {
 
     it('daily: N = tenureMonths × 30', () => {
       expect(deriveInstallmentCount(3, Frequency.DAILY)).toBe(90);
+    });
+
+    it('single month monthly = 1 installment', () => {
+      expect(deriveInstallmentCount(1, Frequency.MONTHLY)).toBe(1);
+    });
+
+    it('single month weekly = 4 installments', () => {
+      expect(deriveInstallmentCount(1, Frequency.WEEKLY)).toBe(4);
+    });
+
+    it('single month daily = 30 installments', () => {
+      expect(deriveInstallmentCount(1, Frequency.DAILY)).toBe(30);
+    });
+
+    it('max tenure 360 months monthly = 360 installments', () => {
+      expect(deriveInstallmentCount(360, Frequency.MONTHLY)).toBe(360);
+    });
+
+    it('max tenure 360 months weekly = 1440 installments', () => {
+      expect(deriveInstallmentCount(360, Frequency.WEEKLY)).toBe(1440);
+    });
+
+    it('max tenure 360 months daily = 10800 installments', () => {
+      expect(deriveInstallmentCount(360, Frequency.DAILY)).toBe(10800);
     });
   });
 
@@ -48,47 +73,59 @@ describe('Schedule Service — Unit Tests', () => {
       const expected = new Decimal(1200).div(10000).div(365);
       expect(rate.eq(expected)).toBe(true);
     });
+
+    it('zero rate returns zero for all frequencies', () => {
+      expect(derivePeriodicRate(0, Frequency.MONTHLY).isZero()).toBe(true);
+      expect(derivePeriodicRate(0, Frequency.WEEKLY).isZero()).toBe(true);
+      expect(derivePeriodicRate(0, Frequency.DAILY).isZero()).toBe(true);
+    });
+
+    it('max rate 10000 bps monthly = 100%/12', () => {
+      const rate = derivePeriodicRate(10000, Frequency.MONTHLY);
+      const expected = new Decimal(10000).div(10000).div(12);
+      expect(rate.eq(expected)).toBe(true);
+    });
+
+    it('max rate 10000 bps weekly = 100%/52', () => {
+      const rate = derivePeriodicRate(10000, Frequency.WEEKLY);
+      const expected = new Decimal(10000).div(10000).div(52);
+      expect(rate.eq(expected)).toBe(true);
+    });
+
+    it('max rate 10000 bps daily = 100%/365', () => {
+      const rate = derivePeriodicRate(10000, Frequency.DAILY);
+      const expected = new Decimal(10000).div(10000).div(365);
+      expect(rate.eq(expected)).toBe(true);
+    });
   });
 
   // ─── calculateFlatEMI ────────────────────────────────────────────────────
 
   describe('calculateFlatEMI', () => {
     it('12% flat on ₹1,00,000 for 12 months — verify exact values', () => {
-      // Principal: 10000000 paise (₹1,00,000)
-      // Rate: 1200 bps (12%)
-      // Tenure: 12 months
-      // total_interest = 10000000 × 1200/10000 × 12/12 = 10000000 × 0.12 × 1 = 1200000 paise
-      // N = 12 (monthly)
-      // per_principal = 10000000 / 12 = 833333.33... → 833333 paise (ROUND_HALF_UP)
-      // per_interest = 1200000 / 12 = 100000 paise (exact)
       const result = calculateFlatEMI(10_000_000, 1200, 12, Frequency.MONTHLY);
 
       expect(result.totalInterestPaise).toBe(1_200_000);
       expect(result.numberOfInstallments).toBe(12);
 
-      // Sum of all principal must equal principal
       const totalPrincipal = result.installments.reduce((s, i) => s + i.principalPaise, 0);
       expect(totalPrincipal).toBe(10_000_000);
 
-      // Sum of all interest must equal total interest
       const totalInterest = result.installments.reduce((s, i) => s + i.interestPaise, 0);
       expect(totalInterest).toBe(1_200_000);
 
-      // First 11 installments should have equal principal
       for (let i = 0; i < 11; i++) {
         expect(result.installments[i]!.principalPaise).toBe(833333);
         expect(result.installments[i]!.interestPaise).toBe(100000);
       }
 
-      // Last installment absorbs rounding difference
-      // 10000000 - 833333 × 11 = 10000000 - 9166663 = 833337
+      // Last installment absorbs rounding: 10000000 - 833333 × 11 = 833337
       expect(result.installments[11]!.principalPaise).toBe(833337);
       expect(result.installments[11]!.interestPaise).toBe(100000);
     });
 
     it('handles single installment (tenure = 1 month, monthly)', () => {
       const result = calculateFlatEMI(500_000, 2400, 1, Frequency.MONTHLY);
-      // total_interest = 500000 × 2400/10000 × 1/12 = 500000 × 0.24 / 12 = 10000
       expect(result.numberOfInstallments).toBe(1);
       expect(result.totalInterestPaise).toBe(10_000);
       expect(result.installments[0]!.principalPaise).toBe(500_000);
@@ -98,16 +135,26 @@ describe('Schedule Service — Unit Tests', () => {
 
     it('weekly frequency produces correct installment count', () => {
       const result = calculateFlatEMI(1_000_000, 1200, 3, Frequency.WEEKLY);
-      // N = 3 × 4 = 12
       expect(result.numberOfInstallments).toBe(12);
-      // total_interest = 1000000 × 0.12 × 3/12 = 30000
       expect(result.totalInterestPaise).toBe(30_000);
     });
 
     it('daily frequency produces correct installment count', () => {
       const result = calculateFlatEMI(1_000_000, 1200, 2, Frequency.DAILY);
-      // N = 2 × 30 = 60
       expect(result.numberOfInstallments).toBe(60);
+    });
+
+    it('daily frequency — known expected output', () => {
+      // 1,000,000 paise, 1200 bps, 2 months daily → 60 installments
+      // total_interest = 1000000 × 0.12 × 2/12 = 20000
+      const result = calculateFlatEMI(1_000_000, 1200, 2, Frequency.DAILY);
+      expect(result.totalInterestPaise).toBe(20_000);
+      expect(result.numberOfInstallments).toBe(60);
+
+      const totalP = result.installments.reduce((s, i) => s + i.principalPaise, 0);
+      const totalI = result.installments.reduce((s, i) => s + i.interestPaise, 0);
+      expect(totalP).toBe(1_000_000);
+      expect(totalI).toBe(20_000);
     });
 
     it('reconciliation: sum of components always equals totals', () => {
@@ -116,7 +163,6 @@ describe('Schedule Service — Unit Tests', () => {
       const totalI = result.installments.reduce((s, i) => s + i.interestPaise, 0);
       expect(totalP).toBe(7_777_777);
       expect(totalI).toBe(result.totalInterestPaise);
-      // Each installment's total = principal + interest
       for (const inst of result.installments) {
         expect(inst.totalPaise).toBe(inst.principalPaise + inst.interestPaise);
       }
@@ -131,11 +177,9 @@ describe('Schedule Service — Unit Tests', () => {
 
       expect(result.numberOfInstallments).toBe(12);
 
-      // Sum of all principal must equal principal
       const totalPrincipal = result.installments.reduce((s, i) => s + i.principalPaise, 0);
       expect(totalPrincipal).toBe(10_000_000);
 
-      // Each installment's total = principal + interest
       for (const inst of result.installments) {
         expect(inst.totalPaise).toBe(inst.principalPaise + inst.interestPaise);
       }
@@ -151,8 +195,6 @@ describe('Schedule Service — Unit Tests', () => {
     it('single installment reducing balance', () => {
       const result = calculateReducingBalanceEMI(500_000, 1200, 1, Frequency.MONTHLY);
       expect(result.numberOfInstallments).toBe(1);
-      // With 1 installment: EMI = P × r × (1+r)^1 / ((1+r)^1 - 1) = P × r × (1+r) / r = P × (1+r)
-      // = 500000 × 1.01 = 505000
       expect(result.installments[0]!.principalPaise).toBe(500_000);
       expect(result.installments[0]!.interestPaise).toBe(5_000);
     });
@@ -162,6 +204,20 @@ describe('Schedule Service — Unit Tests', () => {
       expect(result.numberOfInstallments).toBe(12);
       const totalPrincipal = result.installments.reduce((s, i) => s + i.principalPaise, 0);
       expect(totalPrincipal).toBe(1_000_000);
+    });
+
+    it('daily frequency reducing balance — known expected output', () => {
+      const result = calculateReducingBalanceEMI(1_000_000, 1200, 2, Frequency.DAILY);
+      expect(result.numberOfInstallments).toBe(60);
+      const totalPrincipal = result.installments.reduce((s, i) => s + i.principalPaise, 0);
+      expect(totalPrincipal).toBe(1_000_000);
+
+      // Interest should generally decrease over time
+      for (let i = 1; i < result.installments.length - 1; i++) {
+        expect(result.installments[i]!.interestPaise).toBeLessThanOrEqual(
+          result.installments[i - 1]!.interestPaise,
+        );
+      }
     });
 
     it('reconciliation: principal always sums to original principal', () => {
@@ -174,7 +230,101 @@ describe('Schedule Service — Unit Tests', () => {
     });
   });
 
-  // ─── Edge Cases (Task 8.8) ─────────────────────────────────────────────
+
+  // ─── normalizeZero (tested indirectly) ───────────────────────────────────
+
+  describe('normalizeZero (indirect via schedule generation)', () => {
+    it('zero-rate flat schedule produces no negative zeros in installments', () => {
+      const result = calculateFlatEMI(1_000_000, 0, 6, Frequency.MONTHLY);
+      for (const inst of result.installments) {
+        // Object.is distinguishes -0 from +0
+        expect(Object.is(inst.principalPaise, -0)).toBe(false);
+        expect(Object.is(inst.interestPaise, -0)).toBe(false);
+        expect(Object.is(inst.totalPaise, -0)).toBe(false);
+      }
+    });
+
+    it('zero-rate reducing balance produces no negative zeros', () => {
+      const result = calculateReducingBalanceEMI(1_000_000, 0, 6, Frequency.MONTHLY);
+      for (const inst of result.installments) {
+        expect(Object.is(inst.principalPaise, -0)).toBe(false);
+        expect(Object.is(inst.interestPaise, -0)).toBe(false);
+        expect(Object.is(inst.totalPaise, -0)).toBe(false);
+      }
+    });
+
+    it('zero-rate schedule totalInterestPaise is not negative zero', () => {
+      const flat = calculateFlatEMI(500_000, 0, 3, Frequency.MONTHLY);
+      expect(Object.is(flat.totalInterestPaise, -0)).toBe(false);
+      expect(flat.totalInterestPaise).toBe(0);
+
+      const reducing = calculateReducingBalanceEMI(500_000, 0, 3, Frequency.MONTHLY);
+      expect(Object.is(reducing.totalInterestPaise, -0)).toBe(false);
+      expect(reducing.totalInterestPaise).toBe(0);
+    });
+  });
+
+  // ─── Principal + Interest sum to total payable (Req 1.7) ────────────────
+
+  describe('principal + interest sum to total payable within 1 paisa tolerance', () => {
+    it('flat monthly: components sum to total payable', () => {
+      const result = calculateFlatEMI(10_000_000, 1200, 12, Frequency.MONTHLY);
+      const totalP = result.installments.reduce((s, i) => s + i.principalPaise, 0);
+      const totalI = result.installments.reduce((s, i) => s + i.interestPaise, 0);
+      const totalPayable = totalP + totalI;
+      const expectedPayable = 10_000_000 + result.totalInterestPaise;
+      expect(Math.abs(totalPayable - expectedPayable)).toBeLessThanOrEqual(1);
+    });
+
+    it('flat weekly: components sum to total payable', () => {
+      const result = calculateFlatEMI(2_500_000, 1500, 6, Frequency.WEEKLY);
+      const totalP = result.installments.reduce((s, i) => s + i.principalPaise, 0);
+      const totalI = result.installments.reduce((s, i) => s + i.interestPaise, 0);
+      expect(Math.abs((totalP + totalI) - (2_500_000 + result.totalInterestPaise))).toBeLessThanOrEqual(1);
+    });
+
+    it('flat daily: components sum to total payable', () => {
+      const result = calculateFlatEMI(1_000_000, 1200, 3, Frequency.DAILY);
+      const totalP = result.installments.reduce((s, i) => s + i.principalPaise, 0);
+      const totalI = result.installments.reduce((s, i) => s + i.interestPaise, 0);
+      expect(Math.abs((totalP + totalI) - (1_000_000 + result.totalInterestPaise))).toBeLessThanOrEqual(1);
+    });
+
+    it('reducing monthly: components sum to total payable', () => {
+      const result = calculateReducingBalanceEMI(10_000_000, 1200, 12, Frequency.MONTHLY);
+      const totalP = result.installments.reduce((s, i) => s + i.principalPaise, 0);
+      const totalI = result.installments.reduce((s, i) => s + i.interestPaise, 0);
+      expect(Math.abs((totalP + totalI) - (10_000_000 + result.totalInterestPaise))).toBeLessThanOrEqual(1);
+    });
+
+    it('reducing weekly: components sum to total payable', () => {
+      const result = calculateReducingBalanceEMI(2_500_000, 1500, 6, Frequency.WEEKLY);
+      const totalP = result.installments.reduce((s, i) => s + i.principalPaise, 0);
+      const totalI = result.installments.reduce((s, i) => s + i.interestPaise, 0);
+      expect(Math.abs((totalP + totalI) - (2_500_000 + result.totalInterestPaise))).toBeLessThanOrEqual(1);
+    });
+
+    it('reducing daily: components sum to total payable', () => {
+      const result = calculateReducingBalanceEMI(1_000_000, 1200, 3, Frequency.DAILY);
+      const totalP = result.installments.reduce((s, i) => s + i.principalPaise, 0);
+      const totalI = result.installments.reduce((s, i) => s + i.interestPaise, 0);
+      expect(Math.abs((totalP + totalI) - (1_000_000 + result.totalInterestPaise))).toBeLessThanOrEqual(1);
+    });
+
+    it('each installment totalPaise = principalPaise + interestPaise', () => {
+      const flat = calculateFlatEMI(7_777_777, 1500, 7, Frequency.MONTHLY);
+      for (const inst of flat.installments) {
+        expect(inst.totalPaise).toBe(inst.principalPaise + inst.interestPaise);
+      }
+
+      const reducing = calculateReducingBalanceEMI(7_777_777, 1500, 7, Frequency.MONTHLY);
+      for (const inst of reducing.installments) {
+        expect(inst.totalPaise).toBe(inst.principalPaise + inst.interestPaise);
+      }
+    });
+  });
+
+  // ─── Edge Cases (Req 1.8) ──────────────────────────────────────────────
 
   describe('Edge Cases', () => {
     it('zero-interest flat schedule: all interest components are zero', () => {
@@ -200,6 +350,126 @@ describe('Schedule Service — Unit Tests', () => {
       }
     });
 
+    it('single installment: entire principal and interest in one payment', () => {
+      const flatResult = calculateFlatEMI(10_000_00, 2400, 1, Frequency.MONTHLY);
+      expect(flatResult.numberOfInstallments).toBe(1);
+      expect(flatResult.installments[0]!.principalPaise).toBe(10_000_00);
+      expect(flatResult.totalInterestPaise).toBe(20_000);
+      expect(flatResult.installments[0]!.totalPaise).toBe(10_000_00 + 20_000);
+
+      const reducingResult = calculateReducingBalanceEMI(10_000_00, 2400, 1, Frequency.MONTHLY);
+      expect(reducingResult.numberOfInstallments).toBe(1);
+      expect(reducingResult.installments[0]!.principalPaise).toBe(10_000_00);
+      expect(reducingResult.installments[0]!.interestPaise).toBe(20_000);
+    });
+
+    it('maximum tenure (360 months) flat schedule reconciles', () => {
+      const result = calculateFlatEMI(10_000_000, 1200, 360, Frequency.MONTHLY);
+      expect(result.numberOfInstallments).toBe(360);
+      const totalP = result.installments.reduce((s, i) => s + i.principalPaise, 0);
+      const totalI = result.installments.reduce((s, i) => s + i.interestPaise, 0);
+      expect(totalP).toBe(10_000_000);
+      expect(totalI).toBe(result.totalInterestPaise);
+      // total_interest = 10000000 × 0.12 × 30 = 36000000
+      expect(result.totalInterestPaise).toBe(36_000_000);
+    });
+
+    it('maximum tenure (360 months) reducing balance reconciles', () => {
+      const result = calculateReducingBalanceEMI(10_000_000, 1200, 360, Frequency.MONTHLY);
+      expect(result.numberOfInstallments).toBe(360);
+      const totalP = result.installments.reduce((s, i) => s + i.principalPaise, 0);
+      expect(totalP).toBe(10_000_000);
+    });
+
+    it('minimum principal (100 paise) flat schedule reconciles', () => {
+      const result = calculateFlatEMI(100, 1200, 1, Frequency.MONTHLY);
+      expect(result.numberOfInstallments).toBe(1);
+      expect(result.installments[0]!.principalPaise).toBe(100);
+      const totalP = result.installments.reduce((s, i) => s + i.principalPaise, 0);
+      expect(totalP).toBe(100);
+    });
+
+    it('minimum principal (100 paise) reducing balance reconciles', () => {
+      const result = calculateReducingBalanceEMI(100, 1200, 1, Frequency.MONTHLY);
+      expect(result.numberOfInstallments).toBe(1);
+      expect(result.installments[0]!.principalPaise).toBe(100);
+    });
+
+    it('minimum principal (100 paise) with multiple installments', () => {
+      const result = calculateFlatEMI(100, 1200, 3, Frequency.MONTHLY);
+      expect(result.numberOfInstallments).toBe(3);
+      const totalP = result.installments.reduce((s, i) => s + i.principalPaise, 0);
+      expect(totalP).toBe(100);
+      // All amounts should be non-negative
+      for (const inst of result.installments) {
+        expect(inst.principalPaise).toBeGreaterThanOrEqual(0);
+        expect(inst.interestPaise).toBeGreaterThanOrEqual(0);
+        expect(inst.totalPaise).toBeGreaterThanOrEqual(0);
+      }
+    });
+
+    it('maximum principal (10 billion paise) flat schedule reconciles', () => {
+      const result = calculateFlatEMI(10_000_000_000, 1200, 12, Frequency.MONTHLY);
+      expect(result.numberOfInstallments).toBe(12);
+      const totalP = result.installments.reduce((s, i) => s + i.principalPaise, 0);
+      expect(totalP).toBe(10_000_000_000);
+      const totalI = result.installments.reduce((s, i) => s + i.interestPaise, 0);
+      expect(totalI).toBe(result.totalInterestPaise);
+    });
+
+    it('maximum principal (10 billion paise) reducing balance reconciles', () => {
+      const result = calculateReducingBalanceEMI(10_000_000_000, 1200, 12, Frequency.MONTHLY);
+      expect(result.numberOfInstallments).toBe(12);
+      const totalP = result.installments.reduce((s, i) => s + i.principalPaise, 0);
+      expect(totalP).toBe(10_000_000_000);
+    });
+
+    it('maximum rate (10000 bps = 100%) flat schedule reconciles', () => {
+      const result = calculateFlatEMI(1_000_000, 10000, 12, Frequency.MONTHLY);
+      expect(result.numberOfInstallments).toBe(12);
+      // total_interest = 1000000 × 1.0 × 1 = 1000000
+      expect(result.totalInterestPaise).toBe(1_000_000);
+      const totalP = result.installments.reduce((s, i) => s + i.principalPaise, 0);
+      expect(totalP).toBe(1_000_000);
+      const totalI = result.installments.reduce((s, i) => s + i.interestPaise, 0);
+      expect(totalI).toBe(1_000_000);
+    });
+
+    it('maximum rate (10000 bps = 100%) reducing balance reconciles', () => {
+      const result = calculateReducingBalanceEMI(1_000_000, 10000, 12, Frequency.MONTHLY);
+      expect(result.numberOfInstallments).toBe(12);
+      const totalP = result.installments.reduce((s, i) => s + i.principalPaise, 0);
+      expect(totalP).toBe(1_000_000);
+      // All amounts non-negative
+      for (const inst of result.installments) {
+        expect(inst.principalPaise).toBeGreaterThanOrEqual(0);
+        expect(inst.interestPaise).toBeGreaterThanOrEqual(0);
+      }
+    });
+
+    it('reducing balance known amortization: 12% on ₹1,00,000 for 12 months', () => {
+      const result = calculateReducingBalanceEMI(10_000_000, 1200, 12, Frequency.MONTHLY);
+
+      expect(result.numberOfInstallments).toBe(12);
+
+      // First installment: interest = 10000000 × 0.01 = 100000
+      expect(result.installments[0]!.interestPaise).toBe(100_000);
+      const firstPrincipal = result.installments[0]!.principalPaise;
+      expect(firstPrincipal).toBe(result.emiPaise - 100_000);
+
+      // Second installment: interest = (10000000 - firstPrincipal) × 0.01
+      const outstandingAfterFirst = 10_000_000 - firstPrincipal;
+      const expectedSecondInterest = Math.round(outstandingAfterFirst * 0.01);
+      expect(Math.abs(result.installments[1]!.interestPaise - expectedSecondInterest)).toBeLessThanOrEqual(1);
+
+      const totalP = result.installments.reduce((s, i) => s + i.principalPaise, 0);
+      expect(totalP).toBe(10_000_000);
+
+      // Total interest should be less than flat interest
+      const flatResult = calculateFlatEMI(10_000_000, 1200, 12, Frequency.MONTHLY);
+      expect(result.totalInterestPaise).toBeLessThan(flatResult.totalInterestPaise);
+    });
+
     it('maximum tenure (60 months) flat schedule reconciles', () => {
       const result = calculateFlatEMI(50_000_00, 1200, 60, Frequency.MONTHLY);
       expect(result.numberOfInstallments).toBe(60);
@@ -207,7 +477,6 @@ describe('Schedule Service — Unit Tests', () => {
       const totalI = result.installments.reduce((s, i) => s + i.interestPaise, 0);
       expect(totalP).toBe(50_000_00);
       expect(totalI).toBe(result.totalInterestPaise);
-      // total_interest = 5000000 × 0.12 × 5 = 3000000
       expect(result.totalInterestPaise).toBe(3_000_000);
     });
 
@@ -216,57 +485,11 @@ describe('Schedule Service — Unit Tests', () => {
       expect(result.numberOfInstallments).toBe(60);
       const totalP = result.installments.reduce((s, i) => s + i.principalPaise, 0);
       expect(totalP).toBe(50_000_00);
-      // Interest should decrease over time
       for (let i = 1; i < result.installments.length - 1; i++) {
         expect(result.installments[i]!.interestPaise).toBeLessThanOrEqual(
           result.installments[i - 1]!.interestPaise,
         );
       }
-    });
-
-    it('reducing balance known amortization: 12% on ₹1,00,000 for 12 months', () => {
-      // Verify the first few installments against known amortization values
-      // Monthly rate = 1200/10000/12 = 0.01
-      // EMI = 10000000 × 0.01 × 1.01^12 / (1.01^12 - 1)
-      // Using Decimal.js: EMI ≈ 888488 paise (rounded)
-      const result = calculateReducingBalanceEMI(10_000_000, 1200, 12, Frequency.MONTHLY);
-
-      expect(result.numberOfInstallments).toBe(12);
-
-      // First installment: interest = 10000000 × 0.01 = 100000
-      expect(result.installments[0]!.interestPaise).toBe(100_000);
-      // First principal = EMI - 100000
-      const firstPrincipal = result.installments[0]!.principalPaise;
-      expect(firstPrincipal).toBe(result.emiPaise - 100_000);
-
-      // Second installment: interest = (10000000 - firstPrincipal) × 0.01
-      const outstandingAfterFirst = 10_000_000 - firstPrincipal;
-      const expectedSecondInterest = Math.round(outstandingAfterFirst * 0.01);
-      // Allow ±1 paise for rounding
-      expect(Math.abs(result.installments[1]!.interestPaise - expectedSecondInterest)).toBeLessThanOrEqual(1);
-
-      // Total principal must equal original
-      const totalP = result.installments.reduce((s, i) => s + i.principalPaise, 0);
-      expect(totalP).toBe(10_000_000);
-
-      // Total interest should be less than flat interest (reducing balance always cheaper)
-      const flatResult = calculateFlatEMI(10_000_000, 1200, 12, Frequency.MONTHLY);
-      expect(result.totalInterestPaise).toBeLessThan(flatResult.totalInterestPaise);
-    });
-
-    it('single installment: entire principal and interest in one payment', () => {
-      const flatResult = calculateFlatEMI(10_000_00, 2400, 1, Frequency.MONTHLY);
-      expect(flatResult.numberOfInstallments).toBe(1);
-      expect(flatResult.installments[0]!.principalPaise).toBe(10_000_00);
-      // total_interest = 1000000 × 0.24 × 1/12 = 20000
-      expect(flatResult.totalInterestPaise).toBe(20_000);
-      expect(flatResult.installments[0]!.totalPaise).toBe(10_000_00 + 20_000);
-
-      const reducingResult = calculateReducingBalanceEMI(10_000_00, 2400, 1, Frequency.MONTHLY);
-      expect(reducingResult.numberOfInstallments).toBe(1);
-      expect(reducingResult.installments[0]!.principalPaise).toBe(10_000_00);
-      // interest = 1000000 × (2400/10000/12) = 1000000 × 0.02 = 20000
-      expect(reducingResult.installments[0]!.interestPaise).toBe(20_000);
     });
   });
 
@@ -280,7 +503,6 @@ describe('Schedule Service — Unit Tests', () => {
       expect(dates[0]!.getMonth()).toBe(1); // Feb
       expect(dates[1]!.getMonth()).toBe(2); // Mar
       expect(dates[2]!.getMonth()).toBe(3); // Apr
-      // Day should remain 15
       for (const d of dates) {
         expect(d.getDate()).toBe(15);
       }
@@ -303,6 +525,31 @@ describe('Schedule Service — Unit Tests', () => {
       expect(dates[0]!.getDate()).toBe(2);
       expect(dates[4]!.getDate()).toBe(6);
     });
+
+    it('dates are strictly monotonically increasing', () => {
+      const start = new Date(2024, 0, 1);
+      for (const freq of [Frequency.MONTHLY, Frequency.WEEKLY, Frequency.DAILY]) {
+        const dates = generateDueDates(start, 10, freq);
+        for (let i = 1; i < dates.length; i++) {
+          expect(dates[i]!.getTime()).toBeGreaterThan(dates[i - 1]!.getTime());
+        }
+      }
+    });
+
+    it('zero count returns empty array', () => {
+      const dates = generateDueDates(new Date(2024, 0, 1), 0, Frequency.MONTHLY);
+      expect(dates).toHaveLength(0);
+    });
+
+    it('monthly dates handle month-end rollover', () => {
+      // Starting Jan 31 — Feb doesn't have 31 days
+      const start = new Date(2024, 0, 31);
+      const dates = generateDueDates(start, 3, Frequency.MONTHLY);
+      expect(dates).toHaveLength(3);
+      // Feb 31 → rolls to Mar 2 (2024 is leap year, Feb has 29 days)
+      // This is JavaScript Date behavior
+      expect(dates[0]!.getMonth()).toBe(2); // March (rolled from Feb)
+    });
   });
 
   // ─── adjustForHolidays ──────────────────────────────────────────────────
@@ -315,8 +562,8 @@ describe('Schedule Service — Unit Tests', () => {
       ];
       const holidays = [new Date(2024, 0, 15)];
       const adjusted = adjustForHolidays(dueDates, holidays);
-      expect(adjusted[0]!.getDate()).toBe(16); // shifted to Jan 16
-      expect(adjusted[1]!.getDate()).toBe(15); // unchanged
+      expect(adjusted[0]!.getDate()).toBe(16);
+      expect(adjusted[1]!.getDate()).toBe(15);
     });
 
     it('shifts past consecutive holidays', () => {
@@ -327,7 +574,7 @@ describe('Schedule Service — Unit Tests', () => {
         new Date(2024, 0, 17),
       ];
       const adjusted = adjustForHolidays(dueDates, holidays);
-      expect(adjusted[0]!.getDate()).toBe(18); // shifted past 3 consecutive holidays
+      expect(adjusted[0]!.getDate()).toBe(18);
     });
 
     it('returns unchanged dates when no holidays', () => {
@@ -339,6 +586,14 @@ describe('Schedule Service — Unit Tests', () => {
     it('handles empty due dates', () => {
       const adjusted = adjustForHolidays([], [new Date(2024, 0, 1)]);
       expect(adjusted).toHaveLength(0);
+    });
+
+    it('does not modify original due dates array', () => {
+      const original = new Date(2024, 0, 15);
+      const dueDates = [original];
+      const holidays = [new Date(2024, 0, 15)];
+      adjustForHolidays(dueDates, holidays);
+      expect(original.getDate()).toBe(15); // original unchanged
     });
   });
 
@@ -352,8 +607,8 @@ describe('Schedule Service — Unit Tests', () => {
         tenureMonths: 3,
         interestType: InterestType.FLAT,
         frequency: Frequency.MONTHLY,
-        startDate: new Date(2024, 0, 1), // Jan 1, 2024
-        holidays: [new Date(2024, 1, 1)], // Feb 1 is a holiday
+        startDate: new Date(2024, 0, 1),
+        holidays: [new Date(2024, 1, 1)],
       };
 
       const schedule = generateSchedule(params);
@@ -363,7 +618,6 @@ describe('Schedule Service — Unit Tests', () => {
       expect(schedule[0]!.dueDate.getMonth()).toBe(1);
       expect(schedule[0]!.dueDate.getDate()).toBe(2);
 
-      // Principal reconciliation
       const totalP = schedule.reduce((s, i) => s + i.principalPaise, 0);
       expect(totalP).toBe(10_000_000);
     });
@@ -380,7 +634,6 @@ describe('Schedule Service — Unit Tests', () => {
       };
 
       const schedule = generateSchedule(params);
-      // weekly, 6 months → 24 installments
       expect(schedule).toHaveLength(24);
 
       const totalP = schedule.reduce((s, i) => s + i.principalPaise, 0);
@@ -402,6 +655,75 @@ describe('Schedule Service — Unit Tests', () => {
       const schedule2 = generateSchedule(params);
 
       expect(JSON.stringify(schedule1)).toBe(JSON.stringify(schedule2));
+    });
+
+    it('uses buildScheduleParams factory with defaults', () => {
+      const params = buildScheduleParams();
+      const schedule = generateSchedule(params);
+      // Default: 12 months, monthly → 12 installments
+      expect(schedule).toHaveLength(12);
+      const totalP = schedule.reduce((s, i) => s + i.principalPaise, 0);
+      expect(totalP).toBe(100_000_00);
+    });
+
+    it('uses buildScheduleParams factory with overrides', () => {
+      const params = buildScheduleParams({
+        principalPaise: 5_000_000,
+        tenureMonths: 6,
+        frequency: Frequency.WEEKLY,
+        interestType: InterestType.REDUCING_BALANCE,
+      });
+      const schedule = generateSchedule(params);
+      expect(schedule).toHaveLength(24); // 6 months × 4
+      const totalP = schedule.reduce((s, i) => s + i.principalPaise, 0);
+      expect(totalP).toBe(5_000_000);
+    });
+
+    it('daily frequency schedule with factory', () => {
+      const params = buildScheduleParams({
+        principalPaise: 300_000,
+        tenureMonths: 1,
+        frequency: Frequency.DAILY,
+      });
+      const schedule = generateSchedule(params);
+      expect(schedule).toHaveLength(30); // 1 month × 30
+      const totalP = schedule.reduce((s, i) => s + i.principalPaise, 0);
+      expect(totalP).toBe(300_000);
+    });
+
+    it('all installment amounts are non-negative integers', () => {
+      const params = buildScheduleParams({
+        principalPaise: 7_777_777,
+        annualRateBps: 1500,
+        tenureMonths: 24,
+      });
+      const schedule = generateSchedule(params);
+      for (const inst of schedule) {
+        expect(Number.isInteger(inst.principalPaise)).toBe(true);
+        expect(Number.isInteger(inst.interestPaise)).toBe(true);
+        expect(Number.isInteger(inst.totalPaise)).toBe(true);
+        expect(inst.principalPaise).toBeGreaterThanOrEqual(0);
+        expect(inst.interestPaise).toBeGreaterThanOrEqual(0);
+        expect(inst.totalPaise).toBeGreaterThanOrEqual(0);
+      }
+    });
+
+    it('installment numbers are sequential starting from 1', () => {
+      const params = buildScheduleParams({ tenureMonths: 6 });
+      const schedule = generateSchedule(params);
+      for (let i = 0; i < schedule.length; i++) {
+        expect(schedule[i]!.installmentNumber).toBe(i + 1);
+      }
+    });
+
+    it('due dates are strictly monotonically increasing', () => {
+      const params = buildScheduleParams({ tenureMonths: 12 });
+      const schedule = generateSchedule(params);
+      for (let i = 1; i < schedule.length; i++) {
+        expect(schedule[i]!.dueDate.getTime()).toBeGreaterThan(
+          schedule[i - 1]!.dueDate.getTime(),
+        );
+      }
     });
   });
 });

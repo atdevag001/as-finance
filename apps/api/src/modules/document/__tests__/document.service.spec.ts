@@ -4,75 +4,16 @@ import {
   detectMimeType,
   isFileSizeValid,
 } from '../document.service';
+import { S3StorageService } from '../storage.service';
 import { ValidationError, NotFoundError } from '../../../common/errors';
 
-// --- Pure function tests ---
+/**
+ * Unit tests for DocumentService and S3StorageService.
+ *
+ * Validates: Requirements 57.6, 57.7, 57.8, 57.9, 57.10
+ */
 
-describe('detectMimeType', () => {
-  it('should detect JPEG from magic bytes FF D8 FF', () => {
-    const buf = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00]);
-    expect(detectMimeType(buf)).toBe('image/jpeg');
-  });
-
-  it('should detect PNG from magic bytes 89 50 4E 47', () => {
-    const buf = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]);
-    expect(detectMimeType(buf)).toBe('image/png');
-  });
-
-  it('should detect PDF from magic bytes 25 50 44 46 (%PDF)', () => {
-    const buf = Buffer.from([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31]);
-    expect(detectMimeType(buf)).toBe('application/pdf');
-  });
-
-  it('should return null for unknown magic bytes', () => {
-    const buf = Buffer.from([0x00, 0x01, 0x02, 0x03]);
-    expect(detectMimeType(buf)).toBeNull();
-  });
-
-  it('should return null for empty buffer', () => {
-    const buf = Buffer.alloc(0);
-    expect(detectMimeType(buf)).toBeNull();
-  });
-
-  it('should return null for buffer shorter than any signature', () => {
-    const buf = Buffer.from([0xff, 0xd8]);
-    expect(detectMimeType(buf)).toBeNull();
-  });
-
-  it('should detect JPEG even with minimal matching bytes', () => {
-    const buf = Buffer.from([0xff, 0xd8, 0xff]);
-    expect(detectMimeType(buf)).toBe('image/jpeg');
-  });
-});
-
-describe('isFileSizeValid', () => {
-  it('should accept file exactly at 5MB limit', () => {
-    expect(isFileSizeValid(5 * 1024 * 1024)).toBe(true);
-  });
-
-  it('should accept file under 5MB', () => {
-    expect(isFileSizeValid(1024)).toBe(true);
-  });
-
-  it('should reject file over 5MB', () => {
-    expect(isFileSizeValid(5 * 1024 * 1024 + 1)).toBe(false);
-  });
-
-  it('should reject zero-byte file', () => {
-    expect(isFileSizeValid(0)).toBe(false);
-  });
-
-  it('should reject negative size', () => {
-    expect(isFileSizeValid(-1)).toBe(false);
-  });
-
-  it('should accept 1 byte file', () => {
-    expect(isFileSizeValid(1)).toBe(true);
-  });
-});
-
-
-// --- DocumentService integration-style unit tests (mocked dependencies) ---
+// --- Helpers ---
 
 const mockFileId = '550e8400-e29b-41d4-a716-446655440000';
 const mockActorId = '660e8400-e29b-41d4-a716-446655440001';
@@ -111,6 +52,67 @@ function createMockFile(overrides: Partial<Express.Multer.File> = {}): Express.M
     ...overrides,
   };
 }
+
+// --- Pure function smoke tests (detailed coverage in document-helpers.spec.ts) ---
+
+describe('detectMimeType', () => {
+  it('should detect JPEG from magic bytes FF D8 FF', () => {
+    const buf = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00]);
+    expect(detectMimeType(buf)).toBe('image/jpeg');
+  });
+
+  it('should detect PNG from magic bytes 89 50 4E 47', () => {
+    const buf = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]);
+    expect(detectMimeType(buf)).toBe('image/png');
+  });
+
+  it('should detect PDF from magic bytes 25 50 44 46 (%PDF)', () => {
+    const buf = Buffer.from([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31]);
+    expect(detectMimeType(buf)).toBe('application/pdf');
+  });
+
+  it('should return null for unknown magic bytes', () => {
+    const buf = Buffer.from([0x00, 0x01, 0x02, 0x03]);
+    expect(detectMimeType(buf)).toBeNull();
+  });
+
+  it('should return null for empty buffer', () => {
+    expect(detectMimeType(Buffer.alloc(0))).toBeNull();
+  });
+
+  it('should return null for buffer shorter than any signature', () => {
+    const buf = Buffer.from([0xff, 0xd8]);
+    expect(detectMimeType(buf)).toBeNull();
+  });
+});
+
+describe('isFileSizeValid', () => {
+  it('should accept file exactly at 5MB limit', () => {
+    expect(isFileSizeValid(5 * 1024 * 1024)).toBe(true);
+  });
+
+  it('should accept file under 5MB', () => {
+    expect(isFileSizeValid(1024)).toBe(true);
+  });
+
+  it('should reject file over 5MB', () => {
+    expect(isFileSizeValid(5 * 1024 * 1024 + 1)).toBe(false);
+  });
+
+  it('should reject zero-byte file', () => {
+    expect(isFileSizeValid(0)).toBe(false);
+  });
+
+  it('should reject negative size', () => {
+    expect(isFileSizeValid(-1)).toBe(false);
+  });
+
+  it('should accept 1 byte file', () => {
+    expect(isFileSizeValid(1)).toBe(true);
+  });
+});
+
+// --- DocumentService unit tests (mocked dependencies) ---
 
 describe('DocumentService', () => {
   let service: DocumentService;
@@ -216,6 +218,24 @@ describe('DocumentService', () => {
       expect(mockStorage.upload).not.toHaveBeenCalled();
     });
 
+    it('should reject file containing embedded scripts', async () => {
+      // Build a buffer that has valid JPEG magic bytes but also contains a script tag
+      const jpegHeader = Buffer.from([0xff, 0xd8, 0xff, 0xe0]);
+      const scriptPayload = Buffer.from('<script>alert("xss")</script>');
+      const maliciousBuffer = Buffer.concat([jpegHeader, scriptPayload]);
+      const file = createMockFile({
+        buffer: maliciousBuffer,
+        size: maliciousBuffer.length,
+      });
+
+      await expect(
+        service.upload(file, { prefix: 'kyc' }, mockActorId),
+      ).rejects.toThrow(ValidationError);
+
+      expect(mockStorage.upload).not.toHaveBeenCalled();
+      expect(mockPrisma.file_metadata.create).not.toHaveBeenCalled();
+    });
+
     it('should reject invalid prefix', async () => {
       const file = createMockFile();
 
@@ -234,6 +254,23 @@ describe('DocumentService', () => {
       const key1 = mockPrisma.file_metadata.create.mock.calls[0]![0].data.key;
       const key2 = mockPrisma.file_metadata.create.mock.calls[1]![0].data.key;
       expect(key1).not.toBe(key2);
+    });
+
+    it('should pass correct params to S3 storage upload', async () => {
+      mockPrisma.file_metadata.create.mockResolvedValue({ id: mockFileId });
+      const file = createMockFile();
+
+      await service.upload(file, { prefix: 'receipts' }, mockActorId);
+
+      expect(mockStorage.upload).toHaveBeenCalledWith(
+        expect.objectContaining({
+          bucket: 'test-bucket',
+          body: file.buffer,
+          contentType: 'image/jpeg',
+        }),
+      );
+      const uploadCall = mockStorage.upload.mock.calls[0]![0];
+      expect(uploadCall.key).toMatch(/^receipts\/.+\.jpg$/);
     });
   });
 
@@ -264,7 +301,7 @@ describe('DocumentService', () => {
       ).rejects.toThrow(NotFoundError);
     });
 
-    it('should throw NotFoundError for soft-deleted document', async () => {
+    it('should throw NotFoundError for soft-deleted (inactive) document', async () => {
       mockPrisma.file_metadata.findUnique.mockResolvedValue({
         id: mockFileId,
         is_active: false,
@@ -273,6 +310,23 @@ describe('DocumentService', () => {
       await expect(
         service.getSignedUrl(mockFileId, mockActorId),
       ).rejects.toThrow(NotFoundError);
+    });
+
+    it('should request 15-minute (900s) expiry for signed URLs', async () => {
+      mockPrisma.file_metadata.findUnique.mockResolvedValue({
+        id: mockFileId,
+        bucket: 'test-bucket',
+        key: 'kyc/file.jpg',
+        is_active: true,
+      });
+
+      await service.getSignedUrl(mockFileId, mockActorId);
+
+      expect(mockStorage.getSignedUrl).toHaveBeenCalledWith(
+        'test-bucket',
+        'kyc/file.jpg',
+        900,
+      );
     });
   });
 
@@ -292,12 +346,122 @@ describe('DocumentService', () => {
       });
     });
 
+    it('should not call S3 delete (file retained for compliance)', async () => {
+      mockPrisma.file_metadata.findUnique.mockResolvedValue({
+        id: mockFileId,
+        is_active: true,
+      });
+      mockPrisma.file_metadata.update.mockResolvedValue({});
+
+      await service.softDelete(mockFileId, mockActorId);
+
+      expect(mockStorage.delete).not.toHaveBeenCalled();
+    });
+
     it('should throw NotFoundError for non-existent document', async () => {
       mockPrisma.file_metadata.findUnique.mockResolvedValue(null);
 
       await expect(
         service.softDelete(mockFileId, mockActorId),
       ).rejects.toThrow(NotFoundError);
+    });
+  });
+});
+
+
+// --- S3StorageService unit tests (mocked S3Client) ---
+
+// Mock the AWS SDK modules before importing S3StorageService
+vi.mock('@aws-sdk/client-s3', () => {
+  const mockSend = vi.fn().mockResolvedValue({});
+  const MockS3Client = vi.fn().mockImplementation(() => ({ send: mockSend }));
+  // Expose send on the class for test access
+  (MockS3Client as any).__mockSend = mockSend;
+
+  return {
+    S3Client: MockS3Client,
+    PutObjectCommand: vi.fn().mockImplementation((input: any) => ({ ...input, _type: 'PutObject' })),
+    GetObjectCommand: vi.fn().mockImplementation((input: any) => ({ ...input, _type: 'GetObject' })),
+    DeleteObjectCommand: vi.fn().mockImplementation((input: any) => ({ ...input, _type: 'DeleteObject' })),
+  };
+});
+
+vi.mock('@aws-sdk/s3-request-presigner', () => ({
+  getSignedUrl: vi.fn().mockResolvedValue('https://s3.example.com/presigned-url'),
+}));
+
+describe('S3StorageService', () => {
+  let storageService: S3StorageService;
+  let mockSend: ReturnType<typeof vi.fn>;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    process.env['S3_ENDPOINT'] = 'http://localhost:9000';
+    process.env['S3_REGION'] = 'us-east-1';
+    process.env['S3_ACCESS_KEY'] = 'test-key';
+    process.env['S3_SECRET_KEY'] = 'test-secret';
+
+    // Re-import to get fresh instance with mocked S3Client
+    const { S3Client } = await import('@aws-sdk/client-s3');
+    mockSend = (S3Client as any).__mockSend;
+    mockSend.mockResolvedValue({});
+
+    storageService = new S3StorageService();
+  });
+
+  describe('upload', () => {
+    it('should send PutObjectCommand with correct parameters', async () => {
+      const { PutObjectCommand } = await import('@aws-sdk/client-s3');
+      const body = Buffer.from([0xff, 0xd8, 0xff]);
+
+      await storageService.upload({
+        bucket: 'test-bucket',
+        key: 'kyc/test-file.jpg',
+        body,
+        contentType: 'image/jpeg',
+      });
+
+      expect(PutObjectCommand).toHaveBeenCalledWith({
+        Bucket: 'test-bucket',
+        Key: 'kyc/test-file.jpg',
+        Body: body,
+        ContentType: 'image/jpeg',
+      });
+      expect(mockSend).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('getSignedUrl', () => {
+    it('should generate a presigned URL with correct parameters', async () => {
+      const { GetObjectCommand } = await import('@aws-sdk/client-s3');
+      const { getSignedUrl: mockGetSignedUrl } = await import('@aws-sdk/s3-request-presigner');
+
+      const url = await storageService.getSignedUrl('test-bucket', 'kyc/file.jpg', 900);
+
+      expect(GetObjectCommand).toHaveBeenCalledWith({
+        Bucket: 'test-bucket',
+        Key: 'kyc/file.jpg',
+      });
+      expect(mockGetSignedUrl).toHaveBeenCalledWith(
+        expect.anything(), // S3Client instance
+        expect.objectContaining({ Bucket: 'test-bucket', Key: 'kyc/file.jpg' }),
+        { expiresIn: 900 },
+      );
+      expect(url).toBe('https://s3.example.com/presigned-url');
+    });
+  });
+
+  describe('delete', () => {
+    it('should send DeleteObjectCommand with correct parameters', async () => {
+      const { DeleteObjectCommand } = await import('@aws-sdk/client-s3');
+
+      await storageService.delete('test-bucket', 'kyc/old-file.jpg');
+
+      expect(DeleteObjectCommand).toHaveBeenCalledWith({
+        Bucket: 'test-bucket',
+        Key: 'kyc/old-file.jpg',
+      });
+      expect(mockSend).toHaveBeenCalledOnce();
     });
   });
 });

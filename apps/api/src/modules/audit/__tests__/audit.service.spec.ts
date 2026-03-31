@@ -3,6 +3,9 @@ import { AuditService } from '../audit.service';
 import { AuditRepository } from '../audit.repository';
 import { CreateAuditLogDto } from '../dto/create-audit-log.dto';
 
+/**
+ * Validates: Requirements 33.1, 33.2, 33.3, 33.4
+ */
 describe('AuditService', () => {
   let service: AuditService;
   let repository: AuditRepository;
@@ -32,8 +35,11 @@ describe('AuditService', () => {
     service = new AuditService(repository);
   });
 
+  /**
+   * Requirement 33.1: Audit log creation with all required fields
+   */
   describe('createAuditLog', () => {
-    it('should create an audit log entry with all fields', async () => {
+    it('should create an audit log entry with all required fields', async () => {
       const dto: CreateAuditLogDto = {
         action_type: 'customer_created',
         actor_id: '00000000-0000-0000-0000-000000000010',
@@ -79,6 +85,25 @@ describe('AuditService', () => {
       );
     });
 
+    it('should generate a request_id when not provided', async () => {
+      const dto: CreateAuditLogDto = {
+        action_type: 'loan_approved',
+        actor_id: '00000000-0000-0000-0000-000000000010',
+        actor_role: 'manager',
+        target_entity: 'loan',
+        target_id: '00000000-0000-0000-0000-000000000030',
+      };
+
+      await service.createAuditLog(dto);
+
+      const calls = (repository.create as ReturnType<typeof vi.fn>).mock.calls;
+      expect(calls.length).toBe(1);
+      const callArgs = calls[0]![0] as Record<string, unknown>;
+      expect(callArgs['request_id']).toBeDefined();
+      expect(typeof callArgs['request_id']).toBe('string');
+      expect((callArgs['request_id'] as string).length).toBeGreaterThan(0);
+    });
+
     it('should pass transaction client to repository when provided', async () => {
       const dto: CreateAuditLogDto = {
         action_type: 'loan_disbursed',
@@ -99,6 +124,9 @@ describe('AuditService', () => {
       );
     });
 
+    /**
+     * Requirement 33.4: before_state and after_state capture
+     */
     it('should include before_state and after_state when provided', async () => {
       const dto: CreateAuditLogDto = {
         action_type: 'customer_updated',
@@ -124,8 +152,72 @@ describe('AuditService', () => {
         undefined,
       );
     });
+
+    it('should pass undefined for before_state and after_state when not provided', async () => {
+      const dto: CreateAuditLogDto = {
+        action_type: 'user_login',
+        actor_id: '00000000-0000-0000-0000-000000000010',
+        actor_role: 'field_officer',
+        target_entity: 'user',
+        target_id: '00000000-0000-0000-0000-000000000010',
+        ip_address: '192.168.1.1',
+        request_id: '00000000-0000-0000-0000-000000000077',
+      };
+
+      await service.createAuditLog(dto);
+
+      const calls = (repository.create as ReturnType<typeof vi.fn>).mock.calls;
+      expect(calls.length).toBe(1);
+      const callArgs = calls[0]![0] as Record<string, unknown>;
+      expect(callArgs['before_state']).toBeUndefined();
+      expect(callArgs['after_state']).toBeUndefined();
+    });
+
+    it('should pass approval_id when provided', async () => {
+      const dto: CreateAuditLogDto = {
+        action_type: 'loan_approved',
+        actor_id: '00000000-0000-0000-0000-000000000010',
+        actor_role: 'manager',
+        target_entity: 'loan',
+        target_id: '00000000-0000-0000-0000-000000000030',
+        ip_address: '127.0.0.1',
+        request_id: '00000000-0000-0000-0000-000000000099',
+        approval_id: '00000000-0000-0000-0000-000000000050',
+      };
+
+      await service.createAuditLog(dto);
+
+      expect(repository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          approval_id: '00000000-0000-0000-0000-000000000050',
+        }),
+        undefined,
+      );
+    });
+
+    it('should return the created audit log entry', async () => {
+      const dto: CreateAuditLogDto = {
+        action_type: 'collection_posted',
+        actor_id: '00000000-0000-0000-0000-000000000010',
+        actor_role: 'collection_officer',
+        target_entity: 'collection',
+        target_id: '00000000-0000-0000-0000-000000000040',
+        ip_address: '10.0.0.5',
+        request_id: '00000000-0000-0000-0000-000000000066',
+      };
+
+      const result = await service.createAuditLog(dto);
+
+      expect(result).toBeDefined();
+      expect(result.id).toBe(mockAuditLog.id);
+      expect(result.action_type).toBe(mockAuditLog.action_type);
+      expect(result.created_at).toEqual(mockAuditLog.created_at);
+    });
   });
 
+  /**
+   * Requirement 33.2: Querying with pagination and filtering
+   */
   describe('findAll', () => {
     it('should return paginated audit logs', async () => {
       const result = await service.findAll({ skip: 0, take: 10 });
@@ -181,8 +273,71 @@ describe('AuditService', () => {
         endDate: undefined,
       });
     });
+
+    it('should filter by action_type only', async () => {
+      await service.findAll({ actionType: 'customer_created' });
+
+      expect(repository.findAll).toHaveBeenCalledWith(
+        expect.objectContaining({ actionType: 'customer_created' }),
+      );
+    });
+
+    it('should filter by actor_id only', async () => {
+      await service.findAll({ actorId: '00000000-0000-0000-0000-000000000010' });
+
+      expect(repository.findAll).toHaveBeenCalledWith(
+        expect.objectContaining({ actorId: '00000000-0000-0000-0000-000000000010' }),
+      );
+    });
+
+    it('should filter by target_entity only', async () => {
+      await service.findAll({ targetEntity: 'collection' });
+
+      expect(repository.findAll).toHaveBeenCalledWith(
+        expect.objectContaining({ targetEntity: 'collection' }),
+      );
+    });
+
+    it('should convert startDate string to Date object', async () => {
+      await service.findAll({ startDate: '2024-06-01T00:00:00Z' });
+
+      expect(repository.findAll).toHaveBeenCalledWith(
+        expect.objectContaining({
+          startDate: new Date('2024-06-01T00:00:00Z'),
+        }),
+      );
+    });
+
+    it('should convert endDate string to Date object', async () => {
+      await service.findAll({ endDate: '2024-12-31T23:59:59Z' });
+
+      expect(repository.findAll).toHaveBeenCalledWith(
+        expect.objectContaining({
+          endDate: new Date('2024-12-31T23:59:59Z'),
+        }),
+      );
+    });
+
+    it('should leave startDate undefined when not provided', async () => {
+      await service.findAll({ endDate: '2024-12-31T23:59:59Z' });
+
+      expect(repository.findAll).toHaveBeenCalledWith(
+        expect.objectContaining({ startDate: undefined }),
+      );
+    });
+
+    it('should leave endDate undefined when not provided', async () => {
+      await service.findAll({ startDate: '2024-01-01T00:00:00Z' });
+
+      expect(repository.findAll).toHaveBeenCalledWith(
+        expect.objectContaining({ endDate: undefined }),
+      );
+    });
   });
 
+  /**
+   * Requirement 33.3: Append-only enforcement — no update or delete methods
+   */
   describe('append-only enforcement', () => {
     it('should not expose any update method', () => {
       const svc = service as unknown as Record<string, unknown>;
@@ -195,6 +350,20 @@ describe('AuditService', () => {
       expect(svc['deleteAuditLog']).toBeUndefined();
       expect(svc['delete']).toBeUndefined();
       expect(svc['remove']).toBeUndefined();
+    });
+
+    it('should only expose createAuditLog and findAll as public methods', () => {
+      const proto = Object.getOwnPropertyNames(Object.getPrototypeOf(service));
+      const publicMethods = proto.filter((m) => m !== 'constructor');
+      expect(publicMethods).toContain('createAuditLog');
+      expect(publicMethods).toContain('findAll');
+      // No update/delete/remove methods on the prototype
+      expect(publicMethods).not.toContain('update');
+      expect(publicMethods).not.toContain('delete');
+      expect(publicMethods).not.toContain('remove');
+      expect(publicMethods).not.toContain('updateAuditLog');
+      expect(publicMethods).not.toContain('deleteAuditLog');
+      expect(publicMethods).not.toContain('removeAuditLog');
     });
   });
 });

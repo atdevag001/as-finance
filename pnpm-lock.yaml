@@ -287,6 +287,9 @@ importers:
       decimal.js:
         specifier: ^10.4.3
         version: 10.6.0
+      fast-check:
+        specifier: ^3.19.0
+        version: 3.23.2
     devDependencies:
       '@as-finance/config':
         specifier: workspace:*
@@ -297,6 +300,9 @@ importers:
       typescript:
         specifier: ^5.5.0
         version: 5.9.3
+      vitest:
+        specifier: ^2.0.0
+        version: 2.1.9(@types/node@20.19.37)(terser@5.46.1)
 
 packages:
 

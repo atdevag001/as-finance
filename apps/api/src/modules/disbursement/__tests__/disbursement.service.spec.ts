@@ -256,6 +256,91 @@ describe('DisbursementService', () => {
       expect(updateCall.first_due_date).toEqual(new Date('2024-02-01'));
       expect(updateCall.last_due_date).toEqual(new Date('2025-01-01'));
     });
+
+    it('should create disbursement record with amount matching loan principal (Req 14.7)', async () => {
+      await service.disburse(dto, 'actor-1', 'manager');
+      const createCall = repo.create.mock.calls[0]![0];
+      expect(createCall.amount_paise).toBe(10000000n); // matches loan.principal_paise
+      expect(createCall.loan_id).toBe('loan-1');
+      expect(createCall.mode).toBe(PaymentMode.CASH);
+      expect(createCall.idempotency_key).toBe('idem-key-1');
+    });
+
+    it('should return result body with correct disbursement fields', async () => {
+      const result = await service.disburse(dto, 'actor-1', 'manager');
+      expect(result.statusCode).toBe(201);
+      const data = result.data as Record<string, unknown>;
+      expect(data).toMatchObject({
+        disbursementId: 'disb-1',
+        loanId: 'loan-1',
+        loanNumber: 'LN-2024-00001',
+        amountPaise: '10000000',
+        mode: PaymentMode.CASH,
+        journalEntryId: 'je-1',
+      });
+      expect(data['processingFeePaise']).toBe('0');
+      expect(data['disbursedAt']).toBeDefined();
+    });
+
+    it('should reject disbursement for non-approved loan via disburse() (Req 14.2)', async () => {
+      repo.getLoanForDisbursement.mockResolvedValue(createMockLoan({ status: 'draft' }));
+      await expect(service.disburse(dto, 'actor-1', 'manager')).rejects.toThrow(BusinessRuleError);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('should reject disbursement when no schedule exists via disburse() (Req 14.3)', async () => {
+      repo.hasSchedule.mockResolvedValue(false);
+      await expect(service.disburse(dto, 'actor-1', 'manager')).rejects.toThrow(BusinessRuleError);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('should reject disbursement when loan is already disbursed', async () => {
+      repo.isAlreadyDisbursed.mockResolvedValue(true);
+      await expect(service.disburse(dto, 'actor-1', 'manager')).rejects.toThrow(BusinessRuleError);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('should throw NotFoundError when loan does not exist via disburse()', async () => {
+      repo.getLoanForDisbursement.mockResolvedValue(null);
+      await expect(service.disburse(dto, 'actor-1', 'manager')).rejects.toThrow(NotFoundError);
+    });
+
+    it('should throw BusinessRuleError when chart of accounts not configured', async () => {
+      repo.findAccountByCode.mockResolvedValue(null);
+      await expect(service.disburse(dto, 'actor-1', 'manager')).rejects.toThrow(BusinessRuleError);
+    });
+
+    it('should validate loan transition within transaction', async () => {
+      await service.disburse(dto, 'actor-1', 'manager');
+      expect(loanService.validateTransition).toHaveBeenCalledWith('approved', 'disbursed');
+    });
+
+    it('should use total_payable_paise for cached outstanding when available', async () => {
+      await service.disburse(dto, 'actor-1', 'manager');
+      const updateCall = repo.updateLoanForDisbursement.mock.calls[0]![1];
+      // total_payable_paise (11200000n) is used, not principal_paise (10000000n)
+      expect(updateCall.cached_outstanding_paise).toBe(11200000n);
+    });
+
+    it('should fall back to principal_paise when total_payable_paise is null', async () => {
+      repo.getLoanForDisbursement.mockResolvedValue(
+        createMockLoan({ total_payable_paise: null }),
+      );
+      await service.disburse(dto, 'actor-1', 'manager');
+      const updateCall = repo.updateLoanForDisbursement.mock.calls[0]![1];
+      expect(updateCall.cached_outstanding_paise).toBe(10000000n);
+    });
+
+    it('should handle loan with empty schedules gracefully', async () => {
+      repo.getLoanForDisbursement.mockResolvedValue(
+        createMockLoan({ schedules: [] }),
+      );
+      await service.disburse(dto, 'actor-1', 'manager');
+      const updateCall = repo.updateLoanForDisbursement.mock.calls[0]![1];
+      // When no schedules, dates fall back to disbursement date
+      expect(updateCall.first_due_date).toBeInstanceOf(Date);
+      expect(updateCall.last_due_date).toBeInstanceOf(Date);
+    });
   });
 
   describe('processing fee', () => {
@@ -317,6 +402,111 @@ describe('DisbursementService', () => {
       await service.disburse(dto, 'actor-1', 'manager');
       // Only one journal entry (disbursement, no processing fee)
       expect(accountingService.createJournalEntry).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  /**
+   * Dedicated unit tests for the private calculateProcessingFee() pure function.
+   * Validates: Requirements 66.1, 66.2, 66.3, 66.4, 66.5, 66.6
+   */
+  describe('calculateProcessingFee()', () => {
+    // Helper to call the private method directly
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    function calcFee(principalPaise: bigint, feeType: string, feeValue: number): bigint {
+      return (service as any)['calculateProcessingFee'](principalPaise, feeType, feeValue);
+    }
+
+    // 66.1 — fixed fee type returns feeValue directly as BigInt
+    describe('fixed fee type', () => {
+      it('should return feeValue as BigInt for fixed type', () => {
+        expect(calcFee(10_000_00n, 'fixed', 50000)).toBe(50000n);
+      });
+
+      it('should return feeValue regardless of principal for fixed type', () => {
+        expect(calcFee(0n, 'fixed', 25000)).toBe(25000n);
+        expect(calcFee(1_000_000_000_00n, 'fixed', 25000)).toBe(25000n);
+      });
+    });
+
+    // 66.2 — percentage fee type (bps) with ROUND_HALF_UP
+    describe('percentage fee type', () => {
+      it('should calculate 2% (200 bps) of principal correctly', () => {
+        // 200 bps of 10,000,00 paise = 10,000,00 * 200 / 10000 = 20,000
+        expect(calcFee(10_000_00n, 'percentage', 200)).toBe(20000n);
+      });
+
+      it('should calculate 1.5% (150 bps) of principal correctly', () => {
+        // 150 bps of 10,000,00 paise = 10,000,00 * 150 / 10000 = 15,000
+        expect(calcFee(10_000_00n, 'percentage', 150)).toBe(15000n);
+      });
+
+      it('should calculate 100% (10000 bps) of principal', () => {
+        expect(calcFee(50000n, 'percentage', 10000)).toBe(50000n);
+      });
+    });
+
+    // 66.3 — zero principal returns zero fee for both types
+    describe('zero principal', () => {
+      it('should return 0n for percentage type with zero principal', () => {
+        expect(calcFee(0n, 'percentage', 200)).toBe(0n);
+      });
+
+      it('should return feeValue for fixed type with zero principal', () => {
+        // Fixed fee is independent of principal
+        expect(calcFee(0n, 'fixed', 50000)).toBe(50000n);
+      });
+    });
+
+    // 66.4 — zero feeValue returns zero fee for percentage type
+    describe('zero feeValue', () => {
+      it('should return 0n for percentage type with zero feeValue', () => {
+        expect(calcFee(10_000_00n, 'percentage', 0)).toBe(0n);
+      });
+
+      it('should return 0n for fixed type with zero feeValue', () => {
+        expect(calcFee(10_000_00n, 'fixed', 0)).toBe(0n);
+      });
+    });
+
+    // 66.5 — fractional paise rounding with ROUND_HALF_UP
+    describe('fractional paise rounding', () => {
+      it('should round up at 0.5 (ROUND_HALF_UP) for 150 bps on 100001 paise', () => {
+        // 100001 * 150 / 10000 = 1500.015 → rounds to 1500
+        expect(calcFee(100001n, 'percentage', 150)).toBe(1500n);
+      });
+
+      it('should round 0.5 up (ROUND_HALF_UP)', () => {
+        // Need a case where result is exactly X.5
+        // principal * bps / 10000 = X.5
+        // 10005 * 100 / 10000 = 100.05 → 100
+        // 50 * 100 / 10000 = 0.5 → rounds to 1 (ROUND_HALF_UP)
+        expect(calcFee(50n, 'percentage', 100)).toBe(1n);
+      });
+
+      it('should round down below 0.5', () => {
+        // 30 * 100 / 10000 = 0.3 → rounds to 0
+        expect(calcFee(30n, 'percentage', 100)).toBe(0n);
+      });
+
+      it('should handle large principal with fractional result', () => {
+        // 999_999_999n * 150 / 10000 = 14999999.985 → 15000000
+        expect(calcFee(999_999_999n, 'percentage', 150)).toBe(15000000n);
+      });
+    });
+
+    // 66.6 — unrecognized fee_type returns 0n
+    describe('unrecognized fee_type', () => {
+      it('should return 0n for unknown fee type', () => {
+        expect(calcFee(10_000_00n, 'unknown', 500)).toBe(0n);
+      });
+
+      it('should return 0n for empty string fee type', () => {
+        expect(calcFee(10_000_00n, '', 500)).toBe(0n);
+      });
+
+      it('should return 0n for arbitrary string fee type', () => {
+        expect(calcFee(10_000_00n, 'flat_rate', 500)).toBe(0n);
+      });
     });
   });
 });

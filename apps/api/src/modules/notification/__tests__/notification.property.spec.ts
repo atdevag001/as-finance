@@ -176,18 +176,18 @@ describe('Property 33: Notification Outbox Transactional Consistency', () => {
 });
 
 
-// ─── Property 34: SMS Template Rendering ───────────────────────────────────────
+// ─── Property 29: Template Rendering Completeness ──────────────────────────────
 
 /**
- * Property 34: SMS Template Rendering
+ * Property 29: Template Rendering Completeness — no unsubstituted placeholders remain
  *
- * For all templates and valid variable maps, rendering substitutes all
- * {{variable}} placeholders; no unsubstituted placeholders remain.
+ * For all templates with matching variable maps, rendering substitutes all
+ * {{variable}} placeholders; no unsubstituted placeholders remain in the output.
  *
- * **Validates: Requirements 18.5**
+ * **Validates: Requirements 67.6, 67.7**
  */
 
-// --- Generators for Property 34 ---
+// --- Generators for Property 29 ---
 
 /** Generates a variable name (word characters, 1-20 chars) */
 const varNameArb = fc.stringOf(
@@ -237,7 +237,7 @@ const templateWithVarsArb = fc
 /** Regex that matches any remaining unsubstituted {{...}} placeholder */
 const PLACEHOLDER_RE = /\{\{\w+\}\}/;
 
-describe('Property 34: SMS Template Rendering', () => {
+describe('Property 29: Template Rendering Completeness', () => {
   it('for all templates with matching variable maps, no unsubstituted placeholders remain', () => {
     fc.assert(
       fc.property(templateWithVarsArb, ({ templateBody, variables }) => {

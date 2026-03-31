@@ -1,10 +1,11 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import * as fc from 'fast-check';
 import { AccountingService } from '../accounting.service';
 import { AccountingRepository } from '../accounting.repository';
 import { CreateJournalEntryDto, JournalLineDto } from '../dto/create-journal-entry.dto';
-import { JournalSourceType, AccountCategory } from '@as-finance/shared';
+import { JournalSourceType } from '@as-finance/shared';
 import { BusinessRuleError } from '../../../common/errors';
+import { journalEntryArb } from '@as-finance/testing';
 
 // ---------------------------------------------------------------------------
 // Shared generators
@@ -424,6 +425,179 @@ describe('Property 15: Balance Sheet Equation', () => {
         expect(totalAssets).toBe(totalLiabilities + totalEquity + retainedEarnings);
       }),
       { numRuns: 1000 },
+    );
+  });
+});
+
+
+// ===========================================================================
+// Property 24: Balanced Entries
+//
+// For any valid journal entry (generated via the shared journalEntryArb),
+// total debit paise == total credit paise.
+//
+// **Validates: Requirements 22.1**
+// ===========================================================================
+
+describe('Property 24: Balanced Entries', () => {
+  it('total debit paise = total credit paise for any valid journal entry', () => {
+    fc.assert(
+      fc.property(journalEntryArb, (entry) => {
+        // Verify entry-level totals are balanced
+        expect(entry.totalDebitPaise).toBe(entry.totalCreditPaise);
+        expect(entry.totalDebitPaise).toBeGreaterThan(0);
+
+        // Verify line-level sums match entry totals
+        const lineDebitSum = entry.lines.reduce((s, l) => s + l.debitPaise, 0);
+        const lineCreditSum = entry.lines.reduce((s, l) => s + l.creditPaise, 0);
+        expect(lineDebitSum).toBe(lineCreditSum);
+        expect(lineDebitSum).toBe(entry.totalDebitPaise);
+      }),
+      { numRuns: 1000 },
+    );
+  });
+
+  it('balanced entries pass service validation via createJournalEntry', async () => {
+    await fc.assert(
+      fc.asyncProperty(journalEntryArb, async (entry) => {
+        const { service, repo } = createServiceWithCapture();
+
+        const dto = new CreateJournalEntryDto();
+        dto.date = entry.entryDate.toISOString().split('T')[0]!;
+        dto.description = entry.description;
+        dto.sourceType = entry.sourceType;
+        dto.sourceId = entry.sourceId;
+        dto.createdBy = entry.createdBy;
+        dto.lines = entry.lines.map((l) => ({
+          accountId: l.accountId,
+          debitPaise: l.debitPaise,
+          creditPaise: l.creditPaise,
+        }));
+
+        await service.createJournalEntry(dto);
+
+        expect(repo.createJournalEntry).toHaveBeenCalledOnce();
+        const passedData = (repo.createJournalEntry as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+        expect(BigInt(passedData.total_debit_paise)).toBe(BigInt(passedData.total_credit_paise));
+      }),
+      { numRuns: 1000 },
+    );
+  });
+});
+
+// ===========================================================================
+// Property 25: Trial Balance
+//
+// For any sequence of valid balanced journal entries posted across accounts,
+// trial balance total debits == total credits.
+//
+// **Validates: Requirements 22.2**
+// ===========================================================================
+
+describe('Property 25: Trial Balance', () => {
+  it('trial balance total debits = total credits across all accounts', async () => {
+    const accounts = makeAccounts();
+
+    // Generate sequences of balanced journal entries using the shared arbitrary
+    const entrySequenceArb = fc.array(journalEntryArb, { minLength: 1, maxLength: 10 });
+
+    await fc.assert(
+      fc.asyncProperty(entrySequenceArb, async (entries) => {
+        // Aggregate all lines across all entries, mapping account IDs to our
+        // fixed account set so the trial balance can resolve categories
+        const accountTotals = new Map<string, { debit: bigint; credit: bigint }>();
+
+        for (const entry of entries) {
+          for (let i = 0; i < entry.lines.length; i++) {
+            const line = entry.lines[i]!;
+            // Map each line to one of our fixed accounts (round-robin)
+            const account = accounts[i % accounts.length]!;
+            const existing = accountTotals.get(account.id) ?? { debit: 0n, credit: 0n };
+            existing.debit += BigInt(line.debitPaise);
+            existing.credit += BigInt(line.creditPaise);
+            accountTotals.set(account.id, existing);
+          }
+        }
+
+        const balanceResults = [...accountTotals.entries()].map(([accountId, totals]) => ({
+          account_id: accountId,
+          _sum: { debit_paise: totals.debit, credit_paise: totals.credit },
+        }));
+
+        const { service, repo } = createServiceWithCapture();
+        vi.mocked(repo.getAccountBalances).mockResolvedValue(balanceResults as never);
+        vi.mocked(repo.findAllAccounts).mockResolvedValue(accounts as never);
+
+        const result = await service.getTrialBalance();
+
+        expect(result.isBalanced).toBe(true);
+        expect(result.totalDebitBalancePaise).toBe(result.totalCreditBalancePaise);
+      }),
+      { numRuns: 1000 },
+    );
+  });
+});
+
+// ===========================================================================
+// Property 26: Positive Amounts
+//
+// All journal entry amounts (debit and credit on every line) are positive
+// integers (> 0 for the active side, exactly 0 for the inactive side).
+//
+// **Validates: Requirements 22.3, 22.4**
+// ===========================================================================
+
+describe('Property 26: Positive Amounts', () => {
+  it('all journal entry amounts are positive integers', () => {
+    fc.assert(
+      fc.property(journalEntryArb, (entry) => {
+        for (const line of entry.lines) {
+          // Both amounts must be non-negative integers
+          expect(Number.isInteger(line.debitPaise)).toBe(true);
+          expect(Number.isInteger(line.creditPaise)).toBe(true);
+          expect(line.debitPaise).toBeGreaterThanOrEqual(0);
+          expect(line.creditPaise).toBeGreaterThanOrEqual(0);
+
+          // Each line must have exactly one positive side (debit XOR credit)
+          const hasDebit = line.debitPaise > 0;
+          const hasCredit = line.creditPaise > 0;
+          expect(hasDebit || hasCredit).toBe(true);
+          expect(hasDebit && hasCredit).toBe(false);
+        }
+
+        // Entry-level totals must be positive integers
+        expect(Number.isInteger(entry.totalDebitPaise)).toBe(true);
+        expect(Number.isInteger(entry.totalCreditPaise)).toBe(true);
+        expect(entry.totalDebitPaise).toBeGreaterThan(0);
+        expect(entry.totalCreditPaise).toBeGreaterThan(0);
+      }),
+      { numRuns: 1000 },
+    );
+  });
+
+  it('service rejects entries with non-positive line amounts', async () => {
+    // Generate lines where one line has zero amounts (invalid)
+    const zeroLineArb = fc.tuple(uuidArb, uuidArb).map(([accA, accB]): JournalLineDto[] => [
+      { accountId: accA, debitPaise: 0, creditPaise: 0 },
+      { accountId: accB, debitPaise: 100, creditPaise: 0 },
+    ]);
+
+    await fc.assert(
+      fc.asyncProperty(zeroLineArb, dateStrArb, sourceTypeArb, uuidArb, uuidArb, async (lines, date, sourceType, sourceId, createdBy) => {
+        const { service, repo } = createServiceWithCapture();
+
+        const dto = new CreateJournalEntryDto();
+        dto.date = date!;
+        dto.description = 'Zero amount test';
+        dto.sourceType = sourceType;
+        dto.sourceId = sourceId;
+        dto.createdBy = createdBy;
+        dto.lines = lines;
+
+        await expect(service.createJournalEntry(dto)).rejects.toThrow(BusinessRuleError);
+        expect(repo.createJournalEntry).not.toHaveBeenCalled();
+      }),
+      { numRuns: 100 },
     );
   });
 });

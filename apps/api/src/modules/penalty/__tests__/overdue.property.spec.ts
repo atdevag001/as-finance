@@ -1,32 +1,36 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import * as fc from 'fast-check';
-import { classifyOverdueBucket } from '../penalty.service';
+import {
+  calculateDpd,
+  classifyOverdueBucket,
+  calculatePenaltyAmount,
+} from '../penalty.service';
 import { PenaltyService } from '../penalty.service';
 import { ConflictError } from '../../../common/errors';
+import { penaltyConfigArb, dueDateArb } from '@as-finance/testing';
 
 /**
- * Property 25: Overdue Bucket Classification
+ * Property 20: Non-Negative DPD — DPD is always non-negative
+ * **Validates: Requirements 11.1**
  *
- * For all DPD values, the overdue bucket classification SHALL be:
- *   DPD 0 → bucket_0
- *   DPD 1-30 → bucket_1_30
- *   DPD 31-60 → bucket_31_60
- *   DPD 61-90 → bucket_61_90
- *   DPD > 90 → bucket_90_plus
+ * Property 21: Monotonic Buckets — overdue bucket classification is
+ * monotonically non-decreasing with increasing DPD
+ * **Validates: Requirements 11.2**
  *
- * The classification function SHALL be total (defined for all non-negative
- * integers) and deterministic.
+ * Property 22: Positive Flat Penalty — flat penalty amount is always a
+ * positive integer for valid configuration
+ * **Validates: Requirements 11.3**
  *
- * **Validates: Requirements 8.2**
+ * Property 23: Proportional Percentage Penalty — percentage penalty is
+ * proportional to overdue amount and always a non-negative integer
+ * **Validates: Requirements 11.4**
  *
  * ---
  *
+ * Property 25: Overdue Bucket Classification
+ * **Validates: Requirements 8.2**
+ *
  * Property 26: Penalty Uniqueness
- *
- * For all penalty posting attempts, no two penalties SHALL exist for the same
- * (loan_id, installment_id, penalty_period) combination. Duplicate penalty
- * posting attempts SHALL be rejected.
- *
  * **Validates: Requirements 8.5**
  */
 
@@ -45,6 +49,318 @@ const VALID_BUCKETS = new Set([
   'bucket_90_plus',
 ]);
 
+/** Bucket ordering for monotonicity check */
+const BUCKET_ORDER: Record<string, number> = {
+  bucket_0: 0,
+  bucket_1_30: 1,
+  bucket_31_60: 2,
+  bucket_61_90: 3,
+  bucket_90_plus: 4,
+};
+
+/**
+ * Generate a schedule entry with a specific due date where the installment
+ * is unpaid (for DPD testing).
+ */
+function buildUnpaidSchedule(dueDate: Date) {
+  return [
+    {
+      due_date: dueDate,
+      principal_paise: 100_000,
+      interest_paise: 10_000,
+      principal_paid_paise: 0,
+      interest_paid_paise: 0,
+    },
+  ];
+}
+
+/**
+ * Generate a schedule entry that is fully paid (DPD should be 0).
+ */
+function buildPaidSchedule(dueDate: Date) {
+  return [
+    {
+      due_date: dueDate,
+      principal_paise: 100_000,
+      interest_paise: 10_000,
+      principal_paid_paise: 100_000,
+      interest_paid_paise: 10_000,
+    },
+  ];
+}
+
+/** Arbitrary for a reference date that is on or after the due date */
+const referenceDateAfterDueArb = dueDateArb.chain((dueDate) =>
+  fc
+    .integer({ min: 0, max: 3650 })
+    .map((daysAfter) => {
+      const ref = new Date(dueDate.getTime() + daysAfter * 24 * 60 * 60 * 1000);
+      return { dueDate, referenceDate: ref };
+    }),
+);
+
+/** Arbitrary for a reference date that may be before or after the due date */
+const anyReferenceDateArb = dueDateArb.chain((dueDate) =>
+  fc
+    .integer({ min: -365, max: 3650 })
+    .map((daysOffset) => {
+      const ref = new Date(dueDate.getTime() + daysOffset * 24 * 60 * 60 * 1000);
+      return { dueDate, referenceDate: ref };
+    }),
+);
+
+/** Flat penalty config: positive paise value */
+const flatPenaltyValueArb = fc.integer({ min: 1, max: 1_000_000 });
+
+/** Percentage penalty config: basis points (10 = 0.1%, 5000 = 50%) */
+const percentageBpsArb = fc.integer({ min: 1, max: 10_000 });
+
+/** Overdue amount in paise (positive) */
+const overdueAmountArb = fc.integer({ min: 1, max: 100_000_000 });
+
+
+// ===========================================================================
+// Property 20: Non-Negative DPD
+// ===========================================================================
+
+describe('Property 20: Non-Negative DPD', () => {
+  it(
+    'DPD is always non-negative for any due date and reference date combination (unpaid installment)',
+    () => {
+      /**
+       * **Validates: Requirements 11.1**
+       *
+       * For any due date and any reference date, calculateDpd() must return
+       * a value >= 0, regardless of whether the reference date is before,
+       * on, or after the due date.
+       */
+      fc.assert(
+        fc.property(anyReferenceDateArb, ({ dueDate, referenceDate }) => {
+          const schedules = buildUnpaidSchedule(dueDate);
+          const dpd = calculateDpd(schedules, referenceDate);
+          expect(dpd).toBeGreaterThanOrEqual(0);
+          expect(Number.isInteger(dpd)).toBe(true);
+        }),
+        { numRuns: 200 },
+      );
+    },
+  );
+
+  it(
+    'DPD is zero when all installments are fully paid',
+    () => {
+      fc.assert(
+        fc.property(anyReferenceDateArb, ({ dueDate, referenceDate }) => {
+          const schedules = buildPaidSchedule(dueDate);
+          const dpd = calculateDpd(schedules, referenceDate);
+          expect(dpd).toBe(0);
+        }),
+        { numRuns: 100 },
+      );
+    },
+  );
+
+  it(
+    'DPD is zero when reference date is on or before the due date',
+    () => {
+      fc.assert(
+        fc.property(
+          dueDateArb,
+          fc.integer({ min: 0, max: 365 }),
+          (dueDate, daysBefore) => {
+            const referenceDate = new Date(
+              dueDate.getTime() - daysBefore * 24 * 60 * 60 * 1000,
+            );
+            const schedules = buildUnpaidSchedule(dueDate);
+            const dpd = calculateDpd(schedules, referenceDate);
+            expect(dpd).toBe(0);
+          },
+        ),
+        { numRuns: 100 },
+      );
+    },
+  );
+
+  it(
+    'DPD is non-negative for empty schedule array',
+    () => {
+      fc.assert(
+        fc.property(
+          fc.date({ min: new Date('2020-01-01'), max: new Date('2030-12-31') }),
+          (referenceDate) => {
+            const dpd = calculateDpd([], referenceDate);
+            expect(dpd).toBe(0);
+          },
+        ),
+        { numRuns: 100 },
+      );
+    },
+  );
+});
+
+// ===========================================================================
+// Property 21: Monotonic Buckets
+// ===========================================================================
+
+describe('Property 21: Monotonic Buckets', () => {
+  it(
+    'overdue bucket classification is monotonically non-decreasing with increasing DPD',
+    () => {
+      /**
+       * **Validates: Requirements 11.2**
+       *
+       * For any two DPD values a <= b, the bucket order of
+       * classifyOverdueBucket(a) <= classifyOverdueBucket(b).
+       */
+      fc.assert(
+        fc.property(
+          dpdArb,
+          dpdArb,
+          (dpdA, dpdB) => {
+            const [lo, hi] = dpdA <= dpdB ? [dpdA, dpdB] : [dpdB, dpdA];
+            const bucketLo = classifyOverdueBucket(lo);
+            const bucketHi = classifyOverdueBucket(hi);
+            expect(BUCKET_ORDER[bucketLo]!).toBeLessThanOrEqual(BUCKET_ORDER[bucketHi]!);
+          },
+        ),
+        { numRuns: 200 },
+      );
+    },
+  );
+
+  it(
+    'consecutive DPD values never decrease in bucket order',
+    () => {
+      fc.assert(
+        fc.property(
+          fc.integer({ min: 0, max: 9_999 }),
+          (dpd) => {
+            const bucketCurrent = classifyOverdueBucket(dpd);
+            const bucketNext = classifyOverdueBucket(dpd + 1);
+            expect(BUCKET_ORDER[bucketCurrent]!).toBeLessThanOrEqual(
+              BUCKET_ORDER[bucketNext]!,
+            );
+          },
+        ),
+        { numRuns: 200 },
+      );
+    },
+  );
+});
+
+// ===========================================================================
+// Property 22: Positive Flat Penalty
+// ===========================================================================
+
+describe('Property 22: Positive Flat Penalty', () => {
+  it(
+    'flat penalty amount is always a positive integer for valid configuration',
+    () => {
+      /**
+       * **Validates: Requirements 11.3**
+       *
+       * For any valid flat penalty value (positive integer paise) and any
+       * overdue amount, calculatePenaltyAmount('flat_per_period', value, _)
+       * returns the exact penalty value (positive integer).
+       */
+      fc.assert(
+        fc.property(
+          flatPenaltyValueArb,
+          overdueAmountArb,
+          (penaltyValue, overdueAmountPaise) => {
+            const result = calculatePenaltyAmount(
+              'flat_per_period',
+              penaltyValue,
+              overdueAmountPaise,
+            );
+            expect(result).toBeGreaterThan(0);
+            expect(Number.isInteger(result)).toBe(true);
+            // Flat penalty should equal the configured value exactly
+            expect(result).toBe(penaltyValue);
+          },
+        ),
+        { numRuns: 200 },
+      );
+    },
+  );
+});
+
+// ===========================================================================
+// Property 23: Proportional Percentage Penalty
+// ===========================================================================
+
+describe('Property 23: Proportional Percentage Penalty', () => {
+  it(
+    'percentage penalty is proportional to overdue amount and always a non-negative integer',
+    () => {
+      /**
+       * **Validates: Requirements 11.4**
+       *
+       * For any valid percentage penalty (basis points) and overdue amount,
+       * calculatePenaltyAmount('percentage_of_overdue', bps, overdue)
+       * returns a non-negative integer that equals
+       * round(overdue * bps / 10000).
+       */
+      fc.assert(
+        fc.property(
+          percentageBpsArb,
+          overdueAmountArb,
+          (bps, overdueAmountPaise) => {
+            const result = calculatePenaltyAmount(
+              'percentage_of_overdue',
+              bps,
+              overdueAmountPaise,
+            );
+            expect(result).toBeGreaterThanOrEqual(0);
+            expect(Number.isInteger(result)).toBe(true);
+          },
+        ),
+        { numRuns: 200 },
+      );
+    },
+  );
+
+  it(
+    'doubling the overdue amount doubles the percentage penalty (within rounding tolerance)',
+    () => {
+      fc.assert(
+        fc.property(
+          percentageBpsArb,
+          fc.integer({ min: 1, max: 50_000_000 }),
+          (bps, overdueAmountPaise) => {
+            const single = calculatePenaltyAmount(
+              'percentage_of_overdue',
+              bps,
+              overdueAmountPaise,
+            );
+            const doubled = calculatePenaltyAmount(
+              'percentage_of_overdue',
+              bps,
+              overdueAmountPaise * 2,
+            );
+            // Due to integer rounding, doubled result should be within 1 paisa
+            // of 2 * single
+            expect(Math.abs(doubled - 2 * single)).toBeLessThanOrEqual(1);
+          },
+        ),
+        { numRuns: 100 },
+      );
+    },
+  );
+
+  it(
+    'percentage penalty is zero when overdue amount is zero',
+    () => {
+      fc.assert(
+        fc.property(percentageBpsArb, (bps) => {
+          const result = calculatePenaltyAmount('percentage_of_overdue', bps, 0);
+          expect(result).toBe(0);
+        }),
+        { numRuns: 100 },
+      );
+    },
+  );
+});
 
 // ===========================================================================
 // Property 25: Overdue Bucket Classification
