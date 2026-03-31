@@ -33,3 +33,14 @@ apps/api/prisma/migrations/*.sql.bak
 
 # Turbo
 .turbo/
+
+# Playwright
+test-results/
+playwright-report/
+blob-report/
+apps/web/test/test-results/
+/pacts/
+pact-logs/
+
+# BMAD output
+_bmad-output/

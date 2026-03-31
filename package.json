@@ -27,6 +27,9 @@
   },
   "devDependencies": {
     "@as-finance/config": "workspace:*",
+    "@pact-foundation/pact": "^16.3.0",
+    "@playwright/test": "^1.58.2",
+    "@seontechnologies/playwright-utils": "^4.1.0",
     "eslint": "^9.0.0",
     "prettier": "^3.3.0",
     "typescript": "^5.5.0"
