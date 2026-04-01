@@ -4,7 +4,7 @@ export default defineConfig({
   test: {
     globals: true,
     root: '.',
-    include: ['src/**/*.integration.spec.ts'],
+    include: ['src/**/*.integration.spec.ts', 'test/chaos/**/*.spec.ts'],
     exclude: ['node_modules', 'dist'],
     pool: 'forks',
     poolOptions: {

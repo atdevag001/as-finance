@@ -13,6 +13,10 @@
     "test:unit": "vitest run -c vitest.config.ts",
     "test:integration": "vitest run -c vitest.integration.ts",
     "test:e2e": "vitest run -c vitest.e2e.ts",
+    "test:pact:verify": "vitest run test/pact/provider-verification.spec.ts -c vitest.e2e.ts",
+    "test:chaos": "vitest run test/chaos/ -c vitest.integration.ts",
+    "test:load": "k6 run test/load/scenarios/collection-load.js --summary-export=test/load/results.json",
+    "test:load:verify": "npx tsx test/load/verify-collection-load.ts",
     "test:watch": "vitest",
     "db:migrate": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
@@ -50,6 +54,7 @@
   "devDependencies": {
     "@as-finance/config": "workspace:*",
     "@as-finance/testing": "workspace:*",
+    "@pact-foundation/pact": "^16.0.0",
     "@nestjs/cli": "^10.4.0",
     "@nestjs/testing": "^10.4.0",
     "@types/bcryptjs": "^2.4.6",

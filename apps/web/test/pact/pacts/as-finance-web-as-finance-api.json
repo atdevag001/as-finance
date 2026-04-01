@@ -1,0 +1,1492 @@
+{
+  "consumer": {
+    "name": "as-finance-web"
+  },
+  "interactions": [
+    {
+      "description": "a collection posting request with missing fields",
+      "providerStates": [
+        {
+          "name": "an authenticated user exists"
+        }
+      ],
+      "request": {
+        "body": {},
+        "headers": {
+          "Authorization": "Bearer valid-jwt-token",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "header": {
+            "Authorization": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/collections"
+      },
+      "response": {
+        "body": {
+          "message": "Validation failed",
+          "statusCode": 400
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.message": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.statusCode": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            }
+          }
+        },
+        "status": 400
+      }
+    },
+    {
+      "description": "a login request with valid credentials",
+      "providerStates": [
+        {
+          "name": "a user with username \"manager1\" exists"
+        }
+      ],
+      "request": {
+        "body": {
+          "password": "TestPass1",
+          "username": "manager1"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "method": "POST",
+        "path": "/auth/login"
+      },
+      "response": {
+        "body": {
+          "accessToken": "eyJhbGciOiJIUzI1NiJ9.token",
+          "user": {
+            "fullName": "Manager One",
+            "id": "user-uuid",
+            "role": "manager",
+            "username": "manager1"
+          }
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.accessToken": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.user.fullName": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.user.id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.user.role": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.user.username": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a request to approve a loan",
+      "providerStates": [
+        {
+          "name": "a loan in under_review status exists"
+        }
+      ],
+      "request": {
+        "body": {
+          "remarks": "Approved after review"
+        },
+        "headers": {
+          "Authorization": "Bearer valid-jwt-token",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "header": {
+            "Authorization": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/loans/00000000-0000-4000-a000-000000000020/approve"
+      },
+      "response": {
+        "body": {
+          "approved_by": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+          "id": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+          "loan_number": "LN-2024-0001",
+          "status": "approved"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.approved_by": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "00000000-0000-4000-a000-000000000000"
+                }
+              ]
+            },
+            "$.id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "00000000-0000-4000-a000-000000000020"
+                }
+              ]
+            },
+            "$.loan_number": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.status": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a request to create a new customer",
+      "providerStates": [
+        {
+          "name": "an authenticated field officer exists"
+        }
+      ],
+      "request": {
+        "body": {
+          "aadhaarNumber": "234567890123",
+          "addressLine1": "123 Main Street",
+          "city": "Jaipur",
+          "district": "Jaipur",
+          "fatherOrHusbandName": "Suresh Kumar",
+          "fullName": "Ravi Kumar",
+          "gender": "male",
+          "mobile": "9876543210",
+          "pincode": "302001",
+          "state": "Rajasthan"
+        },
+        "headers": {
+          "Authorization": "Bearer valid-jwt-token",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "header": {
+            "Authorization": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/customers"
+      },
+      "response": {
+        "body": {
+          "customer": {
+            "aadhaar_last_four": "0123",
+            "city": "Jaipur",
+            "created_at": "\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})?)?",
+            "district": "Jaipur",
+            "full_name": "Ravi Kumar",
+            "id": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+            "mobile": "9876543210",
+            "pincode": "302001",
+            "state": "Rajasthan",
+            "status": "active"
+          }
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.customer.aadhaar_last_four": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.customer.city": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.customer.created_at": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "2024-01-15T10:30:00Z"
+                }
+              ]
+            },
+            "$.customer.district": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.customer.full_name": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.customer.id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "00000000-0000-4000-a000-000000000000"
+                }
+              ]
+            },
+            "$.customer.mobile": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.customer.pincode": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.customer.state": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.customer.status": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 201
+      }
+    },
+    {
+      "description": "a request to create a new loan",
+      "providerStates": [
+        {
+          "name": "a customer and product version exist"
+        }
+      ],
+      "request": {
+        "body": {
+          "customerId": "customer-uuid-001",
+          "principalPaise": 10000000,
+          "productVersionId": "product-version-uuid-001",
+          "purpose": "Business expansion",
+          "tenureMonths": 12
+        },
+        "headers": {
+          "Authorization": "Bearer valid-jwt-token",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.customerId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.principalPaise": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.productVersionId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.tenureMonths": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Authorization": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/loans"
+      },
+      "response": {
+        "body": {
+          "created_at": "\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})?)?",
+          "created_by": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+          "customer_id": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+          "id": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+          "loan_number": "LN-2024-0001",
+          "principal_paise": 10000000,
+          "product_version_id": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+          "status": "draft",
+          "tenure_months": 12
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.created_at": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "2024-01-15T10:30:00Z"
+                }
+              ]
+            },
+            "$.created_by": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "00000000-0000-4000-a000-000000000000"
+                }
+              ]
+            },
+            "$.customer_id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "00000000-0000-4000-a000-000000000000"
+                }
+              ]
+            },
+            "$.id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "00000000-0000-4000-a000-000000000000"
+                }
+              ]
+            },
+            "$.loan_number": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.principal_paise": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.product_version_id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "00000000-0000-4000-a000-000000000000"
+                }
+              ]
+            },
+            "$.status": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.tenure_months": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            }
+          }
+        },
+        "status": 201
+      }
+    },
+    {
+      "description": "a request to disburse a loan",
+      "providerStates": [
+        {
+          "name": "an approved loan exists ready for disbursement"
+        }
+      ],
+      "request": {
+        "body": {
+          "disbursementDate": "2024-01-15",
+          "idempotencyKey": "disburse-idem-001",
+          "loanId": "00000000-0000-4000-a000-000000000030",
+          "mode": "bank_transfer"
+        },
+        "headers": {
+          "Authorization": "Bearer valid-jwt-token",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.idempotencyKey": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.loanId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Authorization": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/disbursements"
+      },
+      "response": {
+        "body": {
+          "amount_paise": 10000000,
+          "disbursement_date": "\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})?)?",
+          "id": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+          "loan_id": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+          "status": "completed"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.amount_paise": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.disbursement_date": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "2024-01-15"
+                }
+              ]
+            },
+            "$.id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "00000000-0000-4000-a000-000000000000"
+                }
+              ]
+            },
+            "$.loan_id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "00000000-0000-4000-a000-000000000030"
+                }
+              ]
+            },
+            "$.status": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 201
+      }
+    },
+    {
+      "description": "a request to generate a daily-collection report",
+      "providerStates": [
+        {
+          "name": "report data exists for daily-collection"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Authorization": "Bearer valid-jwt-token"
+        },
+        "matchingRules": {
+          "header": {
+            "Authorization": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "method": "GET",
+        "path": "/reports/daily-collection"
+      },
+      "response": {
+        "body": {
+          "data": {
+            "rows": [
+              {
+                "label": "Collection Summary",
+                "value": "100"
+              }
+            ]
+          },
+          "generatedAt": "\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})?)?",
+          "reportType": "daily-collection"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.data": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.data.rows": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.data.rows[*].label": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.data.rows[*].value": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.generatedAt": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "2024-01-15T10:30:00Z"
+                }
+              ]
+            },
+            "$.reportType": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a request to get a non-existent loan",
+      "providerStates": [
+        {
+          "name": "no loan exists with the given ID"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Authorization": "Bearer valid-jwt-token"
+        },
+        "matchingRules": {
+          "header": {
+            "Authorization": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "method": "GET",
+        "path": "/loans/00000000-0000-0000-0000-000000000000"
+      },
+      "response": {
+        "body": {
+          "message": "Loan not found",
+          "statusCode": 404
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.message": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.statusCode": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            }
+          }
+        },
+        "status": 404
+      }
+    },
+    {
+      "description": "a request to get customer by ID",
+      "providerStates": [
+        {
+          "name": "a customer with known ID exists"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Authorization": "Bearer valid-jwt-token"
+        },
+        "matchingRules": {
+          "header": {
+            "Authorization": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "method": "GET",
+        "path": "/customers/00000000-0000-4000-a000-000000000001"
+      },
+      "response": {
+        "body": {
+          "aadhaar_last_four": "0123",
+          "city": "Jaipur",
+          "created_at": "\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})?)?",
+          "full_name": "Ravi Kumar",
+          "gender": "male",
+          "id": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+          "mobile": "9876543210",
+          "status": "active"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.aadhaar_last_four": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.city": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.created_at": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "2024-01-15T10:30:00Z"
+                }
+              ]
+            },
+            "$.full_name": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.gender": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "00000000-0000-4000-a000-000000000001"
+                }
+              ]
+            },
+            "$.mobile": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.status": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a request to get loan detail with schedules",
+      "providerStates": [
+        {
+          "name": "an active loan with schedules exists"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Authorization": "Bearer valid-jwt-token"
+        },
+        "matchingRules": {
+          "header": {
+            "Authorization": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "method": "GET",
+        "path": "/loans/00000000-0000-4000-a000-000000000010"
+      },
+      "response": {
+        "body": {
+          "cached_outstanding_paise": 9000000,
+          "loan_number": "LN-2024-0001",
+          "principal_paise": 10000000,
+          "schedules": [
+            {
+              "due_date": "\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})?)?",
+              "installment_number": 1,
+              "interest_paise": 166700,
+              "principal_paise": 833300,
+              "status": "pending",
+              "total_paise": 1000000
+            }
+          ],
+          "status": "active"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.cached_outstanding_paise": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.loan_number": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.principal_paise": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.schedules": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.schedules[*].due_date": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "2024-02-15"
+                }
+              ]
+            },
+            "$.schedules[*].installment_number": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.schedules[*].interest_paise": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.schedules[*].principal_paise": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.schedules[*].status": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.schedules[*].total_paise": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.status": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a request to reverse a collection",
+      "providerStates": [
+        {
+          "name": "a posted collection exists for reversal"
+        }
+      ],
+      "request": {
+        "body": {
+          "collectionId": "collection-uuid-001",
+          "idempotencyKey": "rev-idem-001",
+          "reason": "Customer requested reversal"
+        },
+        "headers": {
+          "Authorization": "Bearer valid-jwt-token",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.collectionId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.idempotencyKey": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Authorization": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/reversals"
+      },
+      "response": {
+        "body": {
+          "data": {
+            "amountPaise": 10000,
+            "collectionId": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+            "reason": "Customer requested reversal",
+            "reversalId": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+            "status": "reversed"
+          }
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.data.amountPaise": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.data.collectionId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "00000000-0000-4000-a000-000000000000"
+                }
+              ]
+            },
+            "$.data.reason": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.data.reversalId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "00000000-0000-4000-a000-000000000000"
+                }
+              ]
+            },
+            "$.data.status": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 201
+      }
+    },
+    {
+      "description": "a request to update customer notes",
+      "providerStates": [
+        {
+          "name": "a customer with known ID exists"
+        }
+      ],
+      "request": {
+        "body": {
+          "notes": "Updated via pact test"
+        },
+        "headers": {
+          "Authorization": "Bearer valid-jwt-token",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "header": {
+            "Authorization": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "method": "PATCH",
+        "path": "/customers/00000000-0000-4000-a000-000000000001"
+      },
+      "response": {
+        "body": {
+          "full_name": "Ravi Kumar",
+          "id": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+          "status": "active"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.full_name": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "00000000-0000-4000-a000-000000000001"
+                }
+              ]
+            },
+            "$.status": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a token refresh request with valid refresh token",
+      "providerStates": [
+        {
+          "name": "a valid refresh token exists"
+        }
+      ],
+      "request": {
+        "body": {
+          "refreshToken": "valid-refresh-token"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "method": "POST",
+        "path": "/auth/refresh"
+      },
+      "response": {
+        "body": {
+          "accessToken": "eyJhbGciOiJIUzI1NiJ9.new-token"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.accessToken": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a valid collection posting request",
+      "providerStates": [
+        {
+          "name": "an active loan exists for collection"
+        }
+      ],
+      "request": {
+        "body": {
+          "amountPaise": 10000,
+          "idempotencyKey": "idem-key-001",
+          "loanId": "loan-uuid-001",
+          "paymentDate": "2024-01-15",
+          "paymentMode": "cash"
+        },
+        "headers": {
+          "Authorization": "Bearer valid-jwt-token",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.amountPaise": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.idempotencyKey": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.loanId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Authorization": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/collections"
+      },
+      "response": {
+        "body": {
+          "data": {
+            "allocations": {
+              "interestPaise": 3000,
+              "penaltyPaise": 0,
+              "principalPaise": 7000
+            },
+            "amountPaise": 10000,
+            "collectionId": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+            "loanNumber": "LN-2024-0001",
+            "outstandingAfterPaise": 90000
+          }
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.data.allocations.interestPaise": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.data.allocations.penaltyPaise": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.data.allocations.principalPaise": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.data.amountPaise": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.data.collectionId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "00000000-0000-4000-a000-000000000000"
+                }
+              ]
+            },
+            "$.data.loanNumber": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.data.outstandingAfterPaise": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            }
+          }
+        },
+        "status": 201
+      }
+    },
+    {
+      "description": "an unauthenticated collection posting request",
+      "providerStates": [
+        {
+          "name": "no authentication token provided"
+        }
+      ],
+      "request": {
+        "body": {
+          "amountPaise": 10000,
+          "idempotencyKey": "idem-key-unauth",
+          "loanId": "loan-uuid-001",
+          "paymentDate": "2024-01-15",
+          "paymentMode": "cash"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "method": "POST",
+        "path": "/collections"
+      },
+      "response": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.message": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.statusCode": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            }
+          }
+        },
+        "status": 401
+      }
+    }
+  ],
+  "metadata": {
+    "pact-js": {
+      "version": "16.3.0"
+    },
+    "pactRust": {
+      "ffi": "0.5.3",
+      "models": "1.3.9"
+    },
+    "pactSpecification": {
+      "version": "3.0.0"
+    }
+  },
+  "provider": {
+    "name": "as-finance-api"
+  }
+}

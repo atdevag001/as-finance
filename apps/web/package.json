@@ -15,7 +15,8 @@
     "test:e2e:headed": "playwright test --config test/playwright.config.ts --headed",
     "test:e2e:ui": "playwright test --config test/playwright.config.ts --ui",
     "test:e2e:debug": "playwright test --config test/playwright.config.ts --debug",
-    "test:e2e:report": "playwright show-report test/test-results/html"
+    "test:e2e:report": "playwright show-report test/test-results/html",
+    "test:pact": "vitest run --config test/pact/vitest.pact.ts"
   },
   "dependencies": {
     "@as-finance/shared": "workspace:*",
@@ -40,6 +41,7 @@
   },
   "devDependencies": {
     "@as-finance/config": "workspace:*",
+    "@pact-foundation/pact": "^13.2.0",
     "@types/node": "^20.14.0",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
