@@ -1,34 +1,43 @@
 'use client';
 
 import Link from 'next/link';
-import { FileText } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { FileText, TrendingUp, Wallet, AlertCircle, CalendarCheck, PieChart } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { AccessDenied } from '@/components/shared';
+import { useAuth } from '@/providers/auth-provider';
+import { hasPermission } from '@/lib/permissions';
 
 const REPORT_TYPES = [
-  { type: 'collection-summary', title: 'Collection Summary', description: 'Daily/weekly/monthly collection totals by officer' },
-  { type: 'outstanding', title: 'Outstanding Report', description: 'Loan-wise outstanding balances and overdue status' },
-  { type: 'disbursement', title: 'Disbursement Report', description: 'Disbursements by date range and product' },
-  { type: 'overdue', title: 'Overdue Report', description: 'Overdue loans by DPD bucket with aging analysis' },
-  { type: 'demand', title: 'Demand Report', description: 'Expected collections for upcoming period' },
-  { type: 'portfolio', title: 'Portfolio Report', description: 'Portfolio quality, PAR analysis, and risk distribution' },
-];
+  { type: 'collection-summary', label: 'Collection Summary', description: 'Daily and periodic collection totals', icon: Wallet },
+  { type: 'outstanding', label: 'Outstanding', description: 'Current outstanding balances across loans', icon: TrendingUp },
+  { type: 'disbursement', label: 'Disbursement', description: 'Disbursement activity and amounts', icon: FileText },
+  { type: 'overdue', label: 'Overdue', description: 'Overdue loans and aging analysis', icon: AlertCircle },
+  { type: 'demand', label: 'Demand', description: 'Upcoming demand and due amounts', icon: CalendarCheck },
+  { type: 'portfolio', label: 'Portfolio', description: 'Portfolio composition and health', icon: PieChart },
+] as const;
 
 export default function ReportsPage() {
+  const { user } = useAuth();
+  const role = user?.role ?? '';
+
+  if (!hasPermission(role, 'report.read')) {
+    return <AccessDenied />;
+  }
+
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Reports</h1>
-
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {REPORT_TYPES.map((r) => (
-          <Link key={r.type} href={`/reports/${r.type}`}>
-            <Card className="h-full transition-colors hover:bg-muted/30">
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  <FileText className="h-5 w-5 text-muted-foreground" />
-                  <CardTitle className="text-base">{r.title}</CardTitle>
-                </div>
-                <CardDescription>{r.description}</CardDescription>
+        {REPORT_TYPES.map(({ type, label, description, icon: Icon }) => (
+          <Link key={type} href={`/reports/${type}`}>
+            <Card className="transition-colors hover:bg-muted/50 cursor-pointer h-full">
+              <CardHeader className="flex flex-row items-center gap-3 pb-2">
+                <Icon className="h-5 w-5 text-muted-foreground" />
+                <CardTitle className="text-base">{label}</CardTitle>
               </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">{description}</p>
+              </CardContent>
             </Card>
           </Link>
         ))}

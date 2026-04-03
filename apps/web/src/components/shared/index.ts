@@ -4,3 +4,8 @@ export { ConfirmDialog } from './confirm-dialog';
 export { LoadingSpinner } from './loading-spinner';
 export { ErrorMessage } from './error-message';
 export { PaginationControls } from './pagination-controls';
+export { PermissionGate } from './permission-gate';
+export { AccessDenied } from './access-denied';
+export { DateDisplay } from './date-display';
+export { ToastContainer } from './toast';
+export { ReversalDialog, type ReversalCollection } from './reversal-dialog';

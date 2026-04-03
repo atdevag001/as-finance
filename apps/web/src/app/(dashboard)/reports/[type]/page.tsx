@@ -1,97 +1,133 @@
 'use client';
 
-import { use, useState } from 'react';
+import { useState } from 'react';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Download } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
-import { apiClient } from '@/lib/api-client';
-import { MoneyDisplay, LoadingSpinner, ErrorMessage } from '@/components/shared';
+import { MoneyDisplay, LoadingSpinner, ErrorMessage, AccessDenied, PermissionGate } from '@/components/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useAuth } from '@/providers/auth-provider';
+import { hasPermission } from '@/lib/permissions';
+import { useReport } from '@/hooks/useReports';
+import { apiClient } from '@/lib/api-client';
+import { todayIST } from '@/lib/date-utils';
 
-interface ReportData {
-  title: string;
-  generatedAt: string;
-  columns: string[];
-  rows: Record<string, unknown>[];
-  summaryPaise?: number;
+const REPORT_LABELS: Record<string, string> = {
+  'collection-summary': 'Collection Summary',
+  outstanding: 'Outstanding',
+  disbursement: 'Disbursement',
+  overdue: 'Overdue',
+  demand: 'Demand',
+  portfolio: 'Portfolio',
+};
+
+const MONEY_COLUMN_PATTERNS = /paise|amount|balance|total|outstanding|principal|interest|penalty|inflow|outflow/i;
+
+export default function ReportDetailPage() {
+  const { user } = useAuth();
+  const role = user?.role ?? '';
+
+  if (!hasPermission(role, 'report.read')) {
+    return <AccessDenied />;
+  }
+
+  return <ReportDetailContent />;
 }
 
-export default function ReportViewerPage({ params }: { params: Promise<{ type: string }> }) {
-  const { type } = use(params);
-  const [startDate, setStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10));
-  const [endDate, setEndDate] = useState(new Date().toISOString().slice(0, 10));
+function ReportDetailContent() {
+  const params = useParams();
+  const type = params['type'] as string;
+  const today = todayIST();
+  const [startDate, setStartDate] = useState(today);
+  const [endDate, setEndDate] = useState(today);
+  const [exporting, setExporting] = useState(false);
 
-  const { data, isLoading, error } = useQuery<ReportData>({
-    queryKey: ['reports', type, startDate, endDate],
-    queryFn: () => apiClient.get(`/reports/${type}?startDate=${startDate}&endDate=${endDate}`),
-  });
+  const { data, isLoading, error } = useReport(type, { startDate, endDate });
 
-  const title = type.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  const label = REPORT_LABELS[type] ?? type.replace(/-/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
+
+  async function handleExport(format: 'pdf' | 'excel') {
+    setExporting(true);
+    try {
+      const qs = new URLSearchParams({ startDate, endDate, format }).toString();
+      const blob = await apiClient.get<Blob>(`/reports/${type}/export?${qs}`);
+      const ext = format === 'pdf' ? 'pdf' : 'xlsx';
+      const url = URL.createObjectURL(blob as unknown as Blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${type}-report.${ext}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // Export errors are non-critical; user can retry
+    } finally {
+      setExporting(false);
+    }
+  }
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" asChild><Link href="/reports"><ArrowLeft className="h-4 w-4" /></Link></Button>
-          <h1 className="text-2xl font-bold">{data?.title ?? title}</h1>
-        </div>
-        {data && (
-          <Button variant="outline" size="sm" onClick={() => window.print()}>
-            <Download className="mr-2 h-4 w-4" />Export
-          </Button>
-        )}
+      <div className="flex items-center gap-3">
+        <Button asChild variant="ghost" size="sm"><Link href="/reports"><ArrowLeft className="h-4 w-4" /></Link></Button>
+        <h1 className="text-2xl font-bold">{label} Report</h1>
       </div>
 
-      <div className="flex gap-2 items-end">
+      <div className="flex flex-wrap gap-2 items-end">
         <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">From</label>
+          <label className="text-xs text-muted-foreground">Start Date</label>
           <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-40" />
         </div>
         <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">To</label>
+          <label className="text-xs text-muted-foreground">End Date</label>
           <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-40" />
         </div>
+        <PermissionGate permission="report.export">
+          <Button variant="outline" size="sm" onClick={() => handleExport('pdf')} disabled={exporting}>
+            <Download className="h-4 w-4 mr-1" />{exporting ? 'Exporting…' : 'PDF'}
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => handleExport('excel')} disabled={exporting}>
+            <Download className="h-4 w-4 mr-1" />{exporting ? 'Exporting…' : 'Excel'}
+          </Button>
+        </PermissionGate>
       </div>
 
       {isLoading && <div className="flex justify-center py-8"><LoadingSpinner size="lg" /></div>}
       {error && <ErrorMessage message={(error as Error).message} />}
 
-      {data && (
-        <>
-          {data.summaryPaise != null && (
-            <div className="rounded-lg border bg-muted/30 p-4">
-              <div className="flex justify-between font-semibold">
-                <span>Total</span>
-                <MoneyDisplay paise={data.summaryPaise} />
-              </div>
-            </div>
-          )}
-
-          <div className="overflow-x-auto rounded-lg border">
-            <table className="w-full text-sm">
-              <thead className="border-b bg-muted/50">
-                <tr>
-                  {data.columns.map((col) => (
-                    <th key={col} className="px-4 py-3 text-left font-medium">{col}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {data.rows.map((row, i) => (
-                  <tr key={i} className="border-b last:border-0">
-                    {data.columns.map((col) => (
-                      <td key={col} className="px-4 py-3">{String(row[col] ?? '—')}</td>
-                    ))}
-                  </tr>
+      {data && data.rows.length > 0 && (
+        <div className="overflow-x-auto rounded-lg border">
+          <table className="w-full text-sm">
+            <thead className="border-b bg-muted/50">
+              <tr>
+                {data.columns.map((col) => (
+                  <th key={col} className="px-4 py-3 text-left font-medium whitespace-nowrap">
+                    {col.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())}
+                  </th>
                 ))}
-                {data.rows.length === 0 && (
-                  <tr><td colSpan={data.columns.length} className="px-4 py-8 text-center text-muted-foreground">No data for this period.</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </>
+              </tr>
+            </thead>
+            <tbody>
+              {data.rows.map((row, idx) => (
+                <tr key={idx} className="border-b last:border-0">
+                  {data.columns.map((col) => {
+                    const val = row[col];
+                    const isMoney = MONEY_COLUMN_PATTERNS.test(col) && typeof val === 'number';
+                    return (
+                      <td key={col} className={`px-4 py-3 ${isMoney ? 'text-right' : ''}`}>
+                        {isMoney ? <MoneyDisplay paise={val as number} /> : String(val ?? '—')}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {data && data.rows.length === 0 && (
+        <p className="text-center text-muted-foreground py-8">No data for this period.</p>
       )}
     </div>
   );

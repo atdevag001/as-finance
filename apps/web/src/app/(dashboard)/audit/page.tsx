@@ -1,45 +1,46 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { apiClient } from '@/lib/api-client';
-import { LoadingSpinner, ErrorMessage, PaginationControls } from '@/components/shared';
+import { LoadingSpinner, ErrorMessage, PaginationControls, AccessDenied, DateDisplay } from '@/components/shared';
 import { Input } from '@/components/ui/input';
-
-interface AuditLog {
-  id: string;
-  action_type: string;
-  actor_id: string;
-  actor_role: string;
-  target_entity: string;
-  target_id: string;
-  created_at: string;
-  remarks?: string;
-}
-
-interface PaginatedResult { data: AuditLog[]; total: number; }
+import { useAuth } from '@/providers/auth-provider';
+import { hasPermission } from '@/lib/permissions';
+import { useAuditLogs } from '@/hooks/useAuditLogs';
 
 export default function AuditPage() {
+  const { user } = useAuth();
+  const role = user?.role ?? '';
+
+  if (!hasPermission(role, 'audit.read')) {
+    return <AccessDenied />;
+  }
+
+  return <AuditContent />;
+}
+
+function AuditContent() {
   const [page, setPage] = useState(1);
   const [entity, setEntity] = useState('');
+  const [action, setAction] = useState('');
   const [startDate, setStartDate] = useState('');
 
-  const query = new URLSearchParams({ skip: String((page - 1) * 20), take: '20' });
-  if (entity) query.set('targetEntity', entity);
-  if (startDate) query.set('startDate', startDate);
+  const { data, isLoading, error } = useAuditLogs({ page, entity: entity || undefined, action: action || undefined, startDate: startDate || undefined });
 
-  const { data, isLoading, error } = useQuery<PaginatedResult>({
-    queryKey: ['audit-logs', page, entity, startDate],
-    queryFn: () => apiClient.get(`/audit-logs?${query.toString()}`),
-  });
+  function handleFilterChange(setter: (v: string) => void) {
+    return (e: React.ChangeEvent<HTMLInputElement>) => {
+      setter(e.target.value);
+      setPage(1);
+    };
+  }
 
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Audit Log</h1>
 
       <div className="flex flex-wrap gap-2">
-        <Input placeholder="Filter by entity…" value={entity} onChange={(e) => { setEntity(e.target.value); setPage(1); }} className="w-48" />
-        <Input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setPage(1); }} className="w-40" />
+        <Input placeholder="Filter by entity…" value={entity} onChange={handleFilterChange(setEntity)} className="w-48" />
+        <Input placeholder="Filter by action…" value={action} onChange={handleFilterChange(setAction)} className="w-48" />
+        <Input type="date" value={startDate} onChange={handleFilterChange(setStartDate)} className="w-40" />
       </div>
 
       {isLoading && <div className="flex justify-center py-8"><LoadingSpinner size="lg" /></div>}
@@ -61,7 +62,9 @@ export default function AuditPage() {
               <tbody>
                 {data.data.map((log) => (
                   <tr key={log.id} className="border-b last:border-0">
-                    <td className="px-4 py-3 whitespace-nowrap">{new Date(log.created_at).toLocaleString('en-IN')}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <DateDisplay date={log.created_at} showTime />
+                    </td>
                     <td className="px-4 py-3 capitalize">{log.action_type.replace(/_/g, ' ')}</td>
                     <td className="px-4 py-3 hidden sm:table-cell">
                       <span>{log.actor_id.slice(0, 8)}</span>

@@ -3,33 +3,50 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
-import { apiClient } from '@/lib/api-client';
-import { MoneyDisplay, LoadingSpinner, ErrorMessage } from '@/components/shared';
+import { MoneyDisplay, LoadingSpinner, ErrorMessage, AccessDenied } from '@/components/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-
-interface TrialBalanceRow { accountCode: string; accountName: string; debitBalancePaise: number; creditBalancePaise: number; }
-interface TrialBalance { rows: TrialBalanceRow[]; totalDebitPaise: number; totalCreditPaise: number; }
+import { useAuth } from '@/providers/auth-provider';
+import { hasPermission } from '@/lib/permissions';
+import { useTrialBalance } from '@/hooks/useAccounting';
+import { todayIST } from '@/lib/date-utils';
 
 export default function TrialBalancePage() {
-  const [asOfDate, setAsOfDate] = useState(new Date().toISOString().slice(0, 10));
-  const { data, isLoading, error } = useQuery<TrialBalance>({
-    queryKey: ['trial-balance', asOfDate],
-    queryFn: () => apiClient.get(`/accounting/trial-balance?asOfDate=${asOfDate}`),
-  });
+  const { user } = useAuth();
+  const role = user?.role ?? '';
+
+  if (!hasPermission(role, 'accounting.read')) {
+    return <AccessDenied />;
+  }
+
+  return <TrialBalanceContent />;
+}
+
+function TrialBalanceContent() {
+  const today = todayIST();
+  const [startDate, setStartDate] = useState(today);
+  const [endDate, setEndDate] = useState(today);
+
+  const { data, isLoading, error } = useTrialBalance({ startDate, endDate });
+
+  const totalDebit = data?.reduce((sum, r) => sum + r.debitPaise, 0) ?? 0;
+  const totalCredit = data?.reduce((sum, r) => sum + r.creditPaise, 0) ?? 0;
 
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" asChild><Link href="/accounting"><ArrowLeft className="h-4 w-4" /></Link></Button>
+        <Button asChild variant="ghost" size="sm"><Link href="/accounting"><ArrowLeft className="h-4 w-4" /></Link></Button>
         <h1 className="text-2xl font-bold">Trial Balance</h1>
       </div>
 
-      <div className="flex items-end gap-2">
+      <div className="flex gap-2 items-end">
         <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">As of Date</label>
-          <Input type="date" value={asOfDate} onChange={(e) => setAsOfDate(e.target.value)} className="w-40" />
+          <label className="text-xs text-muted-foreground">From</label>
+          <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-40" />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">To</label>
+          <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-40" />
         </div>
       </div>
 
@@ -41,29 +58,32 @@ export default function TrialBalancePage() {
           <table className="w-full text-sm">
             <thead className="border-b bg-muted/50">
               <tr>
-                <th className="px-4 py-3 text-left font-medium">Code</th>
                 <th className="px-4 py-3 text-left font-medium">Account</th>
                 <th className="px-4 py-3 text-right font-medium">Debit</th>
                 <th className="px-4 py-3 text-right font-medium">Credit</th>
               </tr>
             </thead>
             <tbody>
-              {data.rows.map((r) => (
-                <tr key={r.accountCode} className="border-b last:border-0">
-                  <td className="px-4 py-3 font-mono">{r.accountCode}</td>
-                  <td className="px-4 py-3">{r.accountName}</td>
-                  <td className="px-4 py-3 text-right">{r.debitBalancePaise > 0 ? <MoneyDisplay paise={r.debitBalancePaise} /> : ''}</td>
-                  <td className="px-4 py-3 text-right">{r.creditBalancePaise > 0 ? <MoneyDisplay paise={r.creditBalancePaise} /> : ''}</td>
+              {data.map((row) => (
+                <tr key={row.accountCode} className="border-b last:border-0">
+                  <td className="px-4 py-3">{row.accountName}</td>
+                  <td className="px-4 py-3 text-right"><MoneyDisplay paise={row.debitPaise} /></td>
+                  <td className="px-4 py-3 text-right"><MoneyDisplay paise={row.creditPaise} /></td>
                 </tr>
               ))}
+              {data.length === 0 && (
+                <tr><td colSpan={3} className="px-4 py-8 text-center text-muted-foreground">No data for this period.</td></tr>
+              )}
             </tbody>
-            <tfoot className="border-t bg-muted/30 font-semibold">
-              <tr>
-                <td colSpan={2} className="px-4 py-3">Total</td>
-                <td className="px-4 py-3 text-right"><MoneyDisplay paise={data.totalDebitPaise} /></td>
-                <td className="px-4 py-3 text-right"><MoneyDisplay paise={data.totalCreditPaise} /></td>
-              </tr>
-            </tfoot>
+            {data.length > 0 && (
+              <tfoot className="border-t bg-muted/50 font-semibold">
+                <tr>
+                  <td className="px-4 py-3">Total</td>
+                  <td className="px-4 py-3 text-right"><MoneyDisplay paise={totalDebit} /></td>
+                  <td className="px-4 py-3 text-right"><MoneyDisplay paise={totalCredit} /></td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       )}

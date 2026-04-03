@@ -2,35 +2,34 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
-import { apiClient } from '@/lib/api-client';
-import { MoneyDisplay, LoadingSpinner, ErrorMessage } from '@/components/shared';
+import { MoneyDisplay, LoadingSpinner, ErrorMessage, AccessDenied } from '@/components/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-
-interface Account { id: string; code: string; name: string; category: string; }
-interface JournalEntry {
-  id: string; date: string; description: string; sourceType: string;
-  lines: { accountName: string; debitPaise: number; creditPaise: number }[];
-}
+import { useAuth } from '@/providers/auth-provider';
+import { hasPermission } from '@/lib/permissions';
+import { useChartOfAccounts, useDaybook } from '@/hooks/useAccounting';
+import { todayIST } from '@/lib/date-utils';
 
 export default function AccountingPage() {
+  const { user } = useAuth();
+  const role = user?.role ?? '';
+
+  if (!hasPermission(role, 'accounting.read')) {
+    return <AccessDenied />;
+  }
+
+  return <AccountingContent />;
+}
+
+function AccountingContent() {
   const [tab, setTab] = useState<'coa' | 'daybook'>('coa');
-  const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
-  const [endDate, setEndDate] = useState(new Date().toISOString().slice(0, 10));
+  const today = todayIST();
+  const [startDate, setStartDate] = useState(today);
+  const [endDate, setEndDate] = useState(today);
 
-  const coa = useQuery<Account[]>({
-    queryKey: ['chart-of-accounts'],
-    queryFn: () => apiClient.get('/accounting/chart-of-accounts'),
-    enabled: tab === 'coa',
-  });
-
-  const daybook = useQuery<JournalEntry[]>({
-    queryKey: ['daybook', startDate, endDate],
-    queryFn: () => apiClient.get(`/accounting/daybook?startDate=${startDate}&endDate=${endDate}`),
-    enabled: tab === 'daybook',
-  });
+  const coa = useChartOfAccounts();
+  const daybook = useDaybook({ startDate, endDate });
 
   return (
     <div className="space-y-4">
@@ -38,7 +37,7 @@ export default function AccountingPage() {
         <h1 className="text-2xl font-bold">Accounting</h1>
         <div className="flex gap-2">
           <Button asChild variant="outline" size="sm"><Link href="/accounting/trial-balance">Trial Balance</Link></Button>
-          <Button asChild variant="outline" size="sm"><Link href="/accounting/profit-loss">P&L</Link></Button>
+          <Button asChild variant="outline" size="sm"><Link href="/accounting/profit-loss">P&amp;L</Link></Button>
           <Button asChild variant="outline" size="sm"><Link href="/accounting/balance-sheet">Balance Sheet</Link></Button>
         </div>
       </div>
@@ -70,6 +69,9 @@ export default function AccountingPage() {
                       <td className="px-4 py-3 capitalize">{a.category.replace(/_/g, ' ')}</td>
                     </tr>
                   ))}
+                  {coa.data.length === 0 && (
+                    <tr><td colSpan={3} className="px-4 py-8 text-center text-muted-foreground">No accounts found.</td></tr>
+                  )}
                 </tbody>
               </table>
             </div>

@@ -2,30 +2,31 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Plus } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
-import { apiClient } from '@/lib/api-client';
-import { MoneyDisplay, LoadingSpinner, ErrorMessage } from '@/components/shared';
+import { AlertTriangle } from 'lucide-react';
+import { MoneyDisplay, LoadingSpinner, ErrorMessage, AccessDenied } from '@/components/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-
-interface CashbookSummary {
-  date: string;
-  openingBalancePaise: string;
-  cashInflowsPaise: string;
-  cashOutflowsPaise: string;
-  closingBalancePaise: string;
-  hasDiscrepancy: boolean;
-  transactionCount: number;
-}
+import { useAuth } from '@/providers/auth-provider';
+import { hasPermission } from '@/lib/permissions';
+import { useDailySummary } from '@/hooks/useCashbook';
+import { todayIST } from '@/lib/date-utils';
 
 export default function CashbookPage() {
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const { data, isLoading, error } = useQuery<CashbookSummary>({
-    queryKey: ['cashbook', date],
-    queryFn: () => apiClient.get(`/cashbook/daily-summary?date=${date}`),
-  });
+  const { user } = useAuth();
+  const role = user?.role ?? '';
+
+  if (!hasPermission(role, 'accounting.manage_cashbook')) {
+    return <AccessDenied />;
+  }
+
+  return <CashbookContent />;
+}
+
+function CashbookContent() {
+  const [date, setDate] = useState(todayIST);
+
+  const { data, isLoading, error } = useDailySummary(date);
 
   return (
     <div className="space-y-4">
@@ -37,25 +38,32 @@ export default function CashbookPage() {
         </div>
       </div>
 
-      <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-40" />
+      <div className="space-y-1">
+        <label className="text-xs text-muted-foreground">Date</label>
+        <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-40" />
+      </div>
 
       {isLoading && <div className="flex justify-center py-8"><LoadingSpinner size="lg" /></div>}
       {error && <ErrorMessage message={(error as Error).message} />}
 
       {data && (
         <>
+          {data.hasDiscrepancy && (
+            <div role="alert" className="flex items-center gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive font-medium">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <span>Discrepancy detected — closing balance does not match expected value.</span>
+            </div>
+          )}
+
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <SummaryCard title="Opening" paise={Number(data.openingBalancePaise)} />
-            <SummaryCard title="Inflows" paise={Number(data.cashInflowsPaise)} />
-            <SummaryCard title="Outflows" paise={Number(data.cashOutflowsPaise)} />
-            <SummaryCard title="Closing" paise={Number(data.closingBalancePaise)} />
+            <SummaryCard title="Opening Balance" paise={Number(data.openingBalancePaise)} />
+            <SummaryCard title="Cash Inflows" paise={Number(data.cashInflowsPaise)} />
+            <SummaryCard title="Cash Outflows" paise={Number(data.cashOutflowsPaise)} />
+            <SummaryCard title="Closing Balance" paise={Number(data.closingBalancePaise)} />
           </div>
 
           <div className="rounded-lg border p-4 text-sm text-muted-foreground">
             {data.transactionCount} transaction(s) on {data.date}
-            {data.hasDiscrepancy && (
-              <span className="ml-2 text-destructive font-medium">⚠ Discrepancy detected</span>
-            )}
           </div>
         </>
       )}

@@ -123,19 +123,36 @@ export function generateDueDates(
  * Shift due dates that fall on holidays to the next business day.
  * A "business day" is any day NOT in the holiday set.
  * Comparison is date-only (year-month-day), ignoring time.
+ *
+ * After holiday adjustment, ensures dates remain strictly monotonically
+ * increasing. If two dates collide (e.g., consecutive daily dates both
+ * shifted to the same day), the later one is pushed forward until unique.
  */
 export function adjustForHolidays(dueDates: Date[], holidays: Date[]): Date[] {
   // Build a Set of holiday date strings for O(1) lookup
   const holidaySet = new Set(holidays.map((h) => toDateKey(h)));
 
-  return dueDates.map((d) => {
-    const adjusted = new Date(d);
+  const adjusted = dueDates.map((d) => {
+    const a = new Date(d);
     // Shift forward until the date is not a holiday
-    while (holidaySet.has(toDateKey(adjusted))) {
-      adjusted.setDate(adjusted.getDate() + 1);
+    while (holidaySet.has(toDateKey(a))) {
+      a.setDate(a.getDate() + 1);
     }
-    return adjusted;
+    return a;
   });
+
+  // Ensure strict monotonicity: if adjusted[i] <= adjusted[i-1], push forward
+  for (let i = 1; i < adjusted.length; i++) {
+    while (adjusted[i]!.getTime() <= adjusted[i - 1]!.getTime()) {
+      adjusted[i]!.setDate(adjusted[i]!.getDate() + 1);
+      // Also skip holidays on the new date
+      while (holidaySet.has(toDateKey(adjusted[i]!))) {
+        adjusted[i]!.setDate(adjusted[i]!.getDate() + 1);
+      }
+    }
+  }
+
+  return adjusted;
 }
 
 /** Format a Date as "YYYY-MM-DD" for date-only comparison. */
@@ -328,7 +345,19 @@ export function calculateReducingBalanceEMI(
       const interestPaise = normalizeZero(interestDec.toNumber());
 
       // principal = EMI - interest
-      const principalPaiseCurrent = normalizeZero(emiRounded - interestPaise);
+      // Clamp: ensure cumulative principal never exceeds total principal.
+      // Without this clamp, ROUND_HALF_UP on interest can cause the per-installment
+      // principal to slightly overshoot, and over many installments (e.g., daily
+      // frequency with 1260 installments) the cumulative error makes the last
+      // installment's principal negative.
+      let principalPaiseCurrent = normalizeZero(emiRounded - interestPaise);
+      const remainingPrincipal = principalPaise - cumulativePrincipal;
+      if (principalPaiseCurrent > remainingPrincipal) {
+        principalPaiseCurrent = remainingPrincipal;
+      }
+      if (principalPaiseCurrent < 0) {
+        principalPaiseCurrent = 0;
+      }
 
       cumulativePrincipal += principalPaiseCurrent;
       totalInterest = totalInterest.plus(interestPaise);

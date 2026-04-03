@@ -3,29 +3,41 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
-import { apiClient } from '@/lib/api-client';
-import { MoneyDisplay, LoadingSpinner, ErrorMessage } from '@/components/shared';
+import { MoneyDisplay, LoadingSpinner, ErrorMessage, AccessDenied } from '@/components/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-
-interface LineItem { accountName: string; amountPaise: number; }
-interface ProfitAndLoss { income: LineItem[]; expenses: LineItem[]; totalIncomePaise: number; totalExpensesPaise: number; netProfitPaise: number; }
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useAuth } from '@/providers/auth-provider';
+import { hasPermission } from '@/lib/permissions';
+import { useProfitLoss } from '@/hooks/useAccounting';
+import { todayIST } from '@/lib/date-utils';
 
 export default function ProfitLossPage() {
-  const [startDate, setStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10));
-  const [endDate, setEndDate] = useState(new Date().toISOString().slice(0, 10));
+  const { user } = useAuth();
+  const role = user?.role ?? '';
 
-  const { data, isLoading, error } = useQuery<ProfitAndLoss>({
-    queryKey: ['profit-loss', startDate, endDate],
-    queryFn: () => apiClient.get(`/accounting/profit-loss?startDate=${startDate}&endDate=${endDate}`),
-  });
+  if (!hasPermission(role, 'accounting.read')) {
+    return <AccessDenied />;
+  }
+
+  return <ProfitLossContent />;
+}
+
+function ProfitLossContent() {
+  const today = todayIST();
+  const [startDate, setStartDate] = useState(today);
+  const [endDate, setEndDate] = useState(today);
+
+  const { data, isLoading, error } = useProfitLoss({ startDate, endDate });
+
+  const totalIncome = data?.income.reduce((sum, i) => sum + i.totalPaise, 0) ?? 0;
+  const totalExpenses = data?.expenses.reduce((sum, e) => sum + e.totalPaise, 0) ?? 0;
 
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" asChild><Link href="/accounting"><ArrowLeft className="h-4 w-4" /></Link></Button>
-        <h1 className="text-2xl font-bold">Profit & Loss</h1>
+        <Button asChild variant="ghost" size="sm"><Link href="/accounting"><ArrowLeft className="h-4 w-4" /></Link></Button>
+        <h1 className="text-2xl font-bold">Profit &amp; Loss</h1>
       </div>
 
       <div className="flex gap-2 items-end">
@@ -44,44 +56,48 @@ export default function ProfitLossPage() {
 
       {data && (
         <div className="grid gap-4 md:grid-cols-2">
-          <div className="rounded-lg border">
-            <div className="border-b bg-muted/50 px-4 py-3 font-medium">Income</div>
-            <div className="divide-y">
+          <Card>
+            <CardHeader><CardTitle className="text-green-700">Income</CardTitle></CardHeader>
+            <CardContent className="space-y-2">
               {data.income.map((item) => (
-                <div key={item.accountName} className="flex justify-between px-4 py-2 text-sm">
-                  <span>{item.accountName}</span>
-                  <MoneyDisplay paise={item.amountPaise} />
+                <div key={item.category} className="flex justify-between text-sm">
+                  <span className="capitalize">{item.category.replace(/_/g, ' ')}</span>
+                  <MoneyDisplay paise={item.totalPaise} />
                 </div>
               ))}
-              <div className="flex justify-between px-4 py-3 font-semibold">
+              {data.income.length === 0 && <p className="text-sm text-muted-foreground">No income entries.</p>}
+              <div className="border-t pt-2 flex justify-between font-semibold">
                 <span>Total Income</span>
-                <MoneyDisplay paise={data.totalIncomePaise} />
+                <MoneyDisplay paise={totalIncome} />
               </div>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
 
-          <div className="rounded-lg border">
-            <div className="border-b bg-muted/50 px-4 py-3 font-medium">Expenses</div>
-            <div className="divide-y">
+          <Card>
+            <CardHeader><CardTitle className="text-red-700">Expenses</CardTitle></CardHeader>
+            <CardContent className="space-y-2">
               {data.expenses.map((item) => (
-                <div key={item.accountName} className="flex justify-between px-4 py-2 text-sm">
-                  <span>{item.accountName}</span>
-                  <MoneyDisplay paise={item.amountPaise} />
+                <div key={item.category} className="flex justify-between text-sm">
+                  <span className="capitalize">{item.category.replace(/_/g, ' ')}</span>
+                  <MoneyDisplay paise={item.totalPaise} />
                 </div>
               ))}
-              <div className="flex justify-between px-4 py-3 font-semibold">
+              {data.expenses.length === 0 && <p className="text-sm text-muted-foreground">No expense entries.</p>}
+              <div className="border-t pt-2 flex justify-between font-semibold">
                 <span>Total Expenses</span>
-                <MoneyDisplay paise={data.totalExpensesPaise} />
+                <MoneyDisplay paise={totalExpenses} />
               </div>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
 
-          <div className="md:col-span-2 rounded-lg border bg-muted/30 p-4">
-            <div className="flex justify-between text-lg font-semibold">
-              <span>Net {data.netProfitPaise >= 0 ? 'Profit' : 'Loss'}</span>
-              <MoneyDisplay paise={data.netProfitPaise} />
-            </div>
-          </div>
+          <Card className="md:col-span-2">
+            <CardContent className="pt-6">
+              <div className="flex justify-between text-lg font-bold">
+                <span>Net Profit</span>
+                <MoneyDisplay paise={data.netProfitPaise} />
+              </div>
+            </CardContent>
+          </Card>
         </div>
       )}
     </div>
