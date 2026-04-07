@@ -41,15 +41,24 @@ interface PaginatedResult<T> {
   total: number;
 }
 
-export function useCollections(params: { page?: number; loanId?: string } = {}) {
-  const { page = 1, loanId } = params;
+export function useCollections(params: {
+  page?: number;
+  loanId?: string;
+  startDate?: string;
+  endDate?: string;
+  loanNumber?: string;
+} = {}) {
+  const { page = 1, loanId, startDate, endDate, loanNumber } = params;
   const pageSize = 20;
   const skip = (page - 1) * pageSize;
   const query = new URLSearchParams({ skip: String(skip), take: String(pageSize) });
   if (loanId) query.set('loanId', loanId);
+  if (startDate) query.set('startDate', startDate);
+  if (endDate) query.set('endDate', endDate);
+  if (loanNumber) query.set('loanNumber', loanNumber);
 
   return useQuery<PaginatedResult<Collection>>({
-    queryKey: ['collections', page, loanId],
+    queryKey: ['collections', page, loanId, startDate, endDate, loanNumber],
     queryFn: () => apiClient.get(`/collections?${query.toString()}`),
   });
 }

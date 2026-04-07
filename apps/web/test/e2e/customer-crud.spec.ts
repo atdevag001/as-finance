@@ -12,7 +12,7 @@ test.describe('Customer Management', () => {
 
   test('should display customer list', async ({ page, loginAs }) => {
     // Given: manager is logged in
-    await loginAs('manager');
+    await loginAs('manager1');
 
     // When: navigating to customers page
     await page.goto('/customers');
@@ -23,7 +23,7 @@ test.describe('Customer Management', () => {
 
   test('should navigate to new customer form', async ({ page, loginAs }) => {
     // Given: field officer is logged in
-    await loginAs('field_officer');
+    await loginAs('field1');
 
     // When: clicking new customer button
     await page.goto('/customers');
@@ -36,7 +36,7 @@ test.describe('Customer Management', () => {
 
   test('should validate required fields on customer form', async ({ page, loginAs }) => {
     // Given: field officer is on new customer form
-    await loginAs('field_officer');
+    await loginAs('field1');
     await page.goto('/customers/new');
 
     // When: submitting empty form

@@ -11,17 +11,17 @@ import { test, expect, type Page } from '@playwright/test';
  * 3. Receipt print view renders correctly with all components
  */
 
-// Seed credentials for collection_officer role
-const CO_USERNAME = 'collection_officer';
-const CO_PASSWORD = 'TestPass123!';
+// Seed credentials for collector1 role
+const CO_USERNAME = 'collector1';
+const CO_PASSWORD = 'Admin@123';
 
 // Field officer creates prerequisite data
-const FO_USERNAME = 'field_officer';
-const FO_PASSWORD = 'TestPass123!';
+const FO_USERNAME = 'field1';
+const FO_PASSWORD = 'Admin@123';
 
 // Manager for loan approval
-const MANAGER_USERNAME = 'manager';
-const MANAGER_PASSWORD = 'TestPass123!';
+const MANAGER_USERNAME = 'manager1';
+const MANAGER_PASSWORD = 'Admin@123';
 
 const API_BASE = 'http://localhost:3001';
 

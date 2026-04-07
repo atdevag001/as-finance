@@ -11,16 +11,16 @@ import { test, expect, type Page } from '@playwright/test';
  */
 
 // Collection officer posts collections and views receipts
-const CO_USERNAME = 'collection_officer';
-const CO_PASSWORD = 'TestPass123!';
+const CO_USERNAME = 'collector1';
+const CO_PASSWORD = 'Admin@123';
 
 // Field officer creates prerequisite data
-const FO_USERNAME = 'field_officer';
-const FO_PASSWORD = 'TestPass123!';
+const FO_USERNAME = 'field1';
+const FO_PASSWORD = 'Admin@123';
 
 // Manager for loan approval and disbursement
-const MANAGER_USERNAME = 'manager';
-const MANAGER_PASSWORD = 'TestPass123!';
+const MANAGER_USERNAME = 'manager1';
+const MANAGER_PASSWORD = 'Admin@123';
 
 const API_BASE = 'http://localhost:3001';
 

@@ -1,17 +1,19 @@
 'use client';
 
-import { CheckCircle, XCircle, X } from 'lucide-react';
+import { CheckCircle, XCircle, AlertTriangle, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast, type ToastVariant } from '@/providers/toast-provider';
 
 const VARIANT_STYLES: Record<ToastVariant, string> = {
   success: 'border-green-500/30 bg-green-50 text-green-900 dark:bg-green-950 dark:text-green-100',
   error: 'border-destructive/30 bg-destructive/10 text-destructive',
+  warning: 'border-orange-500/30 bg-orange-50 text-orange-900 dark:bg-orange-950 dark:text-orange-100',
 };
 
 const VARIANT_ICONS: Record<ToastVariant, typeof CheckCircle> = {
   success: CheckCircle,
   error: XCircle,
+  warning: AlertTriangle,
 };
 
 export function ToastContainer() {

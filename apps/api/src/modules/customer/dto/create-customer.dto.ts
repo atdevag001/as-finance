@@ -8,6 +8,7 @@ import {
   Max,
   MaxLength,
   Matches,
+  ValidateIf,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -31,6 +32,7 @@ export class CreateCustomerDto {
 
   @ApiPropertyOptional({ description: 'Alternate mobile number' })
   @IsOptional()
+  @ValidateIf((o) => o.alternateMobile !== '' && o.alternateMobile != null)
   @IsString()
   @Matches(/^[6-9]\d{9}$/, { message: 'Invalid Indian mobile number' })
   alternateMobile?: string;
@@ -42,6 +44,7 @@ export class CreateCustomerDto {
 
   @ApiPropertyOptional({ description: 'PAN number (format: AAAAA9999A)' })
   @IsOptional()
+  @ValidateIf((o) => o.panNumber !== '' && o.panNumber != null)
   @IsString()
   @Matches(/^[A-Z]{5}\d{4}[A-Z]$/, { message: 'Invalid PAN format' })
   panNumber?: string;

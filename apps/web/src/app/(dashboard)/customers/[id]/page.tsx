@@ -2,11 +2,13 @@
 
 import { useState, useRef } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Upload, ShieldBan, ShieldCheck } from 'lucide-react';
-import { useCustomer } from '@/hooks/useCustomers';
-import { StatusBadge, MoneyDisplay, LoadingSpinner, ErrorMessage, PermissionGate, ConfirmDialog } from '@/components/shared';
+import { ArrowLeft, Upload, ShieldBan, ShieldCheck, Plus, Pencil, Eye, ExternalLink } from 'lucide-react';
+import { useCustomer, useUpdateCustomer, useAddFamilyMember, useAddGuarantor } from '@/hooks/useCustomers';
+import { StatusBadge, MoneyDisplay, LoadingSpinner, ErrorMessage, PermissionGate, ConfirmDialog, DateDisplay } from '@/components/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { apiClient, getAccessToken } from '@/lib/api-client';
 import { useToast } from '@/providers/toast-provider';
@@ -20,11 +22,21 @@ interface LinkedLoan {
   cached_outstanding_paise?: number;
 }
 
+interface Document {
+  id: string;
+  document_type: string;
+  file_name: string;
+  uploaded_at: string;
+}
+
 export default function CustomerDetailPage({ params }: { params: { id: string } }) {
   const { id } = params;
   const { data: customer, isLoading, error } = useCustomer(id);
   const { showToast } = useToast();
   const queryClient = useQueryClient();
+  const updateCustomer = useUpdateCustomer();
+  const addFamilyMember = useAddFamilyMember();
+  const addGuarantor = useAddGuarantor();
 
   // Linked loans query
   const { data: loansData } = useQuery<{ data: LinkedLoan[] }>({
@@ -33,6 +45,14 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
     enabled: !!id && !!customer,
   });
   const linkedLoans = loansData?.data ?? [];
+
+  // Documents query
+  const { data: documentsData } = useQuery<{ data: Document[] }>({
+    queryKey: ['customers', id, 'documents'],
+    queryFn: () => apiClient.get(`/customers/${id}/documents`),
+    enabled: !!id && !!customer,
+  });
+  const documents = documentsData?.data ?? [];
 
   // Document upload state
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -47,6 +67,35 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
   // Reinstate state
   const [showReinstateDialog, setShowReinstateDialog] = useState(false);
   const [reinstating, setReinstating] = useState(false);
+
+  // Edit form state
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [editFormData, setEditFormData] = useState<Record<string, string>>({});
+  const [editError, setEditError] = useState<string | null>(null);
+
+  // Add Family Member state
+  const [showAddFamilyDialog, setShowAddFamilyDialog] = useState(false);
+  const [familyFormData, setFamilyFormData] = useState({
+    name: '',
+    relationship: '',
+    contact_number: '',
+    occupation: '',
+  });
+  const [familyError, setFamilyError] = useState<string | null>(null);
+
+  // Add Guarantor state
+  const [showAddGuarantorDialog, setShowAddGuarantorDialog] = useState(false);
+  const [guarantorFormData, setGuarantorFormData] = useState({
+    name: '',
+    relationship: '',
+    mobile: '',
+    aadhaar: '',
+    address: '',
+  });
+  const [guarantorError, setGuarantorError] = useState<string | null>(null);
+
+  // View document loading state
+  const [viewingDocId, setViewingDocId] = useState<string | null>(null);
 
   if (isLoading) return <div className="flex justify-center py-8"><LoadingSpinner size="lg" /></div>;
   if (error) {
@@ -127,6 +176,122 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
     }
   }
 
+  function openEditDialog() {
+    if (!customer) return;
+    setEditFormData({
+      full_name: customer.full_name || '',
+      father_or_husband_name: customer.father_or_husband_name || '',
+      mobile: customer.mobile || '',
+      alternate_mobile: customer.alternate_mobile || '',
+      occupation: customer.occupation || '',
+      monthly_income: customer.monthly_income_paise ? String(customer.monthly_income_paise / 100) : '',
+      address_line1: customer.address_line1 || '',
+      address_line2: customer.address_line2 || '',
+      city: customer.city || '',
+      district: customer.district || '',
+      state: customer.state || '',
+      pincode: customer.pincode || '',
+      notes: customer.notes || '',
+    });
+    setEditError(null);
+    setShowEditDialog(true);
+  }
+
+  async function handleUpdateCustomer() {
+    if (!customer) return;
+    setEditError(null);
+    try {
+      // Only send changed fields
+      const changedFields: Record<string, unknown> = {};
+      const originalData: Record<string, string> = {
+        full_name: customer.full_name || '',
+        father_or_husband_name: customer.father_or_husband_name || '',
+        mobile: customer.mobile || '',
+        alternate_mobile: customer.alternate_mobile || '',
+        occupation: customer.occupation || '',
+        monthly_income: customer.monthly_income_paise ? String(customer.monthly_income_paise / 100) : '',
+        address_line1: customer.address_line1 || '',
+        address_line2: customer.address_line2 || '',
+        city: customer.city || '',
+        district: customer.district || '',
+        state: customer.state || '',
+        pincode: customer.pincode || '',
+        notes: customer.notes || '',
+      };
+
+      for (const [key, value] of Object.entries(editFormData)) {
+        if (value !== originalData[key]) {
+          if (key === 'monthly_income') {
+            changedFields['monthly_income_paise'] = Math.round(parseFloat(value || '0') * 100);
+          } else {
+            changedFields[key] = value;
+          }
+        }
+      }
+
+      if (Object.keys(changedFields).length === 0) {
+        setShowEditDialog(false);
+        return;
+      }
+
+      await updateCustomer.mutateAsync({ id, data: changedFields });
+      showToast({ message: 'Customer updated successfully.' });
+      setShowEditDialog(false);
+    } catch (err) {
+      setEditError((err as Error).message || 'Failed to update customer.');
+    }
+  }
+
+  async function handleAddFamilyMember() {
+    setFamilyError(null);
+    if (!familyFormData.name.trim() || !familyFormData.relationship.trim()) {
+      setFamilyError('Name and relationship are required.');
+      return;
+    }
+    try {
+      await addFamilyMember.mutateAsync({
+        customerId: id,
+        data: familyFormData,
+      });
+      showToast({ message: 'Family member added.' });
+      setShowAddFamilyDialog(false);
+      setFamilyFormData({ name: '', relationship: '', contact_number: '', occupation: '' });
+    } catch (err) {
+      setFamilyError((err as Error).message || 'Failed to add family member.');
+    }
+  }
+
+  async function handleAddGuarantor() {
+    setGuarantorError(null);
+    if (!guarantorFormData.name.trim() || !guarantorFormData.relationship.trim() || !guarantorFormData.mobile.trim()) {
+      setGuarantorError('Name, relationship, and mobile are required.');
+      return;
+    }
+    try {
+      await addGuarantor.mutateAsync({
+        customerId: id,
+        data: guarantorFormData,
+      });
+      showToast({ message: 'Guarantor added.' });
+      setShowAddGuarantorDialog(false);
+      setGuarantorFormData({ name: '', relationship: '', mobile: '', aadhaar: '', address: '' });
+    } catch (err) {
+      setGuarantorError((err as Error).message || 'Failed to add guarantor.');
+    }
+  }
+
+  async function handleViewDocument(docId: string) {
+    setViewingDocId(docId);
+    try {
+      const { url } = await apiClient.get<{ url: string }>(`/documents/${docId}/url`);
+      window.open(url, '_blank');
+    } catch (err) {
+      showToast({ message: (err as Error).message || 'Failed to get document URL.', variant: 'error' });
+    } finally {
+      setViewingDocId(null);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
@@ -138,6 +303,11 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
           <StatusBadge status={customer.status} type="customer" />
         </div>
         <div className="flex gap-2">
+          <PermissionGate permission="customer.update">
+            <Button variant="outline" size="sm" onClick={openEditDialog}>
+              <Pencil className="mr-1 h-4 w-4" /> Edit
+            </Button>
+          </PermissionGate>
           <PermissionGate permission="customer.blacklist">
             {customer.status === 'active' && (
               <Button variant="destructive" size="sm" onClick={() => setShowBlacklistDialog(true)}>
@@ -183,10 +353,18 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
         </Card>
       </div>
 
-      {customer.family_members && customer.family_members.length > 0 && (
-        <Card>
-          <CardHeader><CardTitle className="text-base">Family Members</CardTitle></CardHeader>
-          <CardContent>
+      {/* Family Members */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-base">Family Members</CardTitle>
+          <PermissionGate permission="customer.update">
+            <Button variant="outline" size="sm" onClick={() => setShowAddFamilyDialog(true)}>
+              <Plus className="mr-1 h-4 w-4" /> Add
+            </Button>
+          </PermissionGate>
+        </CardHeader>
+        <CardContent>
+          {customer.family_members && customer.family_members.length > 0 ? (
             <div className="space-y-2 text-sm">
               {customer.family_members.map((f) => (
                 <div key={f.id} className="flex justify-between border-b pb-2 last:border-0">
@@ -195,14 +373,24 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
                 </div>
               ))}
             </div>
-          </CardContent>
-        </Card>
-      )}
+          ) : (
+            <p className="text-sm text-muted-foreground">No family members added.</p>
+          )}
+        </CardContent>
+      </Card>
 
-      {customer.guarantors && customer.guarantors.length > 0 && (
-        <Card>
-          <CardHeader><CardTitle className="text-base">Guarantors</CardTitle></CardHeader>
-          <CardContent>
+      {/* Guarantors */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-base">Guarantors</CardTitle>
+          <PermissionGate permission="customer.update">
+            <Button variant="outline" size="sm" onClick={() => setShowAddGuarantorDialog(true)}>
+              <Plus className="mr-1 h-4 w-4" /> Add
+            </Button>
+          </PermissionGate>
+        </CardHeader>
+        <CardContent>
+          {customer.guarantors && customer.guarantors.length > 0 ? (
             <div className="space-y-2 text-sm">
               {customer.guarantors.map((g) => (
                 <div key={g.id} className="flex justify-between border-b pb-2 last:border-0">
@@ -211,17 +399,67 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
                 </div>
               ))}
             </div>
-          </CardContent>
-        </Card>
-      )}
+          ) : (
+            <p className="text-sm text-muted-foreground">No guarantors added.</p>
+          )}
+        </CardContent>
+      </Card>
 
-      {/* Document Upload Section */}
-      <PermissionGate permission="customer.upload_doc">
-        <Card>
-          <CardHeader><CardTitle className="text-base">Documents</CardTitle></CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
+      {/* Documents Section */}
+      <Card>
+        <CardHeader><CardTitle className="text-base">Documents</CardTitle></CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {/* Document List */}
+            {documents.length > 0 && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="border-b bg-muted/50">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-medium">Type</th>
+                      <th className="px-3 py-2 text-left font-medium hidden sm:table-cell">File Name</th>
+                      <th className="px-3 py-2 text-left font-medium hidden md:table-cell">Uploaded</th>
+                      <th className="px-3 py-2 text-right font-medium">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {documents.map((doc) => (
+                      <tr key={doc.id} className="border-b last:border-0">
+                        <td className="px-3 py-2 capitalize">{doc.document_type.replace(/_/g, ' ')}</td>
+                        <td className="px-3 py-2 hidden sm:table-cell truncate max-w-40">{doc.file_name}</td>
+                        <td className="px-3 py-2 hidden md:table-cell">
+                          <DateDisplay date={doc.uploaded_at} />
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={viewingDocId === doc.id}
+                            onClick={() => handleViewDocument(doc.id)}
+                          >
+                            {viewingDocId === doc.id ? (
+                              <LoadingSpinner size="sm" />
+                            ) : (
+                              <>
+                                <ExternalLink className="mr-1 h-4 w-4" />
+                                View
+                              </>
+                            )}
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {documents.length === 0 && (
+              <p className="text-sm text-muted-foreground">No documents uploaded.</p>
+            )}
+
+            {/* Upload Section */}
+            <PermissionGate permission="customer.upload_doc">
+              <div className="flex items-center gap-3 pt-2 border-t">
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -243,10 +481,10 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
                 <span className="text-xs text-muted-foreground">JPEG, PNG, PDF — max 5MB</span>
               </div>
               {uploadError && <p className="text-sm text-destructive">{uploadError}</p>}
-            </div>
-          </CardContent>
-        </Card>
-      </PermissionGate>
+            </PermissionGate>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Linked Loans Section */}
       {linkedLoans.length > 0 && (
@@ -318,6 +556,264 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
         loading={reinstating}
         onConfirm={handleReinstate}
       />
+
+      {/* Edit Customer Dialog */}
+      <ConfirmDialog
+        open={showEditDialog}
+        onOpenChange={setShowEditDialog}
+        title="Edit Customer"
+        description="Update customer information."
+        confirmLabel={updateCustomer.isPending ? 'Saving…' : 'Save Changes'}
+        loading={updateCustomer.isPending}
+        onConfirm={handleUpdateCustomer}
+      >
+        <div className="space-y-4 py-2 max-h-96 overflow-y-auto">
+          {editError && <p className="text-sm text-destructive">{editError}</p>}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="edit-full_name">Full Name</Label>
+              <Input
+                id="edit-full_name"
+                value={editFormData['full_name'] ?? ''}
+                onChange={(e) => setEditFormData(prev => ({ ...prev, full_name: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-father_or_husband_name">Father/Husband Name</Label>
+              <Input
+                id="edit-father_or_husband_name"
+                value={editFormData['father_or_husband_name'] ?? ''}
+                onChange={(e) => setEditFormData(prev => ({ ...prev, father_or_husband_name: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-mobile">Mobile</Label>
+              <Input
+                id="edit-mobile"
+                value={editFormData['mobile'] ?? ''}
+                onChange={(e) => setEditFormData(prev => ({ ...prev, mobile: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-alternate_mobile">Alternate Mobile</Label>
+              <Input
+                id="edit-alternate_mobile"
+                value={editFormData['alternate_mobile'] ?? ''}
+                onChange={(e) => setEditFormData(prev => ({ ...prev, alternate_mobile: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-occupation">Occupation</Label>
+              <Input
+                id="edit-occupation"
+                value={editFormData['occupation'] ?? ''}
+                onChange={(e) => setEditFormData(prev => ({ ...prev, occupation: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-monthly_income">Monthly Income (₹)</Label>
+              <Input
+                id="edit-monthly_income"
+                type="number"
+                inputMode="numeric"
+                value={editFormData['monthly_income'] ?? ''}
+                onChange={(e) => setEditFormData(prev => ({ ...prev, monthly_income: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="edit-address_line1">Address Line 1</Label>
+              <Input
+                id="edit-address_line1"
+                value={editFormData['address_line1'] ?? ''}
+                onChange={(e) => setEditFormData(prev => ({ ...prev, address_line1: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="edit-address_line2">Address Line 2</Label>
+              <Input
+                id="edit-address_line2"
+                value={editFormData['address_line2'] ?? ''}
+                onChange={(e) => setEditFormData(prev => ({ ...prev, address_line2: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-city">City</Label>
+              <Input
+                id="edit-city"
+                value={editFormData['city'] ?? ''}
+                onChange={(e) => setEditFormData(prev => ({ ...prev, city: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-district">District</Label>
+              <Input
+                id="edit-district"
+                value={editFormData['district'] ?? ''}
+                onChange={(e) => setEditFormData(prev => ({ ...prev, district: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-state">State</Label>
+              <Input
+                id="edit-state"
+                value={editFormData['state'] ?? ''}
+                onChange={(e) => setEditFormData(prev => ({ ...prev, state: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-pincode">Pincode</Label>
+              <Input
+                id="edit-pincode"
+                value={editFormData['pincode'] ?? ''}
+                onChange={(e) => setEditFormData(prev => ({ ...prev, pincode: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="edit-notes">Notes</Label>
+              <Input
+                id="edit-notes"
+                value={editFormData['notes'] ?? ''}
+                onChange={(e) => setEditFormData(prev => ({ ...prev, notes: e.target.value }))}
+              />
+            </div>
+          </div>
+        </div>
+      </ConfirmDialog>
+
+      {/* Add Family Member Dialog */}
+      <ConfirmDialog
+        open={showAddFamilyDialog}
+        onOpenChange={(open) => {
+          setShowAddFamilyDialog(open);
+          if (!open) {
+            setFamilyFormData({ name: '', relationship: '', contact_number: '', occupation: '' });
+            setFamilyError(null);
+          }
+        }}
+        title="Add Family Member"
+        description="Enter family member details."
+        confirmLabel={addFamilyMember.isPending ? 'Adding…' : 'Add Member'}
+        loading={addFamilyMember.isPending}
+        onConfirm={handleAddFamilyMember}
+      >
+        <div className="space-y-4 py-2">
+          {familyError && <p className="text-sm text-destructive">{familyError}</p>}
+          <div className="space-y-2">
+            <Label htmlFor="family-name">Name *</Label>
+            <Input
+              id="family-name"
+              value={familyFormData.name}
+              onChange={(e) => setFamilyFormData(prev => ({ ...prev, name: e.target.value }))}
+              placeholder="Enter name…"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="family-relationship">Relationship *</Label>
+            <Select value={familyFormData.relationship} onValueChange={(v) => setFamilyFormData(prev => ({ ...prev, relationship: v }))}>
+              <SelectTrigger id="family-relationship">
+                <SelectValue placeholder="Select relationship" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="spouse">Spouse</SelectItem>
+                <SelectItem value="parent">Parent</SelectItem>
+                <SelectItem value="child">Child</SelectItem>
+                <SelectItem value="sibling">Sibling</SelectItem>
+                <SelectItem value="other">Other</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="family-contact">Contact Number</Label>
+            <Input
+              id="family-contact"
+              value={familyFormData.contact_number}
+              onChange={(e) => setFamilyFormData(prev => ({ ...prev, contact_number: e.target.value }))}
+              placeholder="Enter phone number…"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="family-occupation">Occupation</Label>
+            <Input
+              id="family-occupation"
+              value={familyFormData.occupation}
+              onChange={(e) => setFamilyFormData(prev => ({ ...prev, occupation: e.target.value }))}
+              placeholder="Enter occupation…"
+            />
+          </div>
+        </div>
+      </ConfirmDialog>
+
+      {/* Add Guarantor Dialog */}
+      <ConfirmDialog
+        open={showAddGuarantorDialog}
+        onOpenChange={(open) => {
+          setShowAddGuarantorDialog(open);
+          if (!open) {
+            setGuarantorFormData({ name: '', relationship: '', mobile: '', aadhaar: '', address: '' });
+            setGuarantorError(null);
+          }
+        }}
+        title="Add Guarantor"
+        description="Enter guarantor details."
+        confirmLabel={addGuarantor.isPending ? 'Adding…' : 'Add Guarantor'}
+        loading={addGuarantor.isPending}
+        onConfirm={handleAddGuarantor}
+      >
+        <div className="space-y-4 py-2">
+          {guarantorError && <p className="text-sm text-destructive">{guarantorError}</p>}
+          <div className="space-y-2">
+            <Label htmlFor="guarantor-name">Name *</Label>
+            <Input
+              id="guarantor-name"
+              value={guarantorFormData.name}
+              onChange={(e) => setGuarantorFormData(prev => ({ ...prev, name: e.target.value }))}
+              placeholder="Enter name…"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="guarantor-relationship">Relationship *</Label>
+            <Select value={guarantorFormData.relationship} onValueChange={(v) => setGuarantorFormData(prev => ({ ...prev, relationship: v }))}>
+              <SelectTrigger id="guarantor-relationship">
+                <SelectValue placeholder="Select relationship" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="friend">Friend</SelectItem>
+                <SelectItem value="relative">Relative</SelectItem>
+                <SelectItem value="employer">Employer</SelectItem>
+                <SelectItem value="neighbor">Neighbor</SelectItem>
+                <SelectItem value="other">Other</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="guarantor-mobile">Mobile *</Label>
+            <Input
+              id="guarantor-mobile"
+              value={guarantorFormData.mobile}
+              onChange={(e) => setGuarantorFormData(prev => ({ ...prev, mobile: e.target.value }))}
+              placeholder="Enter mobile number…"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="guarantor-aadhaar">Aadhaar</Label>
+            <Input
+              id="guarantor-aadhaar"
+              value={guarantorFormData.aadhaar}
+              onChange={(e) => setGuarantorFormData(prev => ({ ...prev, aadhaar: e.target.value }))}
+              placeholder="Enter Aadhaar number…"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="guarantor-address">Address</Label>
+            <Input
+              id="guarantor-address"
+              value={guarantorFormData.address}
+              onChange={(e) => setGuarantorFormData(prev => ({ ...prev, address: e.target.value }))}
+              placeholder="Enter address…"
+            />
+          </div>
+        </div>
+      </ConfirmDialog>
     </div>
   );
 }

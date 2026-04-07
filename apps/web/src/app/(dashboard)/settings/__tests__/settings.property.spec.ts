@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
-import { getChangedSettings } from '../page';
+import { getChangedSettings } from '@/lib/settings-utils';
 
 /**
  * Property 19: Settings dirty tracking — only changed values submitted

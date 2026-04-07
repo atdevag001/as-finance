@@ -62,7 +62,27 @@ const CUSTOMER_STATUS_MAP: Record<string, StatusVariant> = {
   inactive: 'neutral',
 };
 
-type StatusType = 'loan' | 'overdue_bucket' | 'installment' | 'collection' | 'customer';
+/** Maps penalty statuses to visual variants */
+const PENALTY_STATUS_MAP: Record<string, StatusVariant> = {
+  pending: 'warning',
+  paid: 'success',
+  waived: 'info',
+};
+
+/** Maps product statuses to visual variants */
+const PRODUCT_STATUS_MAP: Record<string, StatusVariant> = {
+  active: 'success',
+  inactive: 'neutral',
+};
+
+/** Maps group statuses to visual variants */
+const GROUP_STATUS_MAP: Record<string, StatusVariant> = {
+  active: 'success',
+  inactive: 'neutral',
+  disbanded: 'danger',
+};
+
+type StatusType = 'loan' | 'overdue_bucket' | 'installment' | 'collection' | 'customer' | 'penalty' | 'product' | 'group';
 
 const STATUS_MAPS: Record<StatusType, Record<string, StatusVariant>> = {
   loan: LOAN_STATUS_MAP,
@@ -70,6 +90,9 @@ const STATUS_MAPS: Record<StatusType, Record<string, StatusVariant>> = {
   installment: INSTALLMENT_STATUS_MAP,
   collection: COLLECTION_STATUS_MAP,
   customer: CUSTOMER_STATUS_MAP,
+  penalty: PENALTY_STATUS_MAP,
+  product: PRODUCT_STATUS_MAP,
+  group: GROUP_STATUS_MAP,
 };
 
 interface StatusBadgeProps {

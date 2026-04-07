@@ -85,7 +85,7 @@ export class AuthController {
       path: '/',
     });
 
-    return { accessToken: result.accessToken };
+    return { accessToken: result.accessToken, user: result.user };
   }
 
   @Post('logout')

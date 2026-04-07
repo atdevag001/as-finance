@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Plus } from 'lucide-react';
+import { Plus, Search, X } from 'lucide-react';
 import { useCollections, type Collection } from '@/hooks/useCollections';
+import { todayIST } from '@/lib/date-utils';
 import {
   StatusBadge,
   MoneyDisplay,
@@ -15,11 +16,41 @@ import {
   ReversalDialog,
 } from '@/components/shared';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 export default function CollectionsPage() {
   const [page, setPage] = useState(1);
-  const { data, isLoading, error } = useCollections({ page });
+  const today = todayIST();
+  const [startDate, setStartDate] = useState(today);
+  const [endDate, setEndDate] = useState(today);
+  const [loanNumber, setLoanNumber] = useState('');
+  const [appliedFilters, setAppliedFilters] = useState({
+    startDate: today,
+    endDate: today,
+    loanNumber: '',
+  });
+
+  const { data, isLoading, error } = useCollections({
+    page,
+    startDate: appliedFilters.startDate || undefined,
+    endDate: appliedFilters.endDate || undefined,
+    loanNumber: appliedFilters.loanNumber || undefined,
+  });
   const [reversalCollection, setReversalCollection] = useState<Collection | null>(null);
+
+  function applyFilters() {
+    setPage(1);
+    setAppliedFilters({ startDate, endDate, loanNumber });
+  }
+
+  function clearFilters() {
+    setStartDate('');
+    setEndDate('');
+    setLoanNumber('');
+    setPage(1);
+    setAppliedFilters({ startDate: '', endDate: '', loanNumber: '' });
+  }
 
   return (
     <div className="space-y-4">
@@ -28,6 +59,47 @@ export default function CollectionsPage() {
         <Button asChild>
           <Link href="/collections/new"><Plus className="mr-2 h-4 w-4" />Post Collection</Link>
         </Button>
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-end">
+        <div className="flex-1 grid gap-3 sm:grid-cols-4">
+          <div className="space-y-1">
+            <Label htmlFor="start-date" className="text-xs">Start Date</Label>
+            <Input
+              id="start-date"
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="end-date" className="text-xs">End Date</Label>
+            <Input
+              id="end-date"
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1 sm:col-span-2">
+            <Label htmlFor="loan-filter" className="text-xs">Loan Number</Label>
+            <Input
+              id="loan-filter"
+              placeholder="Search by loan number…"
+              value={loanNumber}
+              onChange={(e) => setLoanNumber(e.target.value)}
+            />
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <Button onClick={applyFilters} size="sm">
+            <Search className="mr-1 h-4 w-4" />Apply
+          </Button>
+          <Button onClick={clearFilters} variant="outline" size="sm">
+            <X className="mr-1 h-4 w-4" />Clear
+          </Button>
+        </div>
       </div>
 
       {isLoading && <div className="flex justify-center py-8"><LoadingSpinner size="lg" /></div>}

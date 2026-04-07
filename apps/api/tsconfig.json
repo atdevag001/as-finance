@@ -1,5 +1,5 @@
 {
-  "extends": "@as-finance/config/tsconfig/base",
+  "extends": "../../packages/config/tsconfig.base.json",
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": "./src",
@@ -12,5 +12,5 @@
     "incremental": true
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "prisma", "test"]
+  "exclude": ["node_modules", "dist", "prisma", "test", "**/__tests__/**", "**/*.spec.ts"]
 }

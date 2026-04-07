@@ -14,8 +14,8 @@ import { test, expect, type Page } from '@playwright/test';
  */
 
 // Collection officer — primary mobile user persona
-const CO_USERNAME = 'collection_officer';
-const CO_PASSWORD = 'TestPass123!';
+const CO_USERNAME = 'collector1';
+const CO_PASSWORD = 'Admin@123';
 
 /**
  * Helper: log in via the UI and wait for the dashboard redirect.

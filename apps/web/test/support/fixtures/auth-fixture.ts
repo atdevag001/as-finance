@@ -5,14 +5,26 @@ export type AuthFixture = {
   authToken: string;
 };
 
+// Credentials must match the seeded users in prisma/seed.ts
+const DEFAULT_PASSWORD = 'Admin@123';
+
 const ROLE_CREDENTIALS: Record<string, { username: string; password: string }> = {
-  super_admin: { username: 'superadmin', password: 'Admin@1234' },
-  manager: { username: 'manager1', password: 'Manager@1234' },
-  field_officer: { username: 'fieldofficer1', password: 'Field@1234' },
-  collection_officer: { username: 'collector1', password: 'Collect@1234' },
-  accountant: { username: 'accountant1', password: 'Account@1234' },
-  office_staff: { username: 'staff1', password: 'Staff@1234' },
-  viewer_auditor: { username: 'auditor1', password: 'Audit@1234' },
+  // Primary role names
+  super_admin: { username: 'admin', password: DEFAULT_PASSWORD },
+  manager: { username: 'manager1', password: DEFAULT_PASSWORD },
+  field_officer: { username: 'field1', password: DEFAULT_PASSWORD },
+  collection_officer: { username: 'collector1', password: DEFAULT_PASSWORD },
+  accountant: { username: 'accountant1', password: DEFAULT_PASSWORD },
+  office_staff: { username: 'staff1', password: DEFAULT_PASSWORD },
+  viewer_auditor: { username: 'auditor1', password: DEFAULT_PASSWORD },
+  // Aliases for convenience (matching username patterns)
+  admin: { username: 'admin', password: DEFAULT_PASSWORD },
+  manager1: { username: 'manager1', password: DEFAULT_PASSWORD },
+  field1: { username: 'field1', password: DEFAULT_PASSWORD },
+  collector1: { username: 'collector1', password: DEFAULT_PASSWORD },
+  accountant1: { username: 'accountant1', password: DEFAULT_PASSWORD },
+  staff1: { username: 'staff1', password: DEFAULT_PASSWORD },
+  auditor1: { username: 'auditor1', password: DEFAULT_PASSWORD },
 };
 
 async function loginViaApi(
@@ -23,7 +35,7 @@ async function loginViaApi(
   const creds = ROLE_CREDENTIALS[role];
   if (!creds) throw new Error(`Unknown role: ${role}`);
 
-  const apiUrl = process.env.API_URL || 'http://localhost:3001';
+  const apiUrl = process.env['API_URL'] || 'http://localhost:3001';
   const response = await context.request.post(`${apiUrl}/auth/login`, {
     data: { username: creds.username, password: creds.password },
   });

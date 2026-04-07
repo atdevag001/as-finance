@@ -11,7 +11,8 @@ import {
   NotFoundError,
 } from '../../common/errors';
 
-const BCRYPT_COST = 12;
+// Use lower bcrypt cost in test/dev for faster hashing (still secure enough for tests)
+const BCRYPT_COST = process.env['BCRYPT_COST'] ? parseInt(process.env['BCRYPT_COST'], 10) : 12;
 
 /**
  * Roles that a manager can assign. Managers cannot assign super_admin or manager.

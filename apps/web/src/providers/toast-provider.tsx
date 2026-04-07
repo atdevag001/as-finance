@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 
-export type ToastVariant = 'success' | 'error';
+export type ToastVariant = 'success' | 'error' | 'warning';
 
 export interface ToastItem {
   id: string;
@@ -66,4 +66,9 @@ export function useToast(): ToastContextValue {
     throw new Error('useToast must be used within a ToastProvider');
   }
   return ctx;
+}
+
+/** Use this version when the toast context might not be available */
+export function useToastSafe(): ToastContextValue | null {
+  return useContext(ToastContext);
 }

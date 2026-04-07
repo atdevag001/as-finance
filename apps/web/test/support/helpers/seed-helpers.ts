@@ -1,6 +1,6 @@
 import type { APIRequestContext } from '@playwright/test';
 
-const API_URL = process.env.API_URL || 'http://localhost:3001';
+const API_URL = process.env['API_URL'] || 'http://localhost:3001';
 
 async function apiPost(request: APIRequestContext, path: string, data: unknown, token: string) {
   const response = await request.post(`${API_URL}${path}`, {
@@ -30,7 +30,7 @@ export async function seedCustomer(request: APIRequestContext, token: string, ov
 export async function seedLoan(request: APIRequestContext, token: string, customerId: string, overrides: Record<string, unknown> = {}) {
   const data = {
     customer_id: customerId,
-    product_version_id: overrides.product_version_id || 'default-pv-id',
+    product_version_id: overrides['product_version_id'] || 'default-pv-id',
     principal_paise: 100_000_00,
     tenure_months: 12,
     ...overrides,

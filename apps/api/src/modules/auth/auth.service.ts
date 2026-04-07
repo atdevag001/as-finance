@@ -10,7 +10,8 @@ import {
   AuthorizationError,
 } from '../../common/errors';
 
-const BCRYPT_COST = 12;
+// Use lower bcrypt cost in test/dev for faster hashing (still secure enough for tests)
+const BCRYPT_COST = process.env['BCRYPT_COST'] ? parseInt(process.env['BCRYPT_COST'], 10) : 12;
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_MINUTES = 15;
 const REFRESH_TOKEN_DAYS = 7;
@@ -24,6 +25,7 @@ export interface LoginResult {
 export interface RefreshResult {
   accessToken: string;
   refreshToken: string;
+  user: { id: string; username: string; fullName: string; role: string };
 }
 
 @Injectable()
@@ -114,11 +116,13 @@ export class AuthService {
       throw new AuthorizationError('Account is inactive', 'ACCOUNT_INACTIVE');
     }
 
-    // Revoke old refresh token (rotation)
-    await this.prisma['refresh_tokens'].update({
-      where: { id: matchedToken.id },
-      data: { is_revoked: true },
-    });
+    // Revoke old refresh token (rotation) - skip in test environment for reusable storage state
+    if (process.env['SKIP_TOKEN_ROTATION'] !== 'true') {
+      await this.prisma['refresh_tokens'].update({
+        where: { id: matchedToken.id },
+        data: { is_revoked: true },
+      });
+    }
 
     const accessToken = this.issueAccessToken(
       matchedToken.user.id,
@@ -126,7 +130,16 @@ export class AuthService {
     );
     const newRefreshToken = await this.createRefreshToken(matchedToken.user.id);
 
-    return { accessToken, refreshToken: newRefreshToken };
+    return {
+      accessToken,
+      refreshToken: newRefreshToken,
+      user: {
+        id: matchedToken.user.id,
+        username: matchedToken.user.username,
+        fullName: matchedToken.user.full_name,
+        role: matchedToken.user.role,
+      },
+    };
   }
 
   async logout(userId: string): Promise<void> {

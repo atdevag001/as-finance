@@ -26,6 +26,7 @@ import { CashbookModule } from './modules/cashbook/cashbook.module';
 import { NotificationModule } from './modules/notification/notification.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { ReportModule } from './modules/report/report.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { ReportModule } from './modules/report/report.module';
     NotificationModule,
     SettingsModule,
     ReportModule,
+    DashboardModule,
     LoggerModule.forRoot({
       pinoHttp: {
         transport:

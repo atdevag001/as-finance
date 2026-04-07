@@ -27,7 +27,7 @@ test.describe('Login Page', () => {
   test('should redirect to dashboard on successful login', async ({ page, loginAs }) => {
     // Given: user logs in as manager
     await page.goto('/login');
-    await loginAs('manager');
+    await loginAs('manager1');
 
     // When: user navigates to dashboard
     await page.goto('/');

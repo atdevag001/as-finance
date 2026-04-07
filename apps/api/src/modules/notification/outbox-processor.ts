@@ -41,24 +41,30 @@ export class OutboxProcessor {
     let processedCount = 0;
 
     try {
-      await this.prisma.$transaction(async (tx) => {
-        const rows = await this.repository.fetchProcessableBatch(batchSize, tx);
+      await this.prisma.$transaction(
+        async (tx) => {
+          const rows = await this.repository.fetchProcessableBatch(batchSize, tx);
 
-        for (const row of rows) {
-          const message = await this.repository.markProcessing(row.id, tx);
-          processedCount++;
+          for (const row of rows) {
+            const message = await this.repository.markProcessing(row.id, tx);
+            processedCount++;
 
-          // Dispatch outside the lock transaction — SMS failure
-          // must not roll back the status update
-          this.dispatchMessage(message).catch((err) => {
-            this.logger.error({
-              msg: 'Unexpected error dispatching SMS',
-              messageId: row.id,
-              error: String(err),
+            // Dispatch outside the lock transaction — SMS failure
+            // must not roll back the status update
+            this.dispatchMessage(message).catch((err) => {
+              this.logger.error({
+                msg: 'Unexpected error dispatching SMS',
+                messageId: row.id,
+                error: String(err),
+              });
             });
-          });
-        }
-      });
+          }
+        },
+        {
+          timeout: 30_000, // 30 seconds - increased from default 5s to handle load
+          maxWait: 10_000, // max time to wait for a connection
+        },
+      );
     } catch (err) {
       this.logger.error({
         msg: 'Outbox processor batch error',

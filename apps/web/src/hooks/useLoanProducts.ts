@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 
 export interface LoanProduct {
@@ -14,11 +14,65 @@ export interface LoanProduct {
   min_tenure_months: number;
   max_tenure_months: number;
   frequency: 'daily' | 'weekly' | 'monthly';
+  is_active: boolean;
+  processing_fee_percent?: number;
+  penalty_rate_percent?: number;
+  allocation_order?: string;
+  created_at?: string;
 }
 
-export function useLoanProducts() {
+interface PaginatedResult<T> {
+  data: T[];
+  total: number;
+}
+
+export function useLoanProducts(params: { page?: number; includeInactive?: boolean } = {}) {
+  const { page = 1, includeInactive = true } = params;
+  const pageSize = 20;
+  const skip = (page - 1) * pageSize;
+  const query = new URLSearchParams({ skip: String(skip), take: String(pageSize) });
+  if (includeInactive) query.set('includeInactive', 'true');
+
+  return useQuery<PaginatedResult<LoanProduct>>({
+    queryKey: ['loan-products', page, includeInactive],
+    queryFn: () => apiClient.get(`/loan-products?${query.toString()}`),
+  });
+}
+
+export function useLoanProductsList() {
   return useQuery<LoanProduct[]>({
-    queryKey: ['loan-products'],
+    queryKey: ['loan-products', 'list'],
     queryFn: () => apiClient.get('/loan-products'),
+  });
+}
+
+export function useCreateLoanProduct() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Record<string, unknown>) => apiClient.post('/loan-products', data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['loan-products'] });
+    },
+  });
+}
+
+export function useUpdateLoanProduct() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) =>
+      apiClient.patch(`/loan-products/${id}`, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['loan-products'] });
+    },
+  });
+}
+
+export function useDeactivateLoanProduct() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.post(`/loan-products/${id}/deactivate`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['loan-products'] });
+    },
   });
 }

@@ -1,11 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Clock, AlertTriangle } from 'lucide-react';
 import { useLoan, useLoanAction } from '@/hooks/useLoans';
 import { useCollections, type Collection } from '@/hooks/useCollections';
 import { useReceipts } from '@/hooks/useReceipts';
+import { usePenalties, useWaivePenalty, type Penalty } from '@/hooks/usePenalties';
+import { useGenerateForeclosureQuote, useExecuteForeclosure, type ForeclosureQuote } from '@/hooks/useForeclosures';
 import { useToast } from '@/providers/toast-provider';
 import {
   StatusBadge,
@@ -21,14 +23,39 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useQuery } from '@tanstack/react-query';
+import { apiClient } from '@/lib/api-client';
+
+// Status history type
+interface StatusTransition {
+  id: string;
+  from_status: string | null;
+  to_status: string;
+  changed_by: string;
+  changed_by_name?: string;
+  reason?: string;
+  created_at: string;
+}
 
 export default function LoanDetailPage({ params }: { params: { id: string } }) {
   const { id } = params;
   const { data: loan, isLoading, error } = useLoan(id);
   const { data: collectionsData } = useCollections({ loanId: id });
   const { data: receiptsData } = useReceipts({ loanId: id });
+  const { data: penaltiesData } = usePenalties({ loanId: id });
   const loanAction = useLoanAction();
+  const waivePenalty = useWaivePenalty();
+  const generateQuote = useGenerateForeclosureQuote();
+  const executeForeclosure = useExecuteForeclosure();
   const { showToast } = useToast();
+
+  // Status history query
+  const { data: statusHistory } = useQuery<StatusTransition[]>({
+    queryKey: ['loans', id, 'status-history'],
+    queryFn: () => apiClient.get(`/loans/${id}/status-history`),
+    enabled: !!id && !!loan,
+  });
 
   // Dialog state
   const [approveOpen, setApproveOpen] = useState(false);
@@ -37,10 +64,59 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
   const [rejectReason, setRejectReason] = useState('');
   const [actionError, setActionError] = useState<string | null>(null);
 
-  // Reversal state (to be wired to reversal dialog in task 8.4)
+  // Disbursement mode state
+  const [disburseMode, setDisburseMode] = useState<string>('cash');
+  const [disburseReference, setDisburseReference] = useState('');
+
+  // Foreclosure state
+  const [foreclosureOpen, setForeclosureOpen] = useState(false);
+  const [foreclosureQuote, setForeclosureQuote] = useState<ForeclosureQuote | null>(null);
+  const [foreclosureConfirmOpen, setForeclosureConfirmOpen] = useState(false);
+  const [quoteExpired, setQuoteExpired] = useState(false);
+
+  // Penalty waiver state
+  const [waivePenaltyOpen, setWaivePenaltyOpen] = useState(false);
+  const [selectedPenalty, setSelectedPenalty] = useState<Penalty | null>(null);
+  const [waiveReason, setWaiveReason] = useState('');
+
+  // Reversal state
   const [reversalCollection, setReversalCollection] = useState<Collection | null>(null);
 
-  const isActionInProgress = loanAction.isPending;
+  const isActionInProgress = loanAction.isPending || waivePenalty.isPending ||
+    generateQuote.isPending || executeForeclosure.isPending;
+
+  // Check quote expiry
+  useEffect(() => {
+    if (foreclosureQuote) {
+      const checkExpiry = () => {
+        const expired = new Date(foreclosureQuote.expires_at) <= new Date();
+        setQuoteExpired(expired);
+      };
+      checkExpiry();
+      const interval = setInterval(checkExpiry, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [foreclosureQuote]);
+
+  async function handleSubmitForReview() {
+    setActionError(null);
+    try {
+      await loanAction.mutateAsync({ id, action: 'submit' });
+      showToast({ message: 'Loan submitted for review' });
+    } catch (err) {
+      setActionError((err as Error).message || 'Failed to submit loan');
+    }
+  }
+
+  async function handleStartReview() {
+    setActionError(null);
+    try {
+      await loanAction.mutateAsync({ id, action: 'review' });
+      showToast({ message: 'Review started' });
+    } catch (err) {
+      setActionError((err as Error).message || 'Failed to start review');
+    }
+  }
 
   async function handleApprove() {
     setActionError(null);
@@ -72,12 +148,59 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
       await loanAction.mutateAsync({
         id,
         action: 'disburse',
-        body: { idempotencyKey },
+        body: {
+          idempotencyKey,
+          mode: disburseMode,
+          referenceNumber: disburseMode === 'bank_transfer' ? disburseReference : undefined,
+        },
       });
       setDisburseOpen(false);
+      setDisburseMode('cash');
+      setDisburseReference('');
       showToast({ message: 'Loan disbursed successfully' });
     } catch (err) {
       setActionError((err as Error).message || 'Failed to disburse loan');
+    }
+  }
+
+  async function handleGenerateForeclosureQuote() {
+    setActionError(null);
+    try {
+      const quote = await generateQuote.mutateAsync({ loanId: id });
+      setForeclosureQuote(quote);
+      setQuoteExpired(false);
+      setForeclosureOpen(true);
+    } catch (err) {
+      setActionError((err as Error).message || 'Failed to generate foreclosure quote');
+    }
+  }
+
+  async function handleExecuteForeclosure() {
+    if (!foreclosureQuote || quoteExpired) return;
+    setActionError(null);
+    try {
+      const idempotencyKey = crypto.randomUUID();
+      await executeForeclosure.mutateAsync({ id: foreclosureQuote.id, idempotencyKey });
+      setForeclosureConfirmOpen(false);
+      setForeclosureOpen(false);
+      setForeclosureQuote(null);
+      showToast({ message: 'Foreclosure completed. Loan is now closed.' });
+    } catch (err) {
+      setActionError((err as Error).message || 'Failed to execute foreclosure');
+    }
+  }
+
+  async function handleWaivePenalty() {
+    if (!selectedPenalty || waiveReason.length < 10) return;
+    setActionError(null);
+    try {
+      await waivePenalty.mutateAsync({ id: selectedPenalty.id, reason: waiveReason });
+      setWaivePenaltyOpen(false);
+      setSelectedPenalty(null);
+      setWaiveReason('');
+      showToast({ message: 'Penalty waived successfully' });
+    } catch (err) {
+      setActionError((err as Error).message || 'Failed to waive penalty');
     }
   }
 
@@ -85,8 +208,14 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
   if (error) return <ErrorMessage message={(error as Error).message} />;
   if (!loan) return <ErrorMessage message="Loan not found" />;
 
+  const canSubmit = loan.status === 'draft';
+  const canReview = loan.status === 'submitted';
   const canApproveReject = loan.status === 'submitted' || loan.status === 'under_review';
   const canDisburse = loan.status === 'approved';
+  const canForeclose = loan.status === 'active' || loan.status === 'overdue';
+
+  const penalties = penaltiesData?.data ?? [];
+  const pendingPenalties = penalties.filter(p => p.status === 'pending');
 
   return (
     <div className="space-y-6">
@@ -97,7 +226,15 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
         </Button>
         <div>
           <h1 className="text-2xl font-bold">{loan.loan_number}</h1>
-          <StatusBadge status={loan.status} type="loan" />
+          <div className="flex items-center gap-2">
+            <StatusBadge status={loan.status} type="loan" />
+            {loan.dpd > 0 && (
+              <span className="text-sm text-muted-foreground">DPD: {loan.dpd}</span>
+            )}
+            {loan.overdue_bucket && (
+              <span className="text-xs px-2 py-0.5 rounded bg-orange-100 text-orange-700">{loan.overdue_bucket}</span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -106,6 +243,26 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
 
       {/* Action buttons */}
       <div className="flex flex-wrap gap-2">
+        {canSubmit && (
+          <PermissionGate permission="loan.submit">
+            <Button
+              onClick={handleSubmitForReview}
+              disabled={isActionInProgress}
+            >
+              Submit for Review
+            </Button>
+          </PermissionGate>
+        )}
+        {canReview && (
+          <PermissionGate permission="loan.review">
+            <Button
+              onClick={handleStartReview}
+              disabled={isActionInProgress}
+            >
+              Start Review
+            </Button>
+          </PermissionGate>
+        )}
         {canApproveReject && (
           <PermissionGate permission="loan.approve">
             <Button
@@ -130,6 +287,17 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
               disabled={isActionInProgress}
             >
               Disburse
+            </Button>
+          </PermissionGate>
+        )}
+        {canForeclose && (
+          <PermissionGate permission="loan.foreclosure">
+            <Button
+              variant="outline"
+              onClick={handleGenerateForeclosureQuote}
+              disabled={isActionInProgress}
+            >
+              {generateQuote.isPending ? 'Generating…' : 'Foreclosure'}
             </Button>
           </PermissionGate>
         )}
@@ -300,6 +468,112 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
         </CardContent>
       </Card>
 
+      {/* Penalties Section */}
+      {penalties.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-orange-500" />
+              Penalties
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="border-b bg-muted/50">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium">Date</th>
+                    <th className="px-3 py-2 text-right font-medium">Amount</th>
+                    <th className="px-3 py-2 text-left font-medium hidden sm:table-cell">Period</th>
+                    <th className="px-3 py-2 text-left font-medium hidden md:table-cell">Installment</th>
+                    <th className="px-3 py-2 text-left font-medium">Status</th>
+                    <th className="px-3 py-2 text-right font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {penalties.map((penalty) => (
+                    <tr key={penalty.id} className="border-b last:border-0">
+                      <td className="px-3 py-2"><DateDisplay date={penalty.posted_date} /></td>
+                      <td className="px-3 py-2 text-right"><MoneyDisplay paise={Number(penalty.amount_paise)} /></td>
+                      <td className="px-3 py-2 hidden sm:table-cell">{penalty.period}</td>
+                      <td className="px-3 py-2 hidden md:table-cell">
+                        {penalty.installment_number ? `#${penalty.installment_number}` : '—'}
+                      </td>
+                      <td className="px-3 py-2">
+                        <StatusBadge status={penalty.status} type="penalty" />
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        {penalty.status === 'pending' && (
+                          <PermissionGate permission="penalty.waive">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={isActionInProgress}
+                              onClick={() => {
+                                setSelectedPenalty(penalty);
+                                setWaivePenaltyOpen(true);
+                              }}
+                            >
+                              Waive
+                            </Button>
+                          </PermissionGate>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Status History Timeline */}
+      {statusHistory && statusHistory.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Clock className="h-4 w-4" />
+              Status History
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {statusHistory.map((transition, idx) => (
+                <div key={transition.id} className="flex gap-3">
+                  <div className="flex flex-col items-center">
+                    <div className="w-2 h-2 rounded-full bg-primary mt-2" />
+                    {idx < statusHistory.length - 1 && (
+                      <div className="w-0.5 flex-1 bg-border mt-1" />
+                    )}
+                  </div>
+                  <div className="flex-1 pb-4">
+                    <div className="flex flex-wrap items-center gap-2 text-sm">
+                      {transition.from_status && (
+                        <>
+                          <StatusBadge status={transition.from_status} type="loan" />
+                          <span className="text-muted-foreground">→</span>
+                        </>
+                      )}
+                      <StatusBadge status={transition.to_status} type="loan" />
+                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      <DateDisplay date={transition.created_at} showTime />
+                      {transition.changed_by_name && ` by ${transition.changed_by_name}`}
+                    </div>
+                    {transition.reason && (
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Reason: {transition.reason}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Approve Dialog */}
       <ConfirmDialog
         open={approveOpen}
@@ -337,16 +611,146 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
         </div>
       </ConfirmDialog>
 
-      {/* Disburse Dialog */}
+      {/* Disburse Dialog with Mode Selection */}
       <ConfirmDialog
         open={disburseOpen}
-        onOpenChange={setDisburseOpen}
+        onOpenChange={(open) => {
+          setDisburseOpen(open);
+          if (!open) {
+            setDisburseMode('cash');
+            setDisburseReference('');
+          }
+        }}
         title="Disburse Loan"
-        description={`Are you sure you want to disburse loan ${loan.loan_number}? Principal: ₹${(Number(loan.principal_paise) / 100).toLocaleString('en-IN')}`}
+        description={`Disbursing loan ${loan.loan_number}. Principal: ₹${(Number(loan.principal_paise) / 100).toLocaleString('en-IN')}`}
         confirmLabel="Disburse"
         loading={isActionInProgress}
         onConfirm={handleDisburse}
+      >
+        <div className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label htmlFor="disburse-mode">Payment Mode</Label>
+            <Select value={disburseMode} onValueChange={setDisburseMode}>
+              <SelectTrigger id="disburse-mode">
+                <SelectValue placeholder="Select mode" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="cash">Cash</SelectItem>
+                <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {disburseMode === 'bank_transfer' && (
+            <div className="space-y-2">
+              <Label htmlFor="disburse-reference">Reference Number</Label>
+              <Input
+                id="disburse-reference"
+                placeholder="Enter bank transfer reference…"
+                value={disburseReference}
+                onChange={(e) => setDisburseReference(e.target.value)}
+                disabled={isActionInProgress}
+              />
+            </div>
+          )}
+        </div>
+      </ConfirmDialog>
+
+      {/* Foreclosure Quote Dialog */}
+      <ConfirmDialog
+        open={foreclosureOpen}
+        onOpenChange={setForeclosureOpen}
+        title="Foreclosure Quote"
+        description={quoteExpired ? 'Quote expired. Please generate a new quote.' : 'Review the settlement breakdown below.'}
+        confirmLabel={quoteExpired ? 'Close' : 'Approve & Execute'}
+        loading={executeForeclosure.isPending}
+        onConfirm={() => {
+          if (quoteExpired) {
+            setForeclosureOpen(false);
+            setForeclosureQuote(null);
+          } else {
+            setForeclosureConfirmOpen(true);
+          }
+        }}
+      >
+        {foreclosureQuote && (
+          <div className="space-y-3 py-2">
+            <div className="grid gap-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Outstanding Principal</span>
+                <MoneyDisplay paise={foreclosureQuote.outstanding_principal_paise} />
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Accrued Interest</span>
+                <MoneyDisplay paise={foreclosureQuote.accrued_interest_paise} />
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Pending Penalties</span>
+                <MoneyDisplay paise={foreclosureQuote.pending_penalties_paise} />
+              </div>
+              {foreclosureQuote.rebate_paise > 0 && (
+                <div className="flex justify-between text-green-600">
+                  <span>Rebate</span>
+                  <span>-<MoneyDisplay paise={foreclosureQuote.rebate_paise} /></span>
+                </div>
+              )}
+              <div className="flex justify-between font-semibold border-t pt-2 mt-2">
+                <span>Settlement Amount</span>
+                <MoneyDisplay paise={foreclosureQuote.settlement_amount_paise} />
+              </div>
+            </div>
+            <div className={`text-xs ${quoteExpired ? 'text-destructive' : 'text-muted-foreground'}`}>
+              {quoteExpired ? (
+                'Quote has expired'
+              ) : (
+                `Expires: ${new Date(foreclosureQuote.expires_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`
+              )}
+            </div>
+          </div>
+        )}
+      </ConfirmDialog>
+
+      {/* Foreclosure Confirm Dialog */}
+      <ConfirmDialog
+        open={foreclosureConfirmOpen}
+        onOpenChange={setForeclosureConfirmOpen}
+        title="Confirm Foreclosure"
+        description={`This will close the loan with a final settlement of ₹${foreclosureQuote ? (foreclosureQuote.settlement_amount_paise / 100).toLocaleString('en-IN') : '0'}. This action cannot be undone.`}
+        confirmLabel="Execute Foreclosure"
+        variant="destructive"
+        loading={executeForeclosure.isPending}
+        onConfirm={handleExecuteForeclosure}
       />
+
+      {/* Waive Penalty Dialog */}
+      <ConfirmDialog
+        open={waivePenaltyOpen}
+        onOpenChange={(open) => {
+          setWaivePenaltyOpen(open);
+          if (!open) {
+            setSelectedPenalty(null);
+            setWaiveReason('');
+          }
+        }}
+        title="Waive Penalty"
+        description={selectedPenalty ? `Waive penalty of ₹${(selectedPenalty.amount_paise / 100).toLocaleString('en-IN')} for ${selectedPenalty.period}` : ''}
+        confirmLabel="Waive Penalty"
+        loading={waivePenalty.isPending}
+        onConfirm={handleWaivePenalty}
+      >
+        <div className="space-y-2 py-2">
+          <Label htmlFor="waive-reason">Reason (min 10 characters)</Label>
+          <Input
+            id="waive-reason"
+            placeholder="Enter reason for waiving penalty…"
+            value={waiveReason}
+            onChange={(e) => setWaiveReason(e.target.value)}
+            disabled={waivePenalty.isPending}
+          />
+          {waiveReason.length > 0 && waiveReason.length < 10 && (
+            <p className="text-xs text-destructive">{10 - waiveReason.length} more characters required</p>
+          )}
+        </div>
+      </ConfirmDialog>
 
       {/* Reversal dialog */}
       <ReversalDialog

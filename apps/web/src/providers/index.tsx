@@ -11,12 +11,12 @@ export function Providers({ children }: { children: ReactNode }) {
   return (
     <ThemeProvider>
       <QueryProvider>
-        <AuthProvider>
-          <ToastProvider>
+        <ToastProvider>
+          <AuthProvider>
             {children}
-            <ToastContainer />
-          </ToastProvider>
-        </AuthProvider>
+          </AuthProvider>
+          <ToastContainer />
+        </ToastProvider>
       </QueryProvider>
     </ThemeProvider>
   );

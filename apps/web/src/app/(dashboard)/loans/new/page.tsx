@@ -8,7 +8,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useCreateLoan } from '@/hooks/useLoans';
-import { useLoanProducts } from '@/hooks/useLoanProducts';
+import { useLoanProductsList } from '@/hooks/useLoanProducts';
 import { useCustomers, type Customer } from '@/hooks/useCustomers';
 import { useToast } from '@/providers/toast-provider';
 import { ApiClientError } from '@/lib/api-client';
@@ -38,7 +38,7 @@ export default function NewLoanPage() {
   const router = useRouter();
   const createLoan = useCreateLoan();
   const { showToast } = useToast();
-  const { data: loanProducts, isLoading: productsLoading } = useLoanProducts();
+  const { data: loanProducts, isLoading: productsLoading } = useLoanProductsList();
   const [serverError, setServerError] = useState<string | null>(null);
 
   // Customer search state

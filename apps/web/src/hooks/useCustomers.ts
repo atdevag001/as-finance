@@ -68,3 +68,37 @@ export function useCreateCustomer() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['customers'] }); },
   });
 }
+
+export function useUpdateCustomer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) =>
+      apiClient.patch(`/customers/${id}`, data),
+    onSuccess: (_, { id }) => {
+      qc.invalidateQueries({ queryKey: ['customers', id] });
+      qc.invalidateQueries({ queryKey: ['customers'] });
+    },
+  });
+}
+
+export function useAddFamilyMember() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ customerId, data }: { customerId: string; data: Record<string, unknown> }) =>
+      apiClient.post(`/customers/${customerId}/family-members`, data),
+    onSuccess: (_, { customerId }) => {
+      qc.invalidateQueries({ queryKey: ['customers', customerId] });
+    },
+  });
+}
+
+export function useAddGuarantor() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ customerId, data }: { customerId: string; data: Record<string, unknown> }) =>
+      apiClient.post(`/customers/${customerId}/guarantors`, data),
+    onSuccess: (_, { customerId }) => {
+      qc.invalidateQueries({ queryKey: ['customers', customerId] });
+    },
+  });
+}

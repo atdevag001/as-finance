@@ -4,6 +4,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { Logger } from 'nestjs-pino';
 import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module.js';
 import { validateEnv } from './config/env.validation.js';
 
@@ -22,6 +23,9 @@ async function bootstrap() {
 
   // Structured logging via pino
   app.useLogger(app.get(Logger));
+
+  // Cookie parser middleware (required for reading httpOnly cookies like refresh_token)
+  app.use(cookieParser());
 
   // Security headers via helmet
   app.use(

@@ -12,10 +12,10 @@ import { test, expect, type Page } from '@playwright/test';
  */
 
 // Seed credentials
-const FO_USERNAME = 'field_officer';
-const FO_PASSWORD = 'TestPass123!';
-const MANAGER_USERNAME = 'manager';
-const MANAGER_PASSWORD = 'TestPass123!';
+const FO_USERNAME = 'field1';
+const FO_PASSWORD = 'Admin@123';
+const MANAGER_USERNAME = 'manager1';
+const MANAGER_PASSWORD = 'Admin@123';
 
 // Known seed data IDs — these must match the seeded test data.
 // In a real run the IDs come from the global seed; here we use the API
@@ -208,7 +208,7 @@ test.describe('Loan Application', () => {
   });
 
   test('approve loan as manager → verify maker-checker enforcement', async ({ page }) => {
-    // Create and submit a loan via API as field_officer (the maker)
+    // Create and submit a loan via API as field1 (the maker)
     const createRes = await fetch(`${API_BASE}/loans`, {
       method: 'POST',
       headers: {
@@ -226,7 +226,7 @@ test.describe('Loan Application', () => {
     const loan = await createRes.json();
     const loanId = loan.id;
 
-    // Submit the loan as field_officer
+    // Submit the loan as field1
     await fetch(`${API_BASE}/loans/${loanId}/submit`, {
       method: 'POST',
       headers: {
@@ -281,7 +281,7 @@ test.describe('Loan Application', () => {
       await expect(approvedOrReviewed).toBeVisible({ timeout: 10_000 });
     }
 
-    // Verify maker-checker: the loan was created by field_officer and approved by manager
+    // Verify maker-checker: the loan was created by field1 and approved by manager
     // The detail page should show the loan number and the updated status
     await expect(page.locator('h1')).toContainText(/LN-/);
   });

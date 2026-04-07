@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/providers/auth-provider';
 import { hasPermission } from '@/lib/permissions';
+import { getChangedSettings } from '@/lib/settings-utils';
 import {
   useSettings,
   useUpdateSettings,
@@ -40,20 +41,6 @@ export default function SettingsPage() {
       <HolidaySection />
     </div>
   );
-}
-
-/** Computes the changed keys between original and current settings */
-export function getChangedSettings(
-  original: Record<string, string>,
-  current: Record<string, string>,
-): Record<string, string> {
-  const changed: Record<string, string> = {};
-  for (const key of Object.keys(current)) {
-    if (current[key] !== original[key]) {
-      changed[key] = current[key];
-    }
-  }
-  return changed;
 }
 
 function SettingsSection() {

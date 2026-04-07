@@ -1,6 +1,6 @@
 import type { APIRequestContext } from '@playwright/test';
 
-const API_URL = process.env.API_URL || 'http://localhost:3001';
+const API_URL = process.env['API_URL'] || 'http://localhost:3001';
 
 type TrackedEntity = { type: string; id: string };
 

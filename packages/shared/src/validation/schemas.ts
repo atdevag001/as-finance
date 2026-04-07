@@ -28,9 +28,11 @@ export const createCustomerSchema = z.object({
   fullName: z.string().min(1, 'Full name is required').max(200),
   fatherOrHusbandName: z.string().max(200).optional(),
   mobile: mobileSchema,
-  alternateMobile: mobileSchema.optional(),
+  // Allow empty string or valid mobile for optional alternate mobile
+  alternateMobile: z.union([z.literal(''), mobileSchema]).optional(),
   aadhaarNumber: aadhaarSchema,
-  panNumber: panSchema.optional(),
+  // Allow empty string or valid PAN for optional PAN
+  panNumber: z.union([z.literal(''), panSchema]).optional(),
   dob: z.string().optional(),
   age: z.number().int().min(18).max(120).optional(),
   gender: z.enum(['male', 'female', 'other']),
