@@ -1,0 +1,29 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if echo \"$CLAUDE_TOOL_OUTPUT\" | grep -q 'FAILED\\|Error\\|failed'; then echo '[AUTO-TEST] Test failure detected - analysis required'; fi",
+            "description": "Detect test failures for auto-analysis"
+          }
+        ]
+      }
+    ]
+  },
+  "autoTest": {
+    "enabled": true,
+    "coverageTarget": 80,
+    "maxIterations": 50,
+    "autoFix": true,
+    "priorities": [
+      "financial-calculations",
+      "authentication",
+      "crud-operations",
+      "ui-interactions",
+      "edge-cases"
+    ]
+  }
+}
