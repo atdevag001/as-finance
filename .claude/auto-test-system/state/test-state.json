@@ -1,0 +1,38 @@
+{
+  "version": "2.0.0",
+  "lastRun": null,
+  "currentPhase": "INIT",
+  "iterations": 0,
+  "coverage": {
+    "e2e": {
+      "totalPages": 32,
+      "testedPages": 22,
+      "percentage": 68
+    },
+    "unit": {
+      "lines": 0,
+      "branches": 0,
+      "functions": 0,
+      "statements": 0
+    }
+  },
+  "modules": {
+    "loans": { "status": "PENDING", "tests": 0, "passing": 0, "failing": 0 },
+    "customers": { "status": "PENDING", "tests": 0, "passing": 0, "failing": 0 },
+    "collections": { "status": "PENDING", "tests": 0, "passing": 0, "failing": 0 },
+    "accounting": { "status": "COMPLETE", "tests": 20, "passing": 20, "failing": 0 },
+    "groups": { "status": "COMPLETE", "tests": 15, "passing": 15, "failing": 0 },
+    "users": { "status": "COMPLETE", "tests": 29, "passing": 29, "failing": 0 },
+    "settings": { "status": "COMPLETE", "tests": 16, "passing": 16, "failing": 0 },
+    "reports": { "status": "COMPLETE", "tests": 12, "passing": 12, "failing": 0 },
+    "cashbook": { "status": "COMPLETE", "tests": 18, "passing": 18, "failing": 0 },
+    "receipts": { "status": "PENDING", "tests": 0, "passing": 0, "failing": 0 },
+    "audit": { "status": "COMPLETE", "tests": 21, "passing": 21, "failing": 0 },
+    "profile": { "status": "COMPLETE", "tests": 8, "passing": 8, "failing": 0 }
+  },
+  "failures": [],
+  "bugsFixed": [],
+  "testsGenerated": [],
+  "checkpoints": [],
+  "flakiness": {}
+}
