@@ -10,11 +10,28 @@ const API_BASE_URL = process.env['NEXT_PUBLIC_API_URL'] || 'http://localhost:300
 let accessToken: string | null = null;
 let refreshPromise: Promise<string | null> | null = null;
 
+/**
+ * Read access_token from document.cookie (client-side only).
+ * Used to initialize accessToken from cookie on page load for pre-authenticated sessions.
+ */
+function getTokenFromCookie(): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(/(?:^|;\s*)access_token=([^;]*)/);
+  return match ? match[1] : null;
+}
+
 export function setAccessToken(token: string | null) {
   accessToken = token;
 }
 
 export function getAccessToken(): string | null {
+  // If in-memory token is null, try to read from cookie (handles pre-authenticated E2E tests)
+  if (!accessToken) {
+    const cookieToken = getTokenFromCookie();
+    if (cookieToken) {
+      accessToken = cookieToken;
+    }
+  }
   return accessToken;
 }
 

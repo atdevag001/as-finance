@@ -38,6 +38,17 @@ function getJwtExpiry(token: string): number | null {
   }
 }
 
+/** Decode JWT payload to extract user info */
+function decodeJwt(token: string): { sub: string; role: string; exp: number } | null {
+  try {
+    const [, payload] = token.split('.');
+    if (!payload) return null;
+    return JSON.parse(atob(payload));
+  } catch {
+    return null;
+  }
+}
+
 export interface AuthUser {
   id: string;
   username: string;
@@ -150,10 +161,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     async function restore() {
-      // Skip restore if we already have an access token (e.g., just logged in)
-      if (getAccessToken()) {
-        setState((prev) => ({ ...prev, isLoading: false }));
-        return;
+      // Skip restore if we already have an access token (e.g., just logged in or from cookie)
+      const existingToken = getAccessToken();
+      if (existingToken) {
+        // Token exists - decode it to get user info and mark as authenticated
+        const payload = decodeJwt(existingToken);
+        if (payload && payload.exp * 1000 > Date.now()) {
+          // Token is valid and not expired - create minimal user from JWT
+          const minimalUser: AuthUser = {
+            id: payload.sub,
+            username: '', // Not in JWT, will be filled on next refresh
+            fullName: '', // Not in JWT, will be filled on next refresh
+            role: payload.role,
+          };
+          setState({ user: minimalUser, isLoading: false, isAuthenticated: true });
+          return;
+        }
+        // Token expired, fall through to refresh
       }
       try {
         const data = await apiClient.post<{ accessToken: string; user: AuthUser }>(

@@ -102,8 +102,8 @@ setup('authenticate all roles', async ({ page }) => {
 
     // Wait between logins to avoid rate limiting (10 req/60s)
     // Space out requests to ensure we stay under the limit
-    console.log(`  ⏳ Waiting 8 seconds before next login...`);
-    await page.waitForTimeout(8_000);
+    console.log(`  ⏳ Waiting 15 seconds before next login...`);
+    await page.waitForTimeout(15_000);
   }
 
   console.log('✅ All auth states created');
