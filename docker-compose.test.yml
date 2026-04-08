@@ -1,0 +1,67 @@
+version: "3.8"
+
+# Docker Compose for E2E testing
+# This runs API, Web, and Playwright tests in Docker with proper networking
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: asfinance-test-postgres
+    environment:
+      POSTGRES_USER: asfinance
+      POSTGRES_PASSWORD: asfinance_dev
+      POSTGRES_DB: asfinance_lms
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U asfinance -d asfinance_lms"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: asfinance-test-api
+    environment:
+      DATABASE_URL: postgresql://asfinance:asfinance_dev@postgres:5432/asfinance_lms
+      JWT_SECRET: test-jwt-secret-for-e2e-tests
+      NODE_ENV: development
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://api:3001
+    container_name: asfinance-test-web
+    environment:
+      NEXT_PUBLIC_API_URL: http://api:3001
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  playwright:
+    image: mcr.microsoft.com/playwright:v1.58.2-noble
+    container_name: asfinance-test-playwright
+    working_dir: /app/apps/web/test
+    environment:
+      BASE_URL: http://web:3000
+    volumes:
+      - .:/app
+      - ./apps/web/test/test-results:/app/apps/web/test/test-results
+      - ./apps/web/playwright-report:/app/apps/web/playwright-report
+    depends_on:
+      - web
+    command: npx playwright test --reporter=html

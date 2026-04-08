@@ -3,9 +3,9 @@
  * and request_id propagation.
  */
 
-const API_BASE_URL =
-  (typeof process !== 'undefined' ? process.env['NEXT_PUBLIC_API_URL'] : undefined) ??
-  'http://localhost:3001';
+// API URL for the backend server
+// Uses NEXT_PUBLIC_API_URL env var, falling back to localhost for development
+const API_BASE_URL = process.env['NEXT_PUBLIC_API_URL'] || 'http://localhost:3001';
 
 let accessToken: string | null = null;
 let refreshPromise: Promise<string | null> | null = null;
@@ -19,7 +19,17 @@ export function getAccessToken(): string | null {
 }
 
 function generateRequestId(): string {
-  return crypto.randomUUID();
+  // Use crypto.randomUUID if available (requires secure context),
+  // otherwise fall back to a random string
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  // Fallback for insecure contexts (HTTP)
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
 }
 
 async function refreshAccessToken(): Promise<string | null> {

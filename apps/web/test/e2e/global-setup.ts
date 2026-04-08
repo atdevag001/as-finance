@@ -1,6 +1,6 @@
 import { chromium, type FullConfig } from '@playwright/test';
 import { login, TEST_USERS } from './fixtures/auth.fixture';
-import path from 'path';
+import * as path from 'path';
 
 /**
  * Global setup - authenticate as manager once and save the session.

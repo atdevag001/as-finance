@@ -150,7 +150,7 @@ export async function createTestLoan(
       '/loan-products?limit=1',
       token,
     );
-    if (!products.data?.length) {
+    if (!products.data || products.data.length === 0) {
       throw new Error('No loan products found');
     }
     productId = products.data[0].id;

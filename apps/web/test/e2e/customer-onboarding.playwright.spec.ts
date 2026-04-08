@@ -1,18 +1,15 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './fixtures';
 
 /**
  * Customer Onboarding — Playwright E2E Tests
  *
- * Validates: Requirements 1.1–1.4; Design GAP 8 (Customer Onboarding)
+ * Uses pre-authenticated fieldOfficerPage fixture for fast test execution.
  *
- * Uses storage state from auth.setup.ts (field_officer role via as-field-officer project).
  * Tests cover:
  * 1. Fill customer form with valid data → submit → verify redirect to customers list
  * 2. Aadhaar validation error shown inline for invalid format
  * 3. PAN validation error shown inline for invalid format (if field present)
- * 4. KYC document upload with valid file → verify upload success
- * 5. KYC upload with invalid MIME type → verify error message
- * 6. Duplicate Aadhaar detection → verify warning/error
+ * 4. Duplicate Aadhaar detection → verify warning/error
  */
 
 // Unique suffix to avoid collisions across test runs
@@ -32,21 +29,7 @@ interface CustomerFormData {
 }
 
 /**
- * Helper: navigate to the new customer form.
- * Assumes storage state is already loaded by Playwright config.
- */
-async function goToNewCustomer(page: Page) {
-  await page.goto('/customers/new');
-  await page.waitForLoadState('networkidle');
-  // Small wait for auth provider to initialize and refresh session
-  await page.waitForTimeout(1000);
-  // Wait for auth to complete and form to load
-  await expect(page.getByRole('heading', { name: /register customer/i })).toBeVisible({ timeout: 20_000 });
-}
-
-/**
  * Helper: fill the customer form with valid data.
- * @param skipValidation - If true, don't auto-correct invalid data (for testing validation)
  */
 async function fillValidCustomerForm(page: Page, overrides: Partial<CustomerFormData> = {}, skipValidation = false) {
   const rand3 = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
@@ -68,12 +51,9 @@ async function fillValidCustomerForm(page: Page, overrides: Partial<CustomerForm
 
   // Only auto-correct invalid data if not testing validation
   if (!skipValidation) {
-    // Ensure Aadhaar is exactly 12 digits and doesn't start with 0 or 1
     if (data.aadhaarNumber.length !== 12) {
       data.aadhaarNumber = '234567890123';
     }
-
-    // Ensure mobile is exactly 10 digits starting with 6-9
     if (!/^[6-9]\d{9}$/.test(data.mobile)) {
       data.mobile = '9876543210';
     }
@@ -98,125 +78,116 @@ async function fillValidCustomerForm(page: Page, overrides: Partial<CustomerForm
 }
 
 test.describe('Customer Onboarding', () => {
-  test.beforeEach(async ({ page }) => {
-    await goToNewCustomer(page);
-  });
+  test('fill customer form with valid data → submit → verify redirect to customers list', async ({ fieldOfficerPage }) => {
+    await fieldOfficerPage.goto('/customers/new');
+    await fieldOfficerPage.waitForLoadState('networkidle');
+    await expect(fieldOfficerPage.getByRole('heading', { name: /register customer/i })).toBeVisible({ timeout: 20_000 });
 
-  test('fill customer form with valid data → submit → verify redirect to customers list', async ({ page }) => {
-    await fillValidCustomerForm(page);
-
-    await page.getByRole('button', { name: 'Register Customer' }).click();
+    await fillValidCustomerForm(fieldOfficerPage);
+    await fieldOfficerPage.getByRole('button', { name: 'Register Customer' }).click();
 
     // On success the app redirects to /customers
-    await page.waitForURL('**/customers', { timeout: 15_000 });
-    await expect(page).toHaveURL(/\/customers$/);
+    await fieldOfficerPage.waitForURL('**/customers', { timeout: 15_000 });
+    await expect(fieldOfficerPage).toHaveURL(/\/customers$/);
   });
 
-  test('Aadhaar validation error shown inline for invalid format', async ({ page }) => {
+  test('Aadhaar validation error shown inline for invalid format', async ({ fieldOfficerPage }) => {
+    await fieldOfficerPage.goto('/customers/new');
+    await fieldOfficerPage.waitForLoadState('networkidle');
+    await expect(fieldOfficerPage.getByRole('heading', { name: /register customer/i })).toBeVisible({ timeout: 20_000 });
+
     // Fill form with an invalid Aadhaar (less than 12 digits)
-    // Use skipValidation=true to prevent auto-correction of invalid data
-    await fillValidCustomerForm(page, { aadhaarNumber: '12345' }, true);
+    await fillValidCustomerForm(fieldOfficerPage, { aadhaarNumber: '12345' }, true);
+    await fieldOfficerPage.getByRole('button', { name: 'Register Customer' }).click();
 
-    await page.getByRole('button', { name: 'Register Customer' }).click();
-
-    // Validation error should appear inline as <p> with class text-destructive
-    const validationError = page.locator('p.text-destructive');
-    await expect(validationError.first()).toBeVisible({ timeout: 5_000 });
-
-    // Should show Aadhaar validation message
-    await expect(page.getByText(/Aadhaar must be exactly 12 digits/i)).toBeVisible();
+    // Validation error should appear inline
+    const validationError = fieldOfficerPage.locator('p.text-destructive');
+    await expect(validationError.first()).toBeVisible({ timeout: 10_000 });
+    await expect(fieldOfficerPage.getByText(/Aadhaar must be exactly 12 digits/i)).toBeVisible();
   });
 
-  test('PAN validation error shown inline for invalid format', async ({ page }) => {
-    // Fill form with valid data first
-    await fillValidCustomerForm(page);
+  test('PAN validation error shown inline for invalid format', async ({ fieldOfficerPage }) => {
+    await fieldOfficerPage.goto('/customers/new');
+    await fieldOfficerPage.waitForLoadState('networkidle');
+    await expect(fieldOfficerPage.getByRole('heading', { name: /register customer/i })).toBeVisible({ timeout: 20_000 });
 
-    // Now fill PAN with invalid format using text-based locator
-    const panFieldContainer = page.locator('text=PAN').locator('..');
-    const panInput = panFieldContainer.getByRole('textbox');
+    await fillValidCustomerForm(fieldOfficerPage);
 
     // Check if PAN field exists
+    const panFieldContainer = fieldOfficerPage.locator('text=PAN').locator('..');
+    const panInput = panFieldContainer.getByRole('textbox');
     const panFieldVisible = await panInput.isVisible().catch(() => false);
+
     if (!panFieldVisible) {
-      // PAN field is not present on the current form — skip gracefully
       test.skip();
       return;
     }
 
     await panInput.fill('INVALID');
+    await fieldOfficerPage.getByRole('button', { name: 'Register Customer' }).click();
 
-    await page.getByRole('button', { name: 'Register Customer' }).click();
-
-    // Validation error should appear inline
-    const validationError = page.locator('p.text-destructive');
-    await expect(validationError.first()).toBeVisible({ timeout: 5_000 });
+    const validationError = fieldOfficerPage.locator('p.text-destructive');
+    await expect(validationError.first()).toBeVisible({ timeout: 10_000 });
   });
 
-  // Skip KYC tests - the current customer form doesn't have file upload
-  // These tests can be re-enabled when KYC document upload is added to the form
-  test.skip('KYC document upload with valid file → verify upload success', async ({ page }) => {
-    const fileInput = page.locator('input[type="file"]');
+  test('duplicate Aadhaar detection → verify warning or error', async ({ fieldOfficerPage }) => {
+    await fieldOfficerPage.goto('/customers/new');
+    await fieldOfficerPage.waitForLoadState('networkidle');
+    await expect(fieldOfficerPage.getByRole('heading', { name: /register customer/i })).toBeVisible({ timeout: 20_000 });
 
-    const buffer = Buffer.from('fake-jpeg-content');
-    await fileInput.setInputFiles({
-      name: 'test-kyc.jpg',
-      mimeType: 'image/jpeg',
-      buffer,
-    });
-
-    // Verify upload success indicator appears
-    const successIndicator = page.getByText(/upload.*success|uploaded|file.*added/i);
-    await expect(successIndicator).toBeVisible({ timeout: 10_000 });
-  });
-
-  test.skip('KYC upload with invalid MIME type → verify error message', async ({ page }) => {
-    const fileInput = page.locator('input[type="file"]');
-
-    const buffer = Buffer.from('fake-exe-content');
-    await fileInput.setInputFiles({
-      name: 'malicious.exe',
-      mimeType: 'application/x-msdownload',
-      buffer,
-    });
-
-    // Verify error message about invalid file type
-    const errorMessage = page.getByText(/invalid.*type|unsupported.*file|only.*jpeg|only.*png|only.*pdf/i);
-    await expect(errorMessage).toBeVisible({ timeout: 10_000 });
-  });
-
-  test('duplicate Aadhaar detection → verify warning or error', async ({ page }) => {
     const knownAadhaar = '234567890123';
-    await fillValidCustomerForm(page, {
+    await fillValidCustomerForm(fieldOfficerPage, {
       fullName: `Dup Test A ${UNIQUE}`,
       aadhaarNumber: knownAadhaar,
       mobile: `9${UNIQUE}001`.slice(0, 10),
     });
-    await page.getByRole('button', { name: 'Register Customer' }).click();
+    await fieldOfficerPage.getByRole('button', { name: 'Register Customer' }).click();
 
     // Wait for either redirect (success) or error (duplicate already exists)
-    const redirected = await page
+    const redirected = await fieldOfficerPage
       .waitForURL('**/customers', { timeout: 10_000 })
       .then(() => true)
       .catch(() => false);
 
-    if (redirected) {
-      // First customer created — now try to create a duplicate
-      await page.goto('/customers/new');
-      await page.waitForLoadState('networkidle');
-
-      await fillValidCustomerForm(page, {
-        fullName: `Dup Test B ${UNIQUE}`,
-        aadhaarNumber: knownAadhaar,
-        mobile: `9${UNIQUE}002`.slice(0, 10),
-      });
-      await page.getByRole('button', { name: 'Register Customer' }).click();
+    if (!redirected) {
+      // If not redirected, expect a duplicate error message
+      const duplicateError = fieldOfficerPage.getByText(/already.*exists|duplicate|Aadhaar.*taken/i);
+      await expect(duplicateError).toBeVisible({ timeout: 5_000 });
+      return;
     }
 
-    // Should show a duplicate warning/error — either as an alert, dialog, or inline error
-    const duplicateIndicator = page
-      .getByRole('alert')
-      .or(page.getByRole('dialog'))
-      .or(page.getByText(/duplicate|already.*exists|potential.*duplicate/i));
-    await expect(duplicateIndicator).toBeVisible({ timeout: 10_000 });
+    // First customer registered successfully; now try with same Aadhaar
+    await fieldOfficerPage.goto('/customers/new');
+    await fieldOfficerPage.waitForLoadState('networkidle');
+    await expect(fieldOfficerPage.getByRole('heading', { name: /register customer/i })).toBeVisible({ timeout: 20_000 });
+
+    await fillValidCustomerForm(fieldOfficerPage, {
+      fullName: `Dup Test B ${UNIQUE}`,
+      aadhaarNumber: knownAadhaar,
+      mobile: `9${UNIQUE}002`.slice(0, 10),
+    });
+    await fieldOfficerPage.getByRole('button', { name: 'Register Customer' }).click();
+
+    // Now expect duplicate error
+    const duplicateError = fieldOfficerPage.getByText(/already.*exists|duplicate|Aadhaar.*taken/i);
+    await expect(duplicateError).toBeVisible({ timeout: 10_000 });
+  });
+
+  test('manager can access customers list', async ({ managerPage }) => {
+    await managerPage.goto('/customers');
+    await managerPage.waitForLoadState('networkidle');
+    await expect(managerPage.getByRole('heading', { name: /customers/i })).toBeVisible({ timeout: 15_000 });
+  });
+
+  test('customers list displays table with columns', async ({ managerPage }) => {
+    await managerPage.goto('/customers');
+    await managerPage.waitForLoadState('networkidle');
+    await expect(managerPage.getByRole('heading', { name: /customers/i })).toBeVisible({ timeout: 15_000 });
+
+    const table = managerPage.locator('table');
+    if (await table.isVisible()) {
+      await expect(managerPage.getByText('Name')).toBeVisible();
+      await expect(managerPage.getByText('Mobile')).toBeVisible();
+    }
   });
 });

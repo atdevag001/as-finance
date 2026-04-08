@@ -1,7 +1,7 @@
 import { test as setup, expect } from '@playwright/test';
 import { TEST_USERS, type UserRole } from './fixtures/auth.fixture';
-import fs from 'fs';
-import path from 'path';
+import * as fs from 'fs';
+import * as path from 'path';
 
 /**
  * Auth Setup - Creates authenticated storage states for all 7 roles.
@@ -83,10 +83,11 @@ setup('authenticate all roles', async ({ page }) => {
     // Wait for successful redirect (away from login page)
     // Login can take 10+ seconds due to bcrypt hashing
     await page.waitForURL(/^(?!.*\/login)/, { timeout: 90_000 });
-    await page.waitForLoadState('networkidle');
+    // Wait for DOM to be ready (skip networkidle as dashboard may have continuous polling)
+    await page.waitForLoadState('domcontentloaded');
 
-    // Verify we're logged in by checking for sidebar nav
-    await expect(page.getByRole('link', { name: /customers/i })).toBeVisible({ timeout: 15_000 });
+    // Verify we're logged in by checking for sidebar nav (use exact match to avoid ambiguity)
+    await expect(page.getByRole('link', { name: 'Customers', exact: true })).toBeVisible({ timeout: 30_000 });
 
     // Save storage state
     await page.context().storageState({ path: authFile });

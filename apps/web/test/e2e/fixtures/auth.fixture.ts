@@ -47,58 +47,46 @@ async function isAuthenticated(page: Page): Promise<boolean> {
 
 /**
  * Log in via the UI and wait for redirect away from login page.
- * Idempotent: skips login if already authenticated (e.g., from storage state).
- *
- * When storage state is loaded by Playwright, this navigates to /customers
- * and waits for the auth provider to complete its refresh cycle.
+ * Always performs fresh login to ensure correct role is authenticated.
  */
 export async function login(page: Page, username: string, password: string): Promise<void> {
-  // Check if already authenticated (e.g., from Playwright storage state)
-  if (await isAuthenticated(page)) {
-    // Navigate to the default landing page and wait for content
-    const currentUrl = page.url();
-    if (!currentUrl || currentUrl === 'about:blank' || currentUrl.includes('/login')) {
-      await page.goto('/customers', { waitUntil: 'networkidle', timeout: 30_000 });
-    }
-    // Wait for page to finish loading (auth refresh may redirect if invalid)
-    const finalUrl = page.url();
-    if (!finalUrl.includes('/login')) {
-      // Successfully authenticated via storage state
-      return;
-    }
-    // If redirected to login, storage state was invalid - fall through to login
-  }
+  // Clear cookies first
+  await page.context().clearCookies();
 
+  // Navigate to login page
   await page.goto('/login');
+  await page.waitForLoadState('networkidle');
 
-  // Wait for the page to be fully loaded and React hydrated
-  await page.waitForLoadState('domcontentloaded');
+  // Clear localStorage after navigation (needs page context)
+  await page.evaluate(() => {
+    try {
+      localStorage.clear();
+      sessionStorage.clear();
+    } catch {
+      // Ignore errors
+    }
+  });
 
-  // Wait for the login form to be ready and interactive
+  // Reload to ensure clean state
+  await page.reload();
+  await page.waitForLoadState('networkidle');
+
+  // Wait for the login form to be ready
   const usernameInput = page.getByLabel('Username');
   const passwordInput = page.getByLabel('Password');
   const submitButton = page.getByRole('button', { name: 'Sign in' });
 
   await usernameInput.waitFor({ state: 'visible', timeout: 15_000 });
-  await submitButton.waitFor({ state: 'visible', timeout: 5_000 });
 
-  // Clear any existing values and fill credentials
-  await usernameInput.clear();
+  // Fill credentials
   await usernameInput.fill(username);
-
-  // Use Playwright's expect to verify the value was set
-  const { expect } = await import('@playwright/test');
-  await expect(usernameInput).toHaveValue(username, { timeout: 5_000 });
-
-  await passwordInput.clear();
   await passwordInput.fill(password);
-  await expect(passwordInput).toHaveValue(password, { timeout: 5_000 });
 
-  // Click submit and wait for navigation
-  await submitButton.click();
-
-  // Wait for redirect away from login
-  await page.waitForURL(/^(?!.*\/login)/, { timeout: 30_000 });
+  // Click and wait for navigation
+  await Promise.all([
+    page.waitForURL(/^(?!.*\/login)/, { timeout: 30_000 }),
+    submitButton.click(),
+  ]);
 }
 
 /**

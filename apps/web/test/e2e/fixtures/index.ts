@@ -6,8 +6,9 @@
  * @module fixtures
  */
 
-// Export the extended test and expect
+// Export the extended test, expect, and Page type
 export { test, expect } from './base.fixture';
+export type { Page, BrowserContext } from '@playwright/test';
 
 // Export auth utilities
 export {
