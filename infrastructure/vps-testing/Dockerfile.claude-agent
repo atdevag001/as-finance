@@ -1,0 +1,32 @@
+# Claude Code Agent Container
+# For autonomous test generation and bug fixing
+
+FROM node:20-alpine
+
+# Install required tools
+RUN apk add --no-cache \
+    bash \
+    curl \
+    git \
+    jq \
+    openssh-client
+
+# Install pnpm
+RUN npm install -g pnpm@9.15.4
+
+# Install Claude Code CLI (when available as npm package)
+# For now, we'll use the API directly
+RUN npm install -g @anthropic-ai/sdk
+
+# Create workspace
+WORKDIR /workspace
+
+# Copy agent scripts
+COPY infrastructure/vps-testing/scripts/claude-agent.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/claude-agent.sh
+
+# Environment
+ENV WORKSPACE=/workspace
+
+# Keep running
+CMD ["tail", "-f", "/dev/null"]

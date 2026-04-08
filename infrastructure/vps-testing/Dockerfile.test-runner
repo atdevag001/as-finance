@@ -1,0 +1,47 @@
+# Test Runner Image
+# Optimized for parallel Playwright execution with high memory
+
+FROM mcr.microsoft.com/playwright:v1.42.0-jammy
+
+# Install Node.js 20
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
+    npm install -g pnpm@9.15.4
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/web/package.json ./apps/web/
+COPY apps/api/package.json ./apps/api/
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/config/package.json ./packages/config/
+COPY packages/testing/package.json ./packages/testing/
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile
+
+# Copy source code
+COPY . .
+
+# Build packages
+RUN pnpm --filter @as-finance/shared build
+
+# Install Playwright browsers with all dependencies
+RUN npx playwright install --with-deps chromium firefox webkit
+
+# Create test results directory
+RUN mkdir -p /app/test-results
+
+# Copy test runner scripts
+COPY infrastructure/vps-testing/scripts/ /app/scripts/
+RUN chmod +x /app/scripts/*.sh
+
+# Environment variables
+ENV NODE_ENV=test
+ENV CI=true
+ENV PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright
+
+# Default command - keep container running
+CMD ["tail", "-f", "/dev/null"]

@@ -1,0 +1,26 @@
+# Web Server Image
+FROM node:20-alpine
+
+RUN npm install -g pnpm@9.15.4
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/web/package.json ./apps/web/
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/config/package.json ./packages/config/
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile
+
+# Copy source
+COPY . .
+
+# Build
+RUN pnpm --filter @as-finance/shared build
+
+WORKDIR /app/apps/web
+
+# Run in dev mode for testing (faster startup)
+CMD ["pnpm", "dev"]

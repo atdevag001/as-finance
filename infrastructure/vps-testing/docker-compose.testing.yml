@@ -1,0 +1,260 @@
+version: '3.8'
+
+# AS-Finance Autonomous Testing Infrastructure
+# Optimized for 4 vCPU + 64GB RAM VPS
+#
+# Usage:
+#   docker compose -f docker-compose.testing.yml up -d
+#   docker compose -f docker-compose.testing.yml exec test-runner ./run-tests.sh
+
+services:
+  # ============================================
+  # DATABASE - PostgreSQL with optimized config
+  # ============================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: asf-test-db
+    environment:
+      POSTGRES_USER: asfinance
+      POSTGRES_PASSWORD: asfinance_test
+      POSTGRES_DB: asfinance_lms
+      # Optimized for 64GB RAM VPS
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_buffers=4GB"
+      - "-c"
+      - "effective_cache_size=16GB"
+      - "-c"
+      - "maintenance_work_mem=1GB"
+      - "-c"
+      - "checkpoint_completion_target=0.9"
+      - "-c"
+      - "wal_buffers=64MB"
+      - "-c"
+      - "max_connections=200"
+      - "-c"
+      - "random_page_cost=1.1"
+      - "-c"
+      - "effective_io_concurrency=200"
+      - "-c"
+      - "work_mem=64MB"
+      - "-c"
+      - "min_wal_size=2GB"
+      - "-c"
+      - "max_wal_size=8GB"
+      - "-c"
+      - "max_parallel_workers_per_gather=2"
+      - "-c"
+      - "max_parallel_workers=4"
+      - "-c"
+      - "max_parallel_maintenance_workers=2"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U asfinance -d asfinance_lms"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 4G
+
+  # ============================================
+  # REDIS - For caching and rate limiting
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: asf-test-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --maxmemory 2gb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
+  # ============================================
+  # API SERVER - NestJS Backend
+  # ============================================
+  api:
+    build:
+      context: ../..
+      dockerfile: infrastructure/vps-testing/Dockerfile.api
+    container_name: asf-test-api
+    environment:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://asfinance:asfinance_test@postgres:5432/asfinance_lms?schema=public
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: test-jwt-secret-minimum-32-characters-long
+      JWT_EXPIRY: 15m
+      PORT: 3001
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1'
+        reservations:
+          memory: 512M
+
+  # ============================================
+  # WEB SERVER - Next.js Frontend
+  # ============================================
+  web:
+    build:
+      context: ../..
+      dockerfile: infrastructure/vps-testing/Dockerfile.web
+    container_name: asf-test-web
+    environment:
+      NODE_ENV: test
+      NEXT_PUBLIC_API_URL: http://api:3001
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1'
+        reservations:
+          memory: 512M
+
+  # ============================================
+  # TEST RUNNER - Playwright + Test Framework
+  # ============================================
+  test-runner:
+    build:
+      context: ../..
+      dockerfile: infrastructure/vps-testing/Dockerfile.test-runner
+    container_name: asf-test-runner
+    environment:
+      NODE_ENV: test
+      BASE_URL: http://web:3000
+      API_URL: http://api:3001
+      DATABASE_URL: postgresql://asfinance:asfinance_test@postgres:5432/asfinance_lms?schema=public
+      CI: "true"
+      # Playwright parallel workers - maximize with 64GB RAM
+      PLAYWRIGHT_WORKERS: 16
+      # Test output
+      TEST_RESULTS_DIR: /app/test-results
+    volumes:
+      - test_results:/app/test-results
+      - playwright_cache:/root/.cache/ms-playwright
+      - ./test-state:/app/.claude/auto-test-system/state
+    depends_on:
+      web:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    # Keep running for interactive use
+    tty: true
+    stdin_open: true
+    deploy:
+      resources:
+        limits:
+          memory: 32G  # Most RAM for parallel browsers
+          cpus: '2'
+        reservations:
+          memory: 8G
+
+  # ============================================
+  # CLAUDE CODE AGENT - For autonomous testing
+  # ============================================
+  claude-agent:
+    build:
+      context: ../..
+      dockerfile: infrastructure/vps-testing/Dockerfile.claude-agent
+    container_name: asf-claude-agent
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      WORKSPACE: /workspace
+      TEST_RUNNER_HOST: test-runner
+    volumes:
+      - ../../:/workspace
+      - test_results:/workspace/test-results
+      - ./test-state:/workspace/.claude/auto-test-system/state
+    depends_on:
+      - test-runner
+    tty: true
+    stdin_open: true
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '0.5'
+
+  # ============================================
+  # MONITORING - Grafana + Prometheus (optional)
+  # ============================================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: asf-prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    profiles:
+      - monitoring
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: asf-grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3030:3000"
+    profiles:
+      - monitoring
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+volumes:
+  postgres_data:
+  test_results:
+  playwright_cache:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  default:
+    name: asf-testing-network
