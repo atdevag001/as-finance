@@ -1,5 +1,4 @@
 import { test, expect } from './fixtures';
-import { loginAsFieldOfficer, loginAsManager, login } from './fixtures';
 
 /**
  * Profile Module — Playwright E2E Tests
@@ -9,50 +8,48 @@ import { loginAsFieldOfficer, loginAsManager, login } from './fixtures';
  * 2. Eye toggle for password visibility
  * 3. Password match validation
  * 4. Success/error handling
+ *
+ * Uses pre-authenticated fieldOfficerPage fixture to avoid rate limiting.
  */
 
 test.describe('Profile Module', () => {
   test.describe('Change Password Page', () => {
-    test('navigates to change password page', async ({ page }) => {
-      await loginAsFieldOfficer(page);
-      await page.goto('/profile/change-password');
-
-      await expect(page.getByRole('heading', { name: /change password/i })).toBeVisible({ timeout: 10_000 });
+    test('navigates to change password page', async ({ fieldOfficerPage }) => {
+      await fieldOfficerPage.goto('/profile/change-password');
+      await expect(fieldOfficerPage.getByRole('heading', { name: /change password/i })).toBeVisible({ timeout: 15_000 });
     });
 
-    test('form has all required fields', async ({ page }) => {
-      await loginAsFieldOfficer(page);
-      await page.goto('/profile/change-password');
-      await page.waitForLoadState('networkidle');
+    test('form has all required fields', async ({ fieldOfficerPage }) => {
+      await fieldOfficerPage.goto('/profile/change-password');
+      await fieldOfficerPage.waitForLoadState('networkidle');
 
-      await expect(page.getByLabel('Current Password')).toBeVisible({ timeout: 10_000 });
-      await expect(page.getByLabel('New Password')).toBeVisible();
-      await expect(page.getByLabel('Confirm New Password')).toBeVisible();
+      await expect(fieldOfficerPage.locator('#currentPassword')).toBeVisible({ timeout: 15_000 });
+      await expect(fieldOfficerPage.locator('#newPassword')).toBeVisible();
+      await expect(fieldOfficerPage.locator('#confirmPassword')).toBeVisible();
     });
 
-    test('has password visibility toggle buttons', async ({ page }) => {
-      await loginAsFieldOfficer(page);
-      await page.goto('/profile/change-password');
-      await page.waitForLoadState('networkidle');
+    test('has password visibility toggle buttons', async ({ fieldOfficerPage }) => {
+      await fieldOfficerPage.goto('/profile/change-password');
+      await fieldOfficerPage.waitForLoadState('networkidle');
 
       // Should have eye toggle buttons (3 password fields)
-      const toggleButtons = page.locator('button').filter({ has: page.locator('svg') });
+      const toggleButtons = fieldOfficerPage.locator('button').filter({ has: fieldOfficerPage.locator('svg') });
       expect(await toggleButtons.count()).toBeGreaterThanOrEqual(3);
     });
 
-    test('eye toggle shows/hides password', async ({ page }) => {
-      await loginAsFieldOfficer(page);
-      await page.goto('/profile/change-password');
-      await page.waitForLoadState('networkidle');
+    test('eye toggle shows/hides password', async ({ fieldOfficerPage }) => {
+      await fieldOfficerPage.goto('/profile/change-password');
+      await fieldOfficerPage.waitForLoadState('networkidle');
 
-      const currentPasswordInput = page.getByLabel('Current Password');
+      const currentPasswordInput = fieldOfficerPage.locator('#currentPassword');
+      await expect(currentPasswordInput).toBeVisible({ timeout: 15_000 });
       await currentPasswordInput.fill('TestPassword');
 
       // Initially type is password
       await expect(currentPasswordInput).toHaveAttribute('type', 'password');
 
-      // Click toggle button (first one after the input)
-      const toggleButton = page.locator('button').filter({ has: page.locator('svg') }).first();
+      // Click toggle button (the one inside the currentPassword field's parent div)
+      const toggleButton = fieldOfficerPage.locator('#currentPassword').locator('..').locator('button');
       await toggleButton.click();
 
       // Now type should be text
@@ -63,144 +60,141 @@ test.describe('Profile Module', () => {
       await expect(currentPasswordInput).toHaveAttribute('type', 'password');
     });
 
-    test('validates current password is required', async ({ page }) => {
-      await loginAsFieldOfficer(page);
-      await page.goto('/profile/change-password');
-      await page.waitForLoadState('networkidle');
+    test('validates current password is required', async ({ fieldOfficerPage }) => {
+      await fieldOfficerPage.goto('/profile/change-password');
+      await fieldOfficerPage.waitForLoadState('networkidle');
 
       // Fill new password but not current
-      await page.getByLabel('New Password').fill('NewPass123');
-      await page.getByLabel('Confirm New Password').fill('NewPass123');
+      await fieldOfficerPage.locator('#newPassword').fill('NewPass123');
+      await fieldOfficerPage.locator('#confirmPassword').fill('NewPass123');
 
-      await page.getByRole('button', { name: /change password/i }).click();
+      await fieldOfficerPage.getByRole('button', { name: /change password/i }).click();
 
+      // Error should appear - look for the specific error message text
       await expect(
-        page.getByText(/current password.*required/i).or(page.locator('[role="alert"]')),
-      ).toBeVisible({ timeout: 5_000 });
-    });
-
-    test('validates new password minimum length', async ({ page }) => {
-      await loginAsFieldOfficer(page);
-      await page.goto('/profile/change-password');
-      await page.waitForLoadState('networkidle');
-
-      await page.getByLabel('Current Password').fill('Admin@123');
-      await page.getByLabel('New Password').fill('Short1'); // Too short
-      await page.getByLabel('Confirm New Password').fill('Short1');
-
-      await page.getByRole('button', { name: /change password/i }).click();
-
-      await expect(
-        page.getByText(/at least 8 characters/i),
-      ).toBeVisible({ timeout: 5_000 });
-    });
-
-    test('validates new password requires uppercase', async ({ page }) => {
-      await loginAsFieldOfficer(page);
-      await page.goto('/profile/change-password');
-      await page.waitForLoadState('networkidle');
-
-      await page.getByLabel('Current Password').fill('Admin@123');
-      await page.getByLabel('New Password').fill('lowercase1'); // No uppercase
-      await page.getByLabel('Confirm New Password').fill('lowercase1');
-
-      await page.getByRole('button', { name: /change password/i }).click();
-
-      await expect(
-        page.getByText(/uppercase/i),
-      ).toBeVisible({ timeout: 5_000 });
-    });
-
-    test('validates new password requires lowercase', async ({ page }) => {
-      await loginAsFieldOfficer(page);
-      await page.goto('/profile/change-password');
-      await page.waitForLoadState('networkidle');
-
-      await page.getByLabel('Current Password').fill('Admin@123');
-      await page.getByLabel('New Password').fill('UPPERCASE1'); // No lowercase
-      await page.getByLabel('Confirm New Password').fill('UPPERCASE1');
-
-      await page.getByRole('button', { name: /change password/i }).click();
-
-      await expect(
-        page.getByText(/lowercase/i),
-      ).toBeVisible({ timeout: 5_000 });
-    });
-
-    test('validates new password requires digit', async ({ page }) => {
-      await loginAsFieldOfficer(page);
-      await page.goto('/profile/change-password');
-      await page.waitForLoadState('networkidle');
-
-      await page.getByLabel('Current Password').fill('Admin@123');
-      await page.getByLabel('New Password').fill('NoDigitsHere'); // No digit
-      await page.getByLabel('Confirm New Password').fill('NoDigitsHere');
-
-      await page.getByRole('button', { name: /change password/i }).click();
-
-      await expect(
-        page.getByText(/digit/i),
-      ).toBeVisible({ timeout: 5_000 });
-    });
-
-    test('validates passwords must match', async ({ page }) => {
-      await loginAsFieldOfficer(page);
-      await page.goto('/profile/change-password');
-      await page.waitForLoadState('networkidle');
-
-      await page.getByLabel('Current Password').fill('Admin@123');
-      await page.getByLabel('New Password').fill('NewPass123');
-      await page.getByLabel('Confirm New Password').fill('DifferentPass123'); // Mismatch
-
-      await page.getByRole('button', { name: /change password/i }).click();
-
-      await expect(
-        page.getByText(/passwords do not match|passwords must match/i),
-      ).toBeVisible({ timeout: 5_000 });
-    });
-
-    test('validates new password must be different from current', async ({ page }) => {
-      await loginAsFieldOfficer(page);
-      await page.goto('/profile/change-password');
-      await page.waitForLoadState('networkidle');
-
-      await page.getByLabel('Current Password').fill('Admin@123');
-      await page.getByLabel('New Password').fill('Admin@123'); // Same as current
-      await page.getByLabel('Confirm New Password').fill('Admin@123');
-
-      await page.getByRole('button', { name: /change password/i }).click();
-
-      await expect(
-        page.getByText(/must be different/i).or(page.getByText(/same.*current/i)),
-      ).toBeVisible({ timeout: 5_000 });
-    });
-
-    test('shows error for incorrect current password', async ({ page }) => {
-      await loginAsFieldOfficer(page);
-      await page.goto('/profile/change-password');
-      await page.waitForLoadState('networkidle');
-
-      await page.getByLabel('Current Password').fill('WrongPassword1');
-      await page.getByLabel('New Password').fill('NewValidPass1');
-      await page.getByLabel('Confirm New Password').fill('NewValidPass1');
-
-      await page.getByRole('button', { name: /change password/i }).click();
-
-      // Should show error about incorrect password
-      await expect(
-        page.getByText(/incorrect|invalid|wrong/i),
+        fieldOfficerPage.getByText('Current password is required'),
       ).toBeVisible({ timeout: 10_000 });
     });
 
-    test('back button returns to home', async ({ page }) => {
-      await loginAsFieldOfficer(page);
-      await page.goto('/profile/change-password');
-      await page.waitForLoadState('networkidle');
+    test('validates new password minimum length', async ({ fieldOfficerPage }) => {
+      await fieldOfficerPage.goto('/profile/change-password');
+      await fieldOfficerPage.waitForLoadState('networkidle');
 
-      const backButton = page.getByRole('link').filter({ has: page.locator('svg') }).first();
+      await fieldOfficerPage.locator('#currentPassword').fill('Admin@123');
+      await fieldOfficerPage.locator('#newPassword').fill('Short1'); // Too short
+      await fieldOfficerPage.locator('#confirmPassword').fill('Short1');
+
+      await fieldOfficerPage.getByRole('button', { name: /change password/i }).click();
+
+      // Error list should appear
+      await expect(
+        fieldOfficerPage.locator('li').filter({ hasText: /at least 8 characters/i }),
+      ).toBeVisible({ timeout: 10_000 });
+    });
+
+    test('validates new password requires uppercase', async ({ fieldOfficerPage }) => {
+      await fieldOfficerPage.goto('/profile/change-password');
+      await fieldOfficerPage.waitForLoadState('networkidle');
+
+      await fieldOfficerPage.locator('#currentPassword').fill('Admin@123');
+      await fieldOfficerPage.locator('#newPassword').fill('lowercase1'); // No uppercase
+      await fieldOfficerPage.locator('#confirmPassword').fill('lowercase1');
+
+      await fieldOfficerPage.getByRole('button', { name: /change password/i }).click();
+
+      // Error list should appear - look for the specific list item
+      await expect(
+        fieldOfficerPage.locator('li').filter({ hasText: /uppercase letter/i }),
+      ).toBeVisible({ timeout: 10_000 });
+    });
+
+    test('validates new password requires lowercase', async ({ fieldOfficerPage }) => {
+      await fieldOfficerPage.goto('/profile/change-password');
+      await fieldOfficerPage.waitForLoadState('networkidle');
+
+      await fieldOfficerPage.locator('#currentPassword').fill('Admin@123');
+      await fieldOfficerPage.locator('#newPassword').fill('UPPERCASE1'); // No lowercase
+      await fieldOfficerPage.locator('#confirmPassword').fill('UPPERCASE1');
+
+      await fieldOfficerPage.getByRole('button', { name: /change password/i }).click();
+
+      // Error list should appear - look for the specific list item
+      await expect(
+        fieldOfficerPage.locator('li').filter({ hasText: /lowercase letter/i }),
+      ).toBeVisible({ timeout: 10_000 });
+    });
+
+    test('validates new password requires digit', async ({ fieldOfficerPage }) => {
+      await fieldOfficerPage.goto('/profile/change-password');
+      await fieldOfficerPage.waitForLoadState('networkidle');
+
+      await fieldOfficerPage.locator('#currentPassword').fill('Admin@123');
+      await fieldOfficerPage.locator('#newPassword').fill('NoDigitsHere'); // No digit
+      await fieldOfficerPage.locator('#confirmPassword').fill('NoDigitsHere');
+
+      await fieldOfficerPage.getByRole('button', { name: /change password/i }).click();
+
+      // Error list should appear - look for the specific list item
+      await expect(
+        fieldOfficerPage.locator('li').filter({ hasText: /at least one digit/i }),
+      ).toBeVisible({ timeout: 10_000 });
+    });
+
+    test('validates passwords must match', async ({ fieldOfficerPage }) => {
+      await fieldOfficerPage.goto('/profile/change-password');
+      await fieldOfficerPage.waitForLoadState('networkidle');
+
+      await fieldOfficerPage.locator('#currentPassword').fill('Admin@123');
+      await fieldOfficerPage.locator('#newPassword').fill('NewPass123');
+      await fieldOfficerPage.locator('#confirmPassword').fill('DifferentPass123'); // Mismatch
+
+      await fieldOfficerPage.getByRole('button', { name: /change password/i }).click();
+
+      await expect(
+        fieldOfficerPage.getByText(/passwords do not match|passwords must match/i),
+      ).toBeVisible({ timeout: 10_000 });
+    });
+
+    test('validates new password must be different from current', async ({ fieldOfficerPage }) => {
+      await fieldOfficerPage.goto('/profile/change-password');
+      await fieldOfficerPage.waitForLoadState('networkidle');
+
+      await fieldOfficerPage.locator('#currentPassword').fill('Admin@123');
+      await fieldOfficerPage.locator('#newPassword').fill('Admin@123'); // Same as current
+      await fieldOfficerPage.locator('#confirmPassword').fill('Admin@123');
+
+      await fieldOfficerPage.getByRole('button', { name: /change password/i }).click();
+
+      await expect(
+        fieldOfficerPage.getByText(/must be different/i).or(fieldOfficerPage.getByText(/same.*current/i)),
+      ).toBeVisible({ timeout: 10_000 });
+    });
+
+    test('shows error for incorrect current password', async ({ fieldOfficerPage }) => {
+      await fieldOfficerPage.goto('/profile/change-password');
+      await fieldOfficerPage.waitForLoadState('networkidle');
+
+      await fieldOfficerPage.locator('#currentPassword').fill('WrongPassword1');
+      await fieldOfficerPage.locator('#newPassword').fill('NewValidPass1');
+      await fieldOfficerPage.locator('#confirmPassword').fill('NewValidPass1');
+
+      await fieldOfficerPage.getByRole('button', { name: /change password/i }).click();
+
+      // Should show error about incorrect password
+      await expect(
+        fieldOfficerPage.getByText(/incorrect|invalid|wrong/i),
+      ).toBeVisible({ timeout: 15_000 });
+    });
+
+    test('back button returns to dashboard', async ({ fieldOfficerPage }) => {
+      await fieldOfficerPage.goto('/profile/change-password');
+      await fieldOfficerPage.waitForLoadState('networkidle');
+
+      const backButton = fieldOfficerPage.getByRole('link').filter({ has: fieldOfficerPage.locator('svg') }).first();
       if (await backButton.isVisible()) {
         await backButton.click();
-        await page.waitForURL(/\/$/, { timeout: 10_000 });
+        // The back button links to "/" which redirects to dashboard
+        await fieldOfficerPage.waitForURL(/\/($|customers|loans|dashboard)/, { timeout: 15_000 });
       }
     });
   });

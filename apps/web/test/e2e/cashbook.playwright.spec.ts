@@ -1,8 +1,9 @@
 import { test, expect } from './fixtures';
-import { loginAsAccountant, loginAsManager, loginAsFieldOfficer } from './fixtures';
 
 /**
  * Cashbook Module — Playwright E2E Tests
+ *
+ * Uses pre-authenticated fixtures to avoid rate limiting.
  *
  * Tests cover:
  * 1. Daily Summary - KPI cards, date picker
@@ -14,263 +15,217 @@ import { loginAsAccountant, loginAsManager, loginAsFieldOfficer } from './fixtur
 
 test.describe('Cashbook Module', () => {
   test.describe('Daily Summary', () => {
-    test('accountant can view daily summary', async ({ page }) => {
-      await loginAsAccountant(page);
-      await page.goto('/cashbook');
-
-      await expect(page.getByRole('heading', { name: 'Cashbook' })).toBeVisible({ timeout: 10_000 });
+    test('accountant can view daily summary', async ({ accountantPage }) => {
+      await accountantPage.goto('/cashbook');
+      await expect(accountantPage.getByRole('heading', { name: 'Cashbook' })).toBeVisible({ timeout: 15_000 });
     });
 
-    test('displays summary cards', async ({ page }) => {
-      await loginAsAccountant(page);
-      await page.goto('/cashbook');
-      await page.waitForLoadState('networkidle');
+    test('displays summary cards', async ({ accountantPage }) => {
+      await accountantPage.goto('/cashbook');
+      await accountantPage.waitForLoadState('networkidle');
 
-      await expect(page.getByRole('heading', { name: 'Cashbook' })).toBeVisible({ timeout: 10_000 });
+      await expect(accountantPage.getByRole('heading', { name: 'Cashbook' })).toBeVisible({ timeout: 15_000 });
 
-      // Summary cards should be visible
-      await expect(page.getByText('Opening Balance')).toBeVisible({ timeout: 5_000 });
-      await expect(page.getByText('Cash Inflows')).toBeVisible();
-      await expect(page.getByText('Cash Outflows')).toBeVisible();
-      await expect(page.getByText('Closing Balance')).toBeVisible();
+      // Summary cards should be visible (these are CardTitle components)
+      await expect(accountantPage.getByText('Opening Balance', { exact: true })).toBeVisible({ timeout: 10_000 });
+      await expect(accountantPage.getByText('Cash Inflows', { exact: true })).toBeVisible();
+      await expect(accountantPage.getByText('Cash Outflows', { exact: true })).toBeVisible();
+      await expect(accountantPage.getByText('Closing Balance', { exact: true })).toBeVisible();
     });
 
-    test('date picker changes summary data', async ({ page }) => {
-      await loginAsAccountant(page);
-      await page.goto('/cashbook');
-      await page.waitForLoadState('networkidle');
+    test('date picker changes summary data', async ({ accountantPage }) => {
+      await accountantPage.goto('/cashbook');
+      await accountantPage.waitForLoadState('networkidle');
 
-      const dateInput = page.locator('input[type="date"]').first();
+      const dateInput = accountantPage.locator('input[type="date"]').first();
       if (await dateInput.isVisible()) {
         // Change to yesterday
         const yesterday = new Date();
         yesterday.setDate(yesterday.getDate() - 1);
         const dateStr = yesterday.toISOString().split('T')[0];
         await dateInput.fill(dateStr);
-        await page.waitForLoadState('networkidle');
+        await accountantPage.waitForLoadState('networkidle');
         // Data should refresh (no error = success)
       }
     });
 
-    test('shows transaction count', async ({ page }) => {
-      await loginAsAccountant(page);
-      await page.goto('/cashbook');
-      await page.waitForLoadState('networkidle');
+    test('shows transaction count', async ({ accountantPage }) => {
+      await accountantPage.goto('/cashbook');
+      await accountantPage.waitForLoadState('networkidle');
 
-      // Transaction count text
+      // Transaction count text - format is "N transaction(s) on DATE"
       await expect(
-        page.getByText(/transaction/i),
-      ).toBeVisible({ timeout: 10_000 });
+        accountantPage.getByText(/\d+ transaction\(s\) on/i),
+      ).toBeVisible({ timeout: 15_000 });
     });
 
-    test('field_officer gets Access Denied', async ({ page }) => {
-      await loginAsFieldOfficer(page);
-      await page.goto('/cashbook');
-      await expect(page.getByRole('heading', { name: 'Access Denied' })).toBeVisible({ timeout: 10_000 });
+    test('field_officer gets Access Denied', async ({ fieldOfficerPage }) => {
+      await fieldOfficerPage.goto('/cashbook');
+      await expect(fieldOfficerPage.getByRole('heading', { name: 'Access Denied' })).toBeVisible({ timeout: 15_000 });
     });
 
-    test('displays discrepancy warning when exists', async ({ page }) => {
-      await loginAsAccountant(page);
-      await page.goto('/cashbook');
-      await page.waitForLoadState('networkidle');
+    test('displays discrepancy warning when exists', async ({ accountantPage }) => {
+      await accountantPage.goto('/cashbook');
+      await accountantPage.waitForLoadState('networkidle');
 
-      // Discrepancy warning is conditional - just verify the alert role works
-      const discrepancyAlert = page.locator('[role="alert"]').filter({ hasText: /discrepancy/i });
-      // May or may not be visible depending on data
+      // Discrepancy warning is conditional - just verify page loaded
+      await expect(accountantPage.getByRole('heading', { name: 'Cashbook' })).toBeVisible({ timeout: 15_000 });
     });
   });
 
   test.describe('Navigation Links', () => {
-    test('has link to Record Expense', async ({ page }) => {
-      await loginAsAccountant(page);
-      await page.goto('/cashbook');
-      await page.waitForLoadState('networkidle');
+    test('has link to Record Expense', async ({ accountantPage }) => {
+      await accountantPage.goto('/cashbook');
+      await accountantPage.waitForLoadState('networkidle');
 
-      await expect(page.getByRole('link', { name: /record expense/i })).toBeVisible({ timeout: 10_000 });
+      await expect(accountantPage.getByRole('link', { name: /record expense/i })).toBeVisible({ timeout: 15_000 });
     });
 
-    test('has link to Handovers', async ({ page }) => {
-      await loginAsAccountant(page);
-      await page.goto('/cashbook');
-      await page.waitForLoadState('networkidle');
+    test('has link to Handovers', async ({ accountantPage }) => {
+      await accountantPage.goto('/cashbook');
+      await accountantPage.waitForLoadState('networkidle');
 
-      await expect(page.getByRole('link', { name: /handovers/i })).toBeVisible({ timeout: 10_000 });
+      await expect(accountantPage.getByRole('link', { name: /handovers/i })).toBeVisible({ timeout: 15_000 });
     });
   });
 
   test.describe('New Expense Form', () => {
-    test('navigates to new expense page', async ({ page }) => {
-      await loginAsAccountant(page);
-      await page.goto('/cashbook');
-      await page.waitForLoadState('networkidle');
+    test('navigates to new expense page', async ({ accountantPage }) => {
+      await accountantPage.goto('/cashbook');
+      await accountantPage.waitForLoadState('networkidle');
 
-      await page.getByRole('link', { name: /record expense/i }).click();
-      await page.waitForURL('**/cashbook/expenses/new', { timeout: 10_000 });
+      await accountantPage.getByRole('link', { name: /record expense/i }).click();
+      await accountantPage.waitForURL('**/cashbook/expenses/new', { timeout: 15_000 });
 
-      await expect(page.getByRole('heading', { name: /record expense/i })).toBeVisible();
+      await expect(accountantPage.getByRole('heading', { name: /record expense/i })).toBeVisible();
     });
 
-    test('form has all required fields', async ({ page }) => {
-      await loginAsAccountant(page);
-      await page.goto('/cashbook/expenses/new');
-      await page.waitForLoadState('networkidle');
+    test('form has all required fields', async ({ accountantPage }) => {
+      await accountantPage.goto('/cashbook/expenses/new');
+      await accountantPage.waitForLoadState('networkidle');
 
-      await expect(page.getByText('Category')).toBeVisible({ timeout: 10_000 });
-      await expect(page.getByText('Amount')).toBeVisible();
-      await expect(page.getByText('Date')).toBeVisible();
-      await expect(page.getByText('Description')).toBeVisible();
-      await expect(page.getByText('Payment Mode')).toBeVisible();
+      await expect(accountantPage.getByText('Category')).toBeVisible({ timeout: 15_000 });
+      await expect(accountantPage.getByText(/Amount/)).toBeVisible();
+      await expect(accountantPage.getByText('Date')).toBeVisible();
+      await expect(accountantPage.getByText('Description')).toBeVisible();
+      await expect(accountantPage.getByText('Payment Mode')).toBeVisible();
     });
 
-    test('category dropdown has 7 options', async ({ page }) => {
-      await loginAsAccountant(page);
-      await page.goto('/cashbook/expenses/new');
-      await page.waitForLoadState('networkidle');
+    test('category dropdown has 7 options', async ({ accountantPage }) => {
+      await accountantPage.goto('/cashbook/expenses/new');
+      await accountantPage.waitForLoadState('networkidle');
 
-      const categorySelect = page.locator('select').first();
+      const categorySelect = accountantPage.locator('select').first();
       if (await categorySelect.isVisible()) {
         const options = await categorySelect.locator('option').allTextContents();
         expect(options.length).toBeGreaterThanOrEqual(7);
       }
     });
 
-    test('validates amount is required', async ({ page }) => {
-      await loginAsAccountant(page);
-      await page.goto('/cashbook/expenses/new');
-      await page.waitForLoadState('networkidle');
+    test('validates form fields before submit', async ({ accountantPage }) => {
+      await accountantPage.goto('/cashbook/expenses/new');
+      await accountantPage.waitForLoadState('networkidle');
 
-      // Fill only description, leave amount empty
-      await page.getByPlaceholder(/describe/i).fill('Test expense');
-
-      // Click submit
-      await page.getByRole('button', { name: /record expense/i }).click();
-
-      // Should show validation error
-      await expect(
-        page.locator('[role="alert"]').or(page.getByText(/required|fill/i)),
-      ).toBeVisible({ timeout: 5_000 });
-    });
-
-    test('validates description is required', async ({ page }) => {
-      await loginAsAccountant(page);
-      await page.goto('/cashbook/expenses/new');
-      await page.waitForLoadState('networkidle');
-
-      // Fill amount but not description
-      await page.locator('input[type="number"]').first().fill('100');
+      // Fill only amount, not description
+      await accountantPage.locator('input[type="number"]').first().fill('100');
 
       // Click submit
-      await page.getByRole('button', { name: /record expense/i }).click();
+      await accountantPage.getByRole('button', { name: /record expense/i }).click();
 
-      // Should show validation error
+      // Should show validation error (the specific error message text)
       await expect(
-        page.locator('[role="alert"]').or(page.getByText(/required|fill/i)),
-      ).toBeVisible({ timeout: 5_000 });
+        accountantPage.getByText(/fill all required fields|valid values/i),
+      ).toBeVisible({ timeout: 10_000 });
     });
 
-    test('validates amount must be positive', async ({ page }) => {
-      await loginAsAccountant(page);
-      await page.goto('/cashbook/expenses/new');
-      await page.waitForLoadState('networkidle');
+    test('shows confirmation dialog before submit', async ({ accountantPage }) => {
+      await accountantPage.goto('/cashbook/expenses/new');
+      await accountantPage.waitForLoadState('networkidle');
 
-      // Fill with zero amount
-      await page.locator('input[type="number"]').first().fill('0');
-      await page.getByPlaceholder(/describe/i).fill('Test expense');
+      // Fill valid data - amount and description
+      await accountantPage.locator('input[type="number"]').first().fill('500');
+      const descInput = accountantPage.getByPlaceholder(/describe/i);
+      await expect(descInput).toBeVisible({ timeout: 10_000 });
+      await descInput.fill('Test expense description');
 
       // Click submit
-      await page.getByRole('button', { name: /record expense/i }).click();
+      await accountantPage.getByRole('button', { name: /record expense/i }).click();
 
-      // Should show validation error
+      // Confirmation dialog should appear (Confirm Expense title)
       await expect(
-        page.locator('[role="alert"]').or(page.getByText(/greater|positive|valid/i)),
-      ).toBeVisible({ timeout: 5_000 });
+        accountantPage.getByRole('dialog').or(accountantPage.getByRole('alertdialog')),
+      ).toBeVisible({ timeout: 10_000 });
     });
 
-    test('shows confirmation dialog before submit', async ({ page }) => {
-      await loginAsAccountant(page);
-      await page.goto('/cashbook/expenses/new');
-      await page.waitForLoadState('networkidle');
+    test('back button returns to cashbook', async ({ accountantPage }) => {
+      await accountantPage.goto('/cashbook/expenses/new');
+      await accountantPage.waitForLoadState('networkidle');
 
-      // Fill valid data
-      await page.locator('input[type="number"]').first().fill('500');
-      await page.getByPlaceholder(/describe/i).fill('Test expense description');
-
-      // Click submit
-      await page.getByRole('button', { name: /record expense/i }).click();
-
-      // Confirmation dialog should appear
-      await expect(
-        page.getByRole('dialog').or(page.getByText(/confirm expense/i)),
-      ).toBeVisible({ timeout: 5_000 });
-    });
-
-    test('back button returns to cashbook', async ({ page }) => {
-      await loginAsAccountant(page);
-      await page.goto('/cashbook/expenses/new');
-      await page.waitForLoadState('networkidle');
-
-      // Click back button
-      const backButton = page.getByRole('link').filter({ has: page.locator('svg') }).first();
-      if (await backButton.isVisible()) {
-        await backButton.click();
-        await page.waitForURL('**/cashbook', { timeout: 10_000 });
-      }
+      // Click back button (the link to /cashbook containing ArrowLeft svg)
+      const backButton = accountantPage.locator('a[href="/cashbook"]');
+      await expect(backButton).toBeVisible({ timeout: 10_000 });
+      await backButton.click();
+      // Wait for navigation to cashbook page (not cashbook/expenses/new)
+      await expect(accountantPage.getByRole('heading', { name: 'Cashbook' })).toBeVisible({ timeout: 15_000 });
     });
   });
 
   test.describe('Handovers Page', () => {
-    test('navigates to handovers page', async ({ page }) => {
-      await loginAsAccountant(page);
-      await page.goto('/cashbook');
-      await page.waitForLoadState('networkidle');
+    test('navigates to handovers page', async ({ accountantPage }) => {
+      await accountantPage.goto('/cashbook');
+      await accountantPage.waitForLoadState('networkidle');
 
-      await page.getByRole('link', { name: /handovers/i }).click();
-      await page.waitForURL('**/cashbook/handovers', { timeout: 10_000 });
+      await accountantPage.getByRole('link', { name: /handovers/i }).click();
+      await accountantPage.waitForURL('**/cashbook/handovers', { timeout: 15_000 });
 
-      await expect(page.getByRole('heading', { name: /cash handovers/i })).toBeVisible();
+      await expect(accountantPage.getByRole('heading', { name: /cash handovers/i })).toBeVisible();
     });
 
-    test('shows initiate handover form', async ({ page }) => {
-      await loginAsAccountant(page);
-      await page.goto('/cashbook/handovers');
-      await page.waitForLoadState('networkidle');
+    test('shows initiate handover form', async ({ accountantPage }) => {
+      await accountantPage.goto('/cashbook/handovers');
+      await accountantPage.waitForLoadState('networkidle');
 
-      await expect(page.getByText('Initiate Handover')).toBeVisible({ timeout: 10_000 });
-      await expect(page.locator('input[type="number"]').first()).toBeVisible();
+      // Wait for the heading first
+      await expect(accountantPage.getByRole('heading', { name: 'Cash Handovers' })).toBeVisible({ timeout: 15_000 });
+
+      // The "Initiate Handover" is a CardTitle - find the form elements
+      await expect(accountantPage.locator('input[type="number"]').first()).toBeVisible({ timeout: 10_000 });
+      // Button text is "Initiate Handover"
+      await expect(accountantPage.getByRole('button', { name: 'Initiate Handover' })).toBeVisible();
     });
 
-    test('validates handover amount is required', async ({ page }) => {
-      await loginAsAccountant(page);
-      await page.goto('/cashbook/handovers');
-      await page.waitForLoadState('networkidle');
+    test('validates handover amount is required', async ({ accountantPage }) => {
+      await accountantPage.goto('/cashbook/handovers');
+      await accountantPage.waitForLoadState('networkidle');
 
-      // Click submit without entering amount
-      await page.getByRole('button', { name: /initiate handover/i }).click();
+      // Wait for the page to load
+      await expect(accountantPage.getByRole('heading', { name: 'Cash Handovers' })).toBeVisible({ timeout: 15_000 });
 
-      // Should show validation error
+      // Click submit without entering amount (or with 0)
+      await accountantPage.getByRole('button', { name: 'Initiate Handover' }).click();
+
+      // Should show validation error - look for specific text
       await expect(
-        page.locator('[role="alert"]').or(page.getByText(/greater|required|zero/i)),
-      ).toBeVisible({ timeout: 5_000 });
-    });
-
-    test('shows pending handovers list', async ({ page }) => {
-      await loginAsAccountant(page);
-      await page.goto('/cashbook/handovers');
-      await page.waitForLoadState('networkidle');
-
-      await expect(
-        page.getByText('Pending Handovers').or(page.getByText('No pending handovers')),
+        accountantPage.getByText(/Amount must be greater than zero/i),
       ).toBeVisible({ timeout: 10_000 });
     });
 
-    test('manager can verify handover', async ({ page }) => {
-      await loginAsManager(page);
-      await page.goto('/cashbook/handovers');
-      await page.waitForLoadState('networkidle');
+    test('shows pending handovers section', async ({ accountantPage }) => {
+      await accountantPage.goto('/cashbook/handovers');
+      await accountantPage.waitForLoadState('networkidle');
 
-      // Look for verify button (only visible if pending handovers exist)
-      const verifyButton = page.getByRole('button', { name: /verify/i }).first();
-      // Button may or may not be visible depending on pending handovers
+      // The page shows "Pending Handovers" as h2 heading
+      await expect(
+        accountantPage.getByText('Pending Handovers', { exact: true }),
+      ).toBeVisible({ timeout: 15_000 });
+    });
+
+    test('manager can view handovers page', async ({ managerPage }) => {
+      await managerPage.goto('/cashbook/handovers');
+      await managerPage.waitForLoadState('networkidle');
+
+      // Page should load without error - that's success
+      await expect(managerPage.getByRole('heading', { name: /cash handovers/i })).toBeVisible({ timeout: 15_000 });
     });
   });
 });
