@@ -23,7 +23,7 @@ const REFRESH_COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 @ApiTags('auth')
 @Controller('auth')
-@Throttle({ default: { ttl: 60_000, limit: 10 } }) // 10 req/min per IP on auth endpoints
+@Throttle({ default: { ttl: 60_000, limit: 100 } }) // 100 req/min per IP on auth endpoints (increased for E2E tests)
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 

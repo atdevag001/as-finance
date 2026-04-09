@@ -35,7 +35,11 @@ export function useDailySummary(date?: string) {
 export function useHandovers() {
   return useQuery<CashHandover[]>({
     queryKey: ['cashbook', 'handovers'],
-    queryFn: () => apiClient.get('/cashbook/handovers'),
+    queryFn: async () => {
+      const response = await apiClient.get<{ data: CashHandover[]; total: number } | CashHandover[]>('/cashbook/handovers');
+      // Handle both { data: [], total: N } and direct array responses
+      return Array.isArray(response) ? response : response.data;
+    },
   });
 }
 

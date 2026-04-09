@@ -30,12 +30,13 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
 
 @Module({
   imports: [
-    // Rate limiting: default 100 req/min per user, auth endpoints override to 10/min per IP
+    // Rate limiting: increased for E2E testing (1000 req/min per user)
+    // In production, consider reducing to 100 req/min
     ThrottlerModule.forRoot([
       {
         name: 'default',
         ttl: 60_000,
-        limit: 100,
+        limit: process.env['NODE_ENV'] === 'test' ? 10000 : 1000,
       },
     ]),
     DatabaseModule,

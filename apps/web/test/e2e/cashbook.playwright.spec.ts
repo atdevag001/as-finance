@@ -161,11 +161,23 @@ test.describe('Cashbook Module', () => {
       await accountantPage.goto('/cashbook/expenses/new');
       await accountantPage.waitForLoadState('networkidle');
 
-      // Click back button (the link to /cashbook containing ArrowLeft svg)
-      const backButton = accountantPage.locator('a[href="/cashbook"]');
-      await expect(backButton).toBeVisible({ timeout: 10_000 });
-      await backButton.click();
-      // Wait for navigation to cashbook page (not cashbook/expenses/new)
+      // Wait for heading to ensure page is fully loaded
+      await expect(accountantPage.getByRole('heading', { name: /record expense/i })).toBeVisible({ timeout: 15_000 });
+
+      // Try to find a visible back button - either in page header or navigation
+      // On mobile, the sidebar nav may be hidden, so look for the page's back link first
+      const pageBackLink = accountantPage.locator('main a[href="/cashbook"], [role="main"] a[href="/cashbook"]').first();
+      const navBackLink = accountantPage.locator('nav a[href="/cashbook"]').first();
+
+      // Check which back link is visible and clickable
+      const backButton = (await pageBackLink.isVisible()) ? pageBackLink : navBackLink;
+      await backButton.scrollIntoViewIfNeeded();
+      await backButton.click({ timeout: 15_000 });
+
+      // Wait for URL change first
+      await accountantPage.waitForURL(/\/cashbook$/, { timeout: 15_000 });
+
+      // Then verify the cashbook heading is visible
       await expect(accountantPage.getByRole('heading', { name: 'Cashbook' })).toBeVisible({ timeout: 15_000 });
     });
   });

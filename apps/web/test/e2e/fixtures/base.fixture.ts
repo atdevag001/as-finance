@@ -20,6 +20,9 @@ import * as fs from 'fs';
 const AUTH_DIR = path.join(__dirname, '..', '.auth');
 const authFile = (role: string) => path.join(AUTH_DIR, `${role}.json`);
 
+// Base URL from environment or default
+const BASE_URL = process.env['BASE_URL'] || 'http://localhost:3000';
+
 // Extended test type with role-specific pages
 type AuthFixtures = {
   adminPage: Page;
@@ -44,6 +47,7 @@ async function createContextForRole(browser: Browser, role: UserRole): Promise<B
 
   return browser.newContext({
     storageState: storageStatePath,
+    baseURL: BASE_URL,
   });
 }
 

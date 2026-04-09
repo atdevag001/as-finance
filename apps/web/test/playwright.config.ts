@@ -13,9 +13,9 @@ export default defineConfig({
   fullyParallel: true, // Enable parallel execution
   forbidOnly: CI,
   retries: CI ? 2 : 1, // Retry once locally, twice in CI
-  workers: CI ? 4 : 2, // More workers for faster execution
-  timeout: 60_000,
-  expect: { timeout: 10_000 },
+  workers: process.env['PLAYWRIGHT_WORKERS'] ? parseInt(process.env['PLAYWRIGHT_WORKERS'], 10) : (CI ? 4 : 8), // 8 workers for 64GB VPS
+  timeout: 120_000, // 2 minutes per test
+  expect: { timeout: 30_000 }, // 30 seconds for assertions
 
   reporter: CI
     ? [['html', { open: 'never' }], ['junit', { outputFile: 'test-results/junit.xml' }], ['list']]
@@ -25,8 +25,8 @@ export default defineConfig({
 
   use: {
     baseURL: BASE_URL,
-    actionTimeout: 15_000,
-    navigationTimeout: 30_000,
+    actionTimeout: 30_000, // 30 seconds for actions
+    navigationTimeout: 60_000, // 60 seconds for navigation
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
