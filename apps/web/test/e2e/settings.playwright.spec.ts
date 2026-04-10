@@ -63,8 +63,8 @@ test.describe('Settings Module', () => {
     test('settings page accessible to admin', async ({ adminPage }) => {
       await adminPage.goto('/settings');
       await adminPage.waitForLoadState('networkidle');
-      // Settings page should be accessible
-      await expect(adminPage.getByRole('heading', { name: 'Settings' })).toBeVisible({ timeout: 10_000 });
+      // Settings page should be accessible - use exact match to avoid matching "System Settings"
+      await expect(adminPage.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible({ timeout: 10_000 });
     });
   });
 
