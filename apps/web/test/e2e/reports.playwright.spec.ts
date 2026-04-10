@@ -101,7 +101,7 @@ test.describe('Reports Module', () => {
       await managerPage.waitForTimeout(2000); // Allow API response
       const hasTable = await managerPage.locator('table').isVisible().catch(() => false);
       const hasEmptyMessage = await managerPage.getByText('No data for this period.').isVisible().catch(() => false);
-      const hasError = await managerPage.locator('[role="alert"]').isVisible().catch(() => false);
+      const hasError = await managerPage.getByText(/too many requests|error|failed/i).isVisible().catch(() => false);
       // Page should show one of these states
       expect(hasTable || hasEmptyMessage || hasError).toBeTruthy();
     });
