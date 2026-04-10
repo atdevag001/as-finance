@@ -1,42 +1,34 @@
-import { chromium, type FullConfig } from '@playwright/test';
-import { login, TEST_USERS } from './fixtures/auth.fixture';
+import { type FullConfig } from '@playwright/test';
+import * as fs from 'fs';
 import * as path from 'path';
 
 /**
- * Global setup - authenticate as manager once and save the session.
- * All tests will use this saved session instead of logging in each time.
+ * Global setup - validates that auth files exist and are fresh.
+ * Actual authentication is handled by the auth-setup project.
+ * This runs before all tests to perform health checks.
  */
 async function globalSetup(config: FullConfig) {
-  const { baseURL } = config.projects[0].use;
+  const authDir = path.join(__dirname, '.auth');
+  const managerAuthFile = path.join(authDir, 'manager.json');
 
-  const browser = await chromium.launch();
-  const context = await browser.newContext();
-  const page = await context.newPage();
+  // Check if auth file exists
+  if (!fs.existsSync(managerAuthFile)) {
+    console.log('⚠️  Auth files not found. Run auth-setup project first:');
+    console.log('   npx playwright test --project=auth-setup');
+    // Don't fail - let auth-setup handle it via dependencies
+    return;
+  }
 
-  // Login as manager
-  const manager = TEST_USERS.manager;
+  // Check if auth file is fresh (< 10 minutes old)
+  const stats = fs.statSync(managerAuthFile);
+  const ageMinutes = (Date.now() - stats.mtimeMs) / 1000 / 60;
 
-  // Navigate to login
-  await page.goto(`${baseURL}/login`);
-  await page.waitForLoadState('domcontentloaded');
-
-  // Wait for the form
-  await page.getByLabel('Username').waitFor({ state: 'visible', timeout: 15_000 });
-
-  // Fill and submit
-  await page.getByLabel('Username').fill(manager.username);
-  await page.getByLabel('Password').fill(manager.password);
-  await page.getByRole('button', { name: 'Sign in' }).click();
-
-  // Wait for redirect away from login
-  await page.waitForURL(/^(?!.*\/login)/, { timeout: 30_000 });
-  await page.waitForLoadState('networkidle');
-
-  // Save storage state (cookies + localStorage)
-  const storageStatePath = path.join(__dirname, '.auth', 'manager.json');
-  await context.storageState({ path: storageStatePath });
-
-  await browser.close();
+  if (ageMinutes > 10) {
+    console.log(`⚠️  Auth tokens may be stale (${Math.round(ageMinutes)} min old). Consider refreshing:`);
+    console.log('   rm -f e2e/.auth/*.json && npx playwright test --project=auth-setup');
+  } else {
+    console.log(`✅ Auth files are fresh (${Math.round(ageMinutes)} min old)`);
+  }
 }
 
 export default globalSetup;
