@@ -239,8 +239,8 @@ test.describe('Users Module', () => {
       if (await editLink.isVisible()) {
         await editLink.click();
         await adminPage.waitForURL(/\/users\/[^/]+\/edit$/, { timeout: 10_000 });
-        // Username should be disabled (use name attribute since labels lack htmlFor)
-        const usernameInput = adminPage.locator('input[name="username"]');
+        // Username field is a disabled input with bg-muted class (not a form field, just display)
+        const usernameInput = adminPage.locator('input[disabled].bg-muted').first();
         await expect(usernameInput).toBeDisabled();
       }
     });
