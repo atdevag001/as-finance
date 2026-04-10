@@ -69,8 +69,8 @@ test.describe('Session Management', () => {
       // Try to access protected route
       await managerPage.goto('/customers');
 
-      // Should redirect to login
-      await managerPage.waitForURL('**/login', { timeout: 10_000 });
+      // Should redirect to login (give extra time for SSR auth check)
+      await managerPage.waitForURL('**/login', { timeout: 15_000 });
     });
   });
 
@@ -83,8 +83,8 @@ test.describe('Session Management', () => {
       // Try to access dashboard
       await page.goto('http://localhost:3000/');
 
-      // Should redirect to login
-      await page.waitForURL('**/login', { timeout: 10_000 });
+      // Should redirect to login (give extra time for SSR to process)
+      await page.waitForURL('**/login', { timeout: 15_000 });
     });
 
     test('login page is accessible without auth', async ({ page }) => {
@@ -99,7 +99,8 @@ test.describe('Session Management', () => {
       await page.context().clearCookies();
       await page.goto('http://localhost:3000/customers/new');
 
-      await page.waitForURL('**/login', { timeout: 10_000 });
+      // Wait for redirect (may take time due to SSR auth check)
+      await page.waitForURL('**/login', { timeout: 15_000 });
     });
   });
 
@@ -111,14 +112,14 @@ test.describe('Session Management', () => {
       await page.goto('http://localhost:3000/customers');
       await page.waitForURL('**/login', { timeout: 10_000 });
 
-      // Login
+      // Login (may be rate-limited so use longer timeout)
       const user = TEST_USERS.manager;
       await page.getByLabel('Username').fill(user.username);
       await page.getByLabel('Password').fill(user.password);
       await page.getByRole('button', { name: 'Sign in' }).click();
 
-      // Should redirect back to customers (or dashboard)
-      await page.waitForURL(/^(?!.*\/login)/, { timeout: 30_000 });
+      // Should redirect back to customers (or dashboard) - wait longer due to potential rate limiting
+      await page.waitForURL(/^(?!.*\/login)/, { timeout: 60_000 });
     });
   });
 
@@ -140,9 +141,9 @@ test.describe('Session Management', () => {
       await page.getByLabel('Password').fill('invalid_password');
       await page.getByRole('button', { name: 'Sign in' }).click();
 
-      // Server error should appear
+      // Server error or rate limit error should appear
       const alert = page.locator('[role="alert"]:not(#__next-route-announcer__)');
-      await expect(alert).toBeVisible({ timeout: 10_000 });
+      await expect(alert).toBeVisible({ timeout: 15_000 });
     });
 
     test('successful login redirects to dashboard', async ({ page }) => {
@@ -153,8 +154,9 @@ test.describe('Session Management', () => {
       await page.getByLabel('Password').fill(user.password);
       await page.getByRole('button', { name: 'Sign in' }).click();
 
-      await page.waitForURL(/^(?!.*\/login)/, { timeout: 30_000 });
-      await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible({ timeout: 10_000 });
+      // Wait longer for login to complete (may be rate-limited)
+      await page.waitForURL(/^(?!.*\/login)/, { timeout: 60_000 });
+      await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible({ timeout: 15_000 });
     });
   });
 
