@@ -30,7 +30,7 @@
     "accounting": { "status": "COMPLETE", "tests": 20, "passing": 20, "failing": 0 },
     "groups": { "status": "COMPLETE", "tests": 15, "passing": 14, "failing": 1 },
     "users": { "status": "COMPLETE", "tests": 23, "passing": 23, "failing": 0 },
-    "settings": { "status": "COMPLETE", "tests": 9, "passing": 9, "failing": 0 },
+    "settings": { "status": "COMPLETE", "tests": 9, "passing": 9, "failing": 0, "lastFixed": "2026-04-10T20:30:00Z" },
     "reports": { "status": "COMPLETE", "tests": 26, "passing": 26, "failing": 0 },
     "cashbook": { "status": "COMPLETE", "tests": 18, "passing": 18, "failing": 0 },
     "receipts": { "status": "PENDING", "tests": 0, "passing": 0, "failing": 0 },
@@ -49,7 +49,10 @@
     "64bc527 - fix(e2e): update additional test files to use pre-authenticated fixtures",
     "fe09862 - fix(e2e): update users and reports test selectors",
     "432d146 - fix(e2e): update accounting test selectors for empty states",
-    "1903ff7 - fix(e2e): increase session test timeouts for rate limiting"
+    "1903ff7 - fix(e2e): increase session test timeouts for rate limiting",
+    "5793d4b - fix(e2e): handle rate limit error message in reports test",
+    "9544ab0 - fix(e2e): update username disabled test for edit page",
+    "06728b9 - fix(e2e): use exact match for all Settings heading selectors"
   ],
   "flakiness": {
     "error-handling.playwright.spec.ts:36": "error boundary catches component errors",
