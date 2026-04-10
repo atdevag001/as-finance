@@ -16,12 +16,12 @@ test.describe('Settings Module', () => {
   test.describe('Page Access', () => {
     test('admin can access settings', async ({ adminPage }) => {
       await adminPage.goto('/settings');
-      await expect(adminPage.getByRole('heading', { name: 'Settings' })).toBeVisible({ timeout: 10_000 });
+      await expect(adminPage.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible({ timeout: 10_000 });
     });
 
     test('manager can access settings', async ({ managerPage }) => {
       await managerPage.goto('/settings');
-      await expect(managerPage.getByRole('heading', { name: 'Settings' })).toBeVisible({ timeout: 10_000 });
+      await expect(managerPage.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible({ timeout: 10_000 });
     });
 
     test('field_officer gets Access Denied', async ({ fieldOfficerPage }) => {
@@ -35,14 +35,14 @@ test.describe('Settings Module', () => {
       await adminPage.goto('/settings');
       await adminPage.waitForLoadState('networkidle');
       // Page should show Settings heading
-      await expect(adminPage.getByRole('heading', { name: 'Settings' })).toBeVisible({ timeout: 10_000 });
+      await expect(adminPage.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible({ timeout: 10_000 });
     });
 
     test('settings page loads without error', async ({ adminPage }) => {
       await adminPage.goto('/settings');
       await adminPage.waitForLoadState('networkidle');
       // Page should not show error
-      await expect(adminPage.getByRole('heading', { name: 'Settings' })).toBeVisible({ timeout: 10_000 });
+      await expect(adminPage.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible({ timeout: 10_000 });
       // Check that there's no error alert
       const errorAlert = adminPage.locator('[role="alert"]').first();
       const hasError = await errorAlert.isVisible().catch(() => false);
@@ -52,7 +52,7 @@ test.describe('Settings Module', () => {
     test('save button is visible if present', async ({ adminPage }) => {
       await adminPage.goto('/settings');
       await adminPage.waitForLoadState('networkidle');
-      await expect(adminPage.getByRole('heading', { name: 'Settings' })).toBeVisible({ timeout: 10_000 });
+      await expect(adminPage.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible({ timeout: 10_000 });
       // Save button may or may not be present depending on settings content
       const saveButton = adminPage.getByRole('button', { name: /save/i });
       // Just verify the page loaded
@@ -72,7 +72,7 @@ test.describe('Settings Module', () => {
     test('manager can access settings', async ({ managerPage }) => {
       await managerPage.goto('/settings');
       await managerPage.waitForLoadState('networkidle');
-      await expect(managerPage.getByRole('heading', { name: 'Settings' })).toBeVisible({ timeout: 10_000 });
+      await expect(managerPage.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible({ timeout: 10_000 });
     });
   });
 });
