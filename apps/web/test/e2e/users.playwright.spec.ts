@@ -93,11 +93,12 @@ test.describe('Users Module', () => {
     test('form has all required fields', async ({ adminPage }) => {
       await adminPage.goto('/users/new');
       await adminPage.waitForLoadState('networkidle');
-      await expect(adminPage.getByText('Username')).toBeVisible({ timeout: 10_000 });
-      await expect(adminPage.getByText('Full Name')).toBeVisible();
-      await expect(adminPage.getByText('Mobile')).toBeVisible();
-      await expect(adminPage.getByText('Password')).toBeVisible();
-      await expect(adminPage.getByText('Role')).toBeVisible();
+      // Labels have asterisks, e.g. "Username *" - check inputs exist by name
+      await expect(adminPage.locator('input[name="username"]')).toBeVisible({ timeout: 10_000 });
+      await expect(adminPage.locator('input[name="fullName"]')).toBeVisible();
+      await expect(adminPage.locator('input[name="mobile"]')).toBeVisible();
+      await expect(adminPage.locator('input[name="password"]')).toBeVisible();
+      await expect(adminPage.locator('select[name="role"]')).toBeVisible();
     });
 
     test('role dropdown has all 7 roles', async ({ adminPage }) => {
@@ -114,10 +115,10 @@ test.describe('Users Module', () => {
     test('validates username is required', async ({ adminPage }) => {
       await adminPage.goto('/users/new');
       await adminPage.waitForLoadState('networkidle');
-      // Fill other fields but not username
-      await adminPage.getByLabel('Full Name').fill('Test User');
-      await adminPage.getByLabel('Mobile').fill('9876543210');
-      await adminPage.getByLabel('Password').fill('TestPass123');
+      // Fill other fields but not username (use name attribute since labels lack htmlFor)
+      await adminPage.locator('input[name="fullName"]').fill('Test User');
+      await adminPage.locator('input[name="mobile"]').fill('9876543210');
+      await adminPage.locator('input[name="password"]').fill('TestPass123');
       // Submit
       await adminPage.getByRole('button', { name: /create user/i }).click();
       // Should show validation error
@@ -129,11 +130,11 @@ test.describe('Users Module', () => {
     test('validates username minimum length', async ({ adminPage }) => {
       await adminPage.goto('/users/new');
       await adminPage.waitForLoadState('networkidle');
-      // Fill username with only 2 characters
-      await adminPage.getByLabel('Username').fill('ab');
-      await adminPage.getByLabel('Full Name').fill('Test User');
-      await adminPage.getByLabel('Mobile').fill('9876543210');
-      await adminPage.getByLabel('Password').fill('TestPass123');
+      // Fill username with only 2 characters (use name attribute since labels lack htmlFor)
+      await adminPage.locator('input[name="username"]').fill('ab');
+      await adminPage.locator('input[name="fullName"]').fill('Test User');
+      await adminPage.locator('input[name="mobile"]').fill('9876543210');
+      await adminPage.locator('input[name="password"]').fill('TestPass123');
       // Select a role
       await adminPage.locator('select').first().selectOption({ index: 1 });
       // Submit
@@ -147,10 +148,10 @@ test.describe('Users Module', () => {
     test('validates password strength - minimum 8 characters', async ({ adminPage }) => {
       await adminPage.goto('/users/new');
       await adminPage.waitForLoadState('networkidle');
-      await adminPage.getByLabel('Username').fill('testuser');
-      await adminPage.getByLabel('Full Name').fill('Test User');
-      await adminPage.getByLabel('Mobile').fill('9876543210');
-      await adminPage.getByLabel('Password').fill('Short1'); // Too short
+      await adminPage.locator('input[name="username"]').fill('testuser');
+      await adminPage.locator('input[name="fullName"]').fill('Test User');
+      await adminPage.locator('input[name="mobile"]').fill('9876543210');
+      await adminPage.locator('input[name="password"]').fill('Short1'); // Too short
       await adminPage.locator('select').first().selectOption({ index: 1 });
       await adminPage.getByRole('button', { name: /create user/i }).click();
       await expect(
@@ -161,10 +162,10 @@ test.describe('Users Module', () => {
     test('validates password strength - requires uppercase', async ({ adminPage }) => {
       await adminPage.goto('/users/new');
       await adminPage.waitForLoadState('networkidle');
-      await adminPage.getByLabel('Username').fill('testuser');
-      await adminPage.getByLabel('Full Name').fill('Test User');
-      await adminPage.getByLabel('Mobile').fill('9876543210');
-      await adminPage.getByLabel('Password').fill('lowercase1'); // No uppercase
+      await adminPage.locator('input[name="username"]').fill('testuser');
+      await adminPage.locator('input[name="fullName"]').fill('Test User');
+      await adminPage.locator('input[name="mobile"]').fill('9876543210');
+      await adminPage.locator('input[name="password"]').fill('lowercase1'); // No uppercase
       await adminPage.locator('select').first().selectOption({ index: 1 });
       await adminPage.getByRole('button', { name: /create user/i }).click();
       await expect(
@@ -175,10 +176,10 @@ test.describe('Users Module', () => {
     test('validates password strength - requires digit', async ({ adminPage }) => {
       await adminPage.goto('/users/new');
       await adminPage.waitForLoadState('networkidle');
-      await adminPage.getByLabel('Username').fill('testuser');
-      await adminPage.getByLabel('Full Name').fill('Test User');
-      await adminPage.getByLabel('Mobile').fill('9876543210');
-      await adminPage.getByLabel('Password').fill('NoDigits'); // No digit
+      await adminPage.locator('input[name="username"]').fill('testuser');
+      await adminPage.locator('input[name="fullName"]').fill('Test User');
+      await adminPage.locator('input[name="mobile"]').fill('9876543210');
+      await adminPage.locator('input[name="password"]').fill('NoDigits'); // No digit
       await adminPage.locator('select').first().selectOption({ index: 1 });
       await adminPage.getByRole('button', { name: /create user/i }).click();
       await expect(
@@ -189,30 +190,30 @@ test.describe('Users Module', () => {
     test('validates role is required', async ({ adminPage }) => {
       await adminPage.goto('/users/new');
       await adminPage.waitForLoadState('networkidle');
-      await adminPage.getByLabel('Username').fill('testuser');
-      await adminPage.getByLabel('Full Name').fill('Test User');
-      await adminPage.getByLabel('Mobile').fill('9876543210');
-      await adminPage.getByLabel('Password').fill('ValidPass1');
+      await adminPage.locator('input[name="username"]').fill('testuser');
+      await adminPage.locator('input[name="fullName"]').fill('Test User');
+      await adminPage.locator('input[name="mobile"]').fill('9876543210');
+      await adminPage.locator('input[name="password"]').fill('ValidPass1');
       // Don't select role
       await adminPage.getByRole('button', { name: /create user/i }).click();
+      // Check for "Please select a role" error message
       await expect(
-        adminPage.getByText(/select.*role/i),
+        adminPage.locator('p.text-destructive', { hasText: /select.*role/i }),
       ).toBeVisible({ timeout: 5_000 });
     });
 
     test('mobile field accepts only 10 digits', async ({ adminPage }) => {
       await adminPage.goto('/users/new');
       await adminPage.waitForLoadState('networkidle');
-      const mobileInput = adminPage.getByLabel('Mobile');
-      await mobileInput.fill('123456789'); // Only 9 digits
-      await adminPage.getByLabel('Username').fill('testuser');
-      await adminPage.getByLabel('Full Name').fill('Test User');
-      await adminPage.getByLabel('Password').fill('ValidPass1');
+      await adminPage.locator('input[name="mobile"]').fill('123456789'); // Only 9 digits
+      await adminPage.locator('input[name="username"]').fill('testuser');
+      await adminPage.locator('input[name="fullName"]').fill('Test User');
+      await adminPage.locator('input[name="password"]').fill('ValidPass1');
       await adminPage.locator('select').first().selectOption({ index: 1 });
       await adminPage.getByRole('button', { name: /create user/i }).click();
-      // Should show validation error
+      // Should show validation error - look for error message, not label
       await expect(
-        adminPage.getByText(/mobile|10.*digits/i),
+        adminPage.locator('p.text-destructive', { hasText: /mobile|invalid/i }),
       ).toBeVisible({ timeout: 5_000 });
     });
   });
@@ -225,9 +226,9 @@ test.describe('Users Module', () => {
       if (await editLink.isVisible()) {
         await editLink.click();
         await adminPage.waitForURL(/\/users\/[^/]+\/edit$/, { timeout: 10_000 });
-        // Fields should be pre-populated
-        await expect(adminPage.getByLabel('Full Name')).not.toBeEmpty();
-        await expect(adminPage.getByLabel('Mobile')).not.toBeEmpty();
+        // Fields should be pre-populated (use name attribute since labels lack htmlFor)
+        await expect(adminPage.locator('input[name="fullName"]')).not.toBeEmpty();
+        await expect(adminPage.locator('input[name="mobile"]')).not.toBeEmpty();
       }
     });
 
@@ -238,8 +239,8 @@ test.describe('Users Module', () => {
       if (await editLink.isVisible()) {
         await editLink.click();
         await adminPage.waitForURL(/\/users\/[^/]+\/edit$/, { timeout: 10_000 });
-        // Username should be disabled
-        const usernameInput = adminPage.getByLabel('Username');
+        // Username should be disabled (use name attribute since labels lack htmlFor)
+        const usernameInput = adminPage.locator('input[name="username"]');
         await expect(usernameInput).toBeDisabled();
       }
     });
@@ -253,7 +254,7 @@ test.describe('Users Module', () => {
         await adminPage.waitForURL(/\/users\/[^/]+\/edit$/, { timeout: 10_000 });
         // Active checkbox should be visible
         await expect(
-          adminPage.getByLabel('Active').or(adminPage.locator('input[type="checkbox"]')),
+          adminPage.locator('input[name="isActive"]').or(adminPage.locator('input[type="checkbox"]')),
         ).toBeVisible({ timeout: 5_000 });
       }
     });
