@@ -1,8 +1,8 @@
 {
   "version": "2.3.0",
-  "lastRun": "2026-04-11T06:30:00Z",
-  "currentPhase": "COMPLETE",
-  "iterations": 2,
+  "lastRun": "2026-04-11T16:45:00Z",
+  "currentPhase": "TESTING",
+  "iterations": 3,
   "auth": {
     "lastRefresh": "2026-04-11T06:30:00Z",
     "tokenMaxAgeMinutes": 10,
@@ -48,7 +48,12 @@
     "Session tests with manual login - fixed by adding unauthenticatedPage fixture",
     "Flaky customer-onboarding table test - fixed with more specific header selectors",
     "Flaky error-handling state test - added proper assertion",
-    "Flaky loan-products deactivate test - added proper page load check"
+    "Flaky loan-products deactivate test - added proper page load check",
+    "Dashboard not loading KPIs - fixed apiClient to use getAccessToken() for cookie tokens",
+    "Auth provider not setting in-memory token on restore from cookie",
+    "Loan products page crash on undefined interest_type - added null safety",
+    "Missing loan_product permissions - added to shared constants",
+    "Loans new page crash - loanProducts.map not a function - fixed useLoanProducts hook to handle paginated response"
   ],
   "testsGenerated": [],
   "checkpoints": [
@@ -60,7 +65,10 @@
     "5793d4b - fix(e2e): handle rate limit error message in reports test",
     "9544ab0 - fix(e2e): update username disabled test for edit page",
     "06728b9 - fix(e2e): use exact match for all Settings heading selectors",
-    "6c775c1 - fix(e2e): add unauthenticatedPage fixture and fix session tests"
+    "6c775c1 - fix(e2e): add unauthenticatedPage fixture and fix session tests",
+    "ce6e835 - fix(web): ensure access token is read from cookie on first request",
+    "2156732 - fix(web): handle undefined values in loan products page and add permissions",
+    "22e1338 - fix(e2e): fix test selectors and loan products page crash"
   ],
   "flakiness": {}
 }
