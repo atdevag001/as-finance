@@ -11,10 +11,13 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { Request } from 'express';
+import { randomUUID } from 'crypto';
 import { LoanService } from './loan.service';
+import { DisbursementService } from '../disbursement/disbursement.service';
 import { CreateLoanDto } from './dto/create-loan.dto';
 import { ApproveLoanDto } from './dto/approve-loan.dto';
 import { RejectLoanDto } from './dto/reject-loan.dto';
+import { DisburseLoanDto } from './dto/disburse-loan.dto';
 import { LoanQueryDto } from './dto/loan-query.dto';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 import { JwtPayload } from '../../common/guards/jwt-auth.guard';
@@ -22,7 +25,10 @@ import { JwtPayload } from '../../common/guards/jwt-auth.guard';
 @ApiTags('loans')
 @Controller('loans')
 export class LoanController {
-  constructor(private readonly loanService: LoanService) {}
+  constructor(
+    private readonly loanService: LoanService,
+    private readonly disbursementService: DisbursementService,
+  ) {}
 
   @Post()
   @RequirePermission('loan.create')
@@ -121,5 +127,32 @@ export class LoanController {
     @Req() req: Request & { user: JwtPayload },
   ) {
     return this.loanService.closeLoan(id, req.user.sub, req.user.role);
+  }
+
+  @Post(':id/disburse')
+  @RequirePermission('loan.disburse')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Disburse an approved loan' })
+  @ApiResponse({ status: 201, description: 'Loan disbursed successfully' })
+  @ApiResponse({ status: 400, description: 'Prerequisite check failed' })
+  @ApiResponse({ status: 404, description: 'Loan not found' })
+  @ApiResponse({ status: 422, description: 'Invalid status or prerequisites not met' })
+  async disburse(
+    @Param('id') id: string,
+    @Body() dto: DisburseLoanDto,
+    @Req() req: Request & { user: JwtPayload },
+  ) {
+    // Use client-provided key or auto-generate one
+    const idempotencyKey = dto.idempotencyKey ?? `disburse-${id}-${randomUUID()}`;
+    return this.disbursementService.disburse(
+      {
+        loanId: id,
+        mode: dto.mode,
+        referenceNumber: dto.referenceNumber,
+        idempotencyKey,
+      },
+      req.user.sub,
+      req.user.role,
+    );
   }
 }

@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { DisbursementService } from './disbursement.service';
 import { DisbursementController } from './disbursement.controller';
 import { DisbursementRepository } from './disbursement.repository';
@@ -8,7 +8,7 @@ import { AuditModule } from '../audit/audit.module';
 import { IdempotencyModule } from '../idempotency/idempotency.module';
 
 @Module({
-  imports: [LoanModule, AccountingModule, AuditModule, IdempotencyModule],
+  imports: [forwardRef(() => LoanModule), AccountingModule, AuditModule, IdempotencyModule],
   controllers: [DisbursementController],
   providers: [DisbursementService, DisbursementRepository],
   exports: [DisbursementService],
