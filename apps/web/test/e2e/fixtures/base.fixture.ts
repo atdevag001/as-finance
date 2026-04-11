@@ -32,6 +32,7 @@ type AuthFixtures = {
   accountantPage: Page;
   officeStaffPage: Page;
   auditorPage: Page;
+  unauthenticatedPage: Page;
   getPageForRole: (role: UserRole) => Promise<Page>;
 };
 
@@ -121,6 +122,18 @@ export const test = base.extend<AuthFixtures>({
 
   auditorPage: async ({ browser }, use) => {
     const context = await createContextForRole(browser, 'viewer_auditor');
+    const page = await context.newPage();
+    await use(page);
+    await page.close();
+    await context.close();
+  },
+
+  unauthenticatedPage: async ({ browser }, use) => {
+    // Create a fresh context without any storage state (no auth)
+    const context = await browser.newContext({
+      baseURL: BASE_URL,
+      storageState: { cookies: [], origins: [] }, // Explicitly empty storage
+    });
     const page = await context.newPage();
     await use(page);
     await page.close();

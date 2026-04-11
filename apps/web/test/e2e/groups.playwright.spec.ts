@@ -19,10 +19,8 @@ test.describe('Groups Module', () => {
       await managerPage.goto('/groups');
 
       await expect(managerPage.getByRole('heading', { name: 'Groups' })).toBeVisible({ timeout: 15_000 });
-      // Table or empty state should be visible
-      await expect(
-        managerPage.locator('table').or(managerPage.getByText('No groups found')),
-      ).toBeVisible({ timeout: 10_000 });
+      // Table should be visible (may contain data or empty state message)
+      await expect(managerPage.locator('table')).toBeVisible({ timeout: 10_000 });
     });
 
     test('shows empty state when no groups exist', async ({ managerPage }) => {
