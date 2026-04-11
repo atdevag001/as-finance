@@ -49,7 +49,7 @@ test.describe('Error Handling', () => {
       await fieldOfficerPage.waitForLoadState('domcontentloaded');
 
       // Wait for form to be ready
-      const submitButton = fieldOfficerPage.getByRole('button', { name: /create customer|submit/i });
+      const submitButton = fieldOfficerPage.getByRole('button', { name: /register customer|create customer|submit/i });
       await submitButton.waitFor({ state: 'visible', timeout: 30_000 });
 
       // Submit empty form
@@ -84,7 +84,7 @@ test.describe('Error Handling', () => {
       await fieldOfficerPage.waitForLoadState('domcontentloaded');
 
       // Wait for form to load
-      await fieldOfficerPage.getByRole('button', { name: /create customer|submit/i }).waitFor({ state: 'visible', timeout: 30_000 });
+      await fieldOfficerPage.getByRole('button', { name: /register customer|create customer|submit/i }).waitFor({ state: 'visible', timeout: 30_000 });
 
       // Fill invalid Aadhaar
       const aadhaarInput = fieldOfficerPage.getByLabel(/aadhaar/i);
@@ -104,7 +104,7 @@ test.describe('Error Handling', () => {
       await fieldOfficerPage.waitForLoadState('domcontentloaded');
 
       // Wait for form to load
-      await fieldOfficerPage.getByRole('button', { name: /create customer|submit/i }).waitFor({ state: 'visible', timeout: 30_000 });
+      await fieldOfficerPage.getByRole('button', { name: /register customer|create customer|submit/i }).waitFor({ state: 'visible', timeout: 30_000 });
 
       const mobileInput = fieldOfficerPage.getByLabel(/mobile/i);
       if (await mobileInput.isVisible({ timeout: 5_000 }).catch(() => false)) {
@@ -120,7 +120,7 @@ test.describe('Error Handling', () => {
       await fieldOfficerPage.waitForLoadState('domcontentloaded');
 
       // Wait for form to load
-      await fieldOfficerPage.getByRole('button', { name: /create customer|submit/i }).waitFor({ state: 'visible', timeout: 30_000 });
+      await fieldOfficerPage.getByRole('button', { name: /register customer|create customer|submit/i }).waitFor({ state: 'visible', timeout: 30_000 });
 
       const panInput = fieldOfficerPage.getByLabel(/pan/i);
       if (await panInput.isVisible({ timeout: 5_000 }).catch(() => false)) {
@@ -197,7 +197,7 @@ test.describe('Error Handling', () => {
       await fieldOfficerPage.waitForLoadState('domcontentloaded');
 
       // Wait for form to be ready
-      const submitButton = fieldOfficerPage.getByRole('button', { name: /create customer|submit/i });
+      const submitButton = fieldOfficerPage.getByRole('button', { name: /register customer|create customer|submit/i });
       await submitButton.waitFor({ state: 'visible', timeout: 30_000 });
 
       // Fill valid form data
@@ -233,7 +233,7 @@ test.describe('Error Handling', () => {
       await fieldOfficerPage.waitForLoadState('domcontentloaded');
 
       // Wait for form to be ready
-      const submitButton = fieldOfficerPage.getByRole('button', { name: /create customer|submit/i });
+      const submitButton = fieldOfficerPage.getByRole('button', { name: /register customer|create customer|submit/i });
       await submitButton.waitFor({ state: 'visible', timeout: 30_000 });
 
       // Submit to trigger errors

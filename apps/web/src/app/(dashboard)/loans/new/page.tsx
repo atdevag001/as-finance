@@ -233,7 +233,7 @@ export default function NewLoanPage() {
                 <option value="">
                   {productsLoading ? 'Loading products…' : 'Select loan product'}
                 </option>
-                {loanProducts?.map((p) => (
+                {(Array.isArray(loanProducts) ? loanProducts : []).map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name} — {p.interest_type === 'flat' ? 'Flat' : 'Reducing'} @{' '}
                     {p.annual_rate}% ({p.frequency})

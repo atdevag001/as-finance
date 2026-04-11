@@ -42,7 +42,11 @@ export function useLoanProducts(params: { page?: number; includeInactive?: boole
 export function useLoanProductsList() {
   return useQuery<LoanProduct[]>({
     queryKey: ['loan-products', 'list'],
-    queryFn: () => apiClient.get('/loan-products'),
+    queryFn: async () => {
+      const result = await apiClient.get<PaginatedResult<LoanProduct> | LoanProduct[]>('/loan-products');
+      // Handle both array response and paginated response
+      return Array.isArray(result) ? result : result.data ?? [];
+    },
   });
 }
 

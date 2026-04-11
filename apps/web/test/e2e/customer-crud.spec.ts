@@ -13,7 +13,7 @@ test.describe('Customer Management', () => {
 
     // Customer list should be visible (either table or heading)
     await expect(
-      managerPage.locator('table').or(managerPage.getByRole('heading', { name: /customers/i }))
+      managerPage.getByRole('heading', { name: 'Customers' })
     ).toBeVisible({ timeout: 30_000 });
   });
 
@@ -23,7 +23,7 @@ test.describe('Customer Management', () => {
 
     // Wait for the page content to load
     await expect(
-      fieldOfficerPage.locator('table').or(fieldOfficerPage.getByRole('heading', { name: /customers/i }))
+      fieldOfficerPage.getByRole('heading', { name: 'Customers' })
     ).toBeVisible({ timeout: 30_000 });
 
     // Click new customer button
@@ -31,7 +31,7 @@ test.describe('Customer Management', () => {
     if (await newButton.isVisible()) {
       await newButton.click();
       await fieldOfficerPage.waitForURL('**/customers/new', { timeout: 30_000 });
-      await expect(fieldOfficerPage.getByRole('heading', { name: /register|new|add/i })).toBeVisible({ timeout: 30_000 });
+      await expect(fieldOfficerPage.getByRole('heading', { name: 'Register Customer' })).toBeVisible({ timeout: 30_000 });
     }
   });
 
@@ -40,7 +40,7 @@ test.describe('Customer Management', () => {
     await fieldOfficerPage.waitForLoadState('domcontentloaded');
 
     // Wait for form to be visible
-    await expect(fieldOfficerPage.getByRole('heading', { name: /register|new/i })).toBeVisible({ timeout: 30_000 });
+    await expect(fieldOfficerPage.getByRole('heading', { name: 'Register Customer' })).toBeVisible({ timeout: 30_000 });
 
     // Try submitting empty form
     await fieldOfficerPage.getByRole('button', { name: /register|submit|save/i }).click();
@@ -55,7 +55,7 @@ test.describe('Customer Management', () => {
 
     // Wait for page content to load
     await expect(
-      managerPage.locator('table').or(managerPage.getByRole('heading', { name: /customers/i }))
+      managerPage.getByRole('heading', { name: 'Customers' })
     ).toBeVisible({ timeout: 30_000 });
 
     // Look for search input
@@ -73,7 +73,7 @@ test.describe('Customer Management', () => {
 
     // Wait for page content to load
     await expect(
-      managerPage.locator('table').or(managerPage.getByRole('heading', { name: /customers/i }))
+      managerPage.getByRole('heading', { name: 'Customers' })
     ).toBeVisible({ timeout: 30_000 });
 
     // Click on first customer link
