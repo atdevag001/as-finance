@@ -167,7 +167,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Token exists - decode it to get user info and mark as authenticated
         const payload = decodeJwt(existingToken);
         if (payload && payload.exp * 1000 > Date.now()) {
-          // Token is valid and not expired - create minimal user from JWT
+          // Token is valid and not expired - ensure it's set in memory for API calls
+          setAccessToken(existingToken);
+          // Create minimal user from JWT
           const minimalUser: AuthUser = {
             id: payload.sub,
             username: '', // Not in JWT, will be filled on next refresh

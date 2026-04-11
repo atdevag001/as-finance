@@ -112,8 +112,10 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   headers.set('Content-Type', 'application/json');
   headers.set('x-request-id', requestId);
 
-  if (accessToken) {
-    headers.set('Authorization', `Bearer ${accessToken}`);
+  // Use getAccessToken() to read from cookie if in-memory token is null
+  const token = getAccessToken();
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
   }
 
   const res = await fetch(`${API_BASE_URL}${path}`, {
