@@ -1,8 +1,8 @@
 {
-  "version": "2.3.0",
-  "lastRun": "2026-04-11T16:45:00Z",
-  "currentPhase": "TESTING",
-  "iterations": 3,
+  "version": "2.4.0",
+  "lastRun": "2026-04-11T17:45:00Z",
+  "currentPhase": "COMPLETE",
+  "iterations": 4,
   "auth": {
     "lastRefresh": "2026-04-11T06:30:00Z",
     "tokenMaxAgeMinutes": 10,
@@ -24,7 +24,7 @@
     }
   },
   "modules": {
-    "loans": { "status": "COMPLETE", "tests": 3, "passing": 3, "failing": 0 },
+    "loans": { "status": "COMPLETE", "tests": 4, "passing": 4, "failing": 0 },
     "loan-products": { "status": "COMPLETE", "tests": 16, "passing": 16, "failing": 0 },
     "customers": { "status": "COMPLETE", "tests": 12, "passing": 12, "failing": 0 },
     "collections": { "status": "COMPLETE", "tests": 3, "passing": 3, "failing": 0 },
@@ -53,7 +53,11 @@
     "Auth provider not setting in-memory token on restore from cookie",
     "Loan products page crash on undefined interest_type - added null safety",
     "Missing loan_product permissions - added to shared constants",
-    "Loans new page crash - loanProducts.map not a function - fixed useLoanProducts hook to handle paginated response"
+    "Loans new page crash - loanProducts.map not a function - fixed useLoanProducts hook to handle paginated response",
+    "Profit-loss page crash on undefined category - added null safety",
+    "Loan application test - fixed product version ID lookup for snake_case API response",
+    "Loan application test - fixed principal amount validation (min ₹50,000)",
+    "Loan approval dialog - fixed button selector to match dialog button text"
   ],
   "testsGenerated": [],
   "checkpoints": [
@@ -68,7 +72,8 @@
     "6c775c1 - fix(e2e): add unauthenticatedPage fixture and fix session tests",
     "ce6e835 - fix(web): ensure access token is read from cookie on first request",
     "2156732 - fix(web): handle undefined values in loan products page and add permissions",
-    "22e1338 - fix(e2e): fix test selectors and loan products page crash"
+    "22e1338 - fix(e2e): fix test selectors and loan products page crash",
+    "2425cb8 - fix(e2e): comprehensive test fixes and app bug fixes"
   ],
   "flakiness": {}
 }
