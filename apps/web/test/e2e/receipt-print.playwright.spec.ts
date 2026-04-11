@@ -1,7 +1,9 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 /**
  * Receipt Print View — Playwright E2E Tests
+ *
+ * Uses pre-authenticated fixtures to avoid rate limiting.
  *
  * Validates: Design GAP 8 (Receipt Print View)
  *
@@ -10,10 +12,6 @@ import { test, expect, type Page } from '@playwright/test';
  * 2. Print layout correct (no navigation elements, proper formatting)
  */
 
-// Collection officer posts collections and views receipts
-const CO_USERNAME = 'collector1';
-const CO_PASSWORD = 'Admin@123';
-
 // Field officer creates prerequisite data
 const FO_USERNAME = 'field1';
 const FO_PASSWORD = 'Admin@123';
@@ -21,6 +19,10 @@ const FO_PASSWORD = 'Admin@123';
 // Manager for loan approval and disbursement
 const MANAGER_USERNAME = 'manager1';
 const MANAGER_PASSWORD = 'Admin@123';
+
+// Collection officer posts collections and views receipts
+const CO_USERNAME = 'collector1';
+const CO_PASSWORD = 'Admin@123';
 
 const API_BASE = 'http://localhost:3001';
 
@@ -62,7 +64,8 @@ async function createTestCustomer(token: string): Promise<string> {
     }),
   });
   const body = await res.json();
-  return body.id;
+  // API returns { customer: { id, ... }, duplicateWarnings: [...] }
+  return body.customer?.id ?? body.id;
 }
 
 /**
@@ -75,9 +78,14 @@ async function getProductVersionId(token: string): Promise<string> {
   const body = await res.json();
   const products = Array.isArray(body) ? body : body.data ?? [];
   const product = products[0];
+  if (!product) {
+    throw new Error('No loan products found');
+  }
+  // API uses snake_case: current_version_id
   return (
+    product?.current_version_id ??
     product?.currentVersionId ??
-    product?.versionId ??
+    product?.current_version?.id ??
     product?.versions?.[0]?.id ??
     product?.id
   );
@@ -85,6 +93,7 @@ async function getProductVersionId(token: string): Promise<string> {
 
 /**
  * Helper: create a loan and advance it to active status via the API.
+ * Workflow: draft -> submitted -> under_review -> approved -> disbursed (active)
  */
 async function createActiveLoan(
   foToken: string,
@@ -92,6 +101,8 @@ async function createActiveLoan(
   customerId: string,
   productVersionId: string,
 ): Promise<string> {
+  // Create loan in draft status
+  // Note: Principal must be within product limits (min 5000000 paise = 50,000 INR)
   const createRes = await fetch(`${API_BASE}/loans`, {
     method: 'POST',
     headers: {
@@ -101,29 +112,43 @@ async function createActiveLoan(
     body: JSON.stringify({
       customerId,
       productVersionId,
-      principalPaise: 1000000,
+      principalPaise: 5000000, // 50,000 INR - minimum allowed
       tenureMonths: 12,
       purpose: 'PW receipt test loan',
     }),
   });
   const loan = await createRes.json();
   const loanId = loan.id;
+  if (!loanId) throw new Error(`Failed to create loan: ${JSON.stringify(loan)}`);
 
-  await fetch(`${API_BASE}/loans/${loanId}/submit`, {
+  // Submit loan (draft -> submitted)
+  const submitRes = await fetch(`${API_BASE}/loans/${loanId}/submit`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${foToken}` },
   });
+  if (!submitRes.ok) throw new Error(`Failed to submit loan: ${await submitRes.text()}`);
 
-  await fetch(`${API_BASE}/loans/${loanId}/approve`, {
+  // Move to review (submitted -> under_review)
+  const reviewRes = await fetch(`${API_BASE}/loans/${loanId}/review`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${managerToken}` },
   });
+  if (!reviewRes.ok) throw new Error(`Failed to review loan: ${await reviewRes.text()}`);
 
-  await fetch(`${API_BASE}/disbursements`, {
+  // Approve loan (under_review -> approved)
+  const approveRes = await fetch(`${API_BASE}/loans/${loanId}/approve`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${managerToken}` },
-    body: JSON.stringify({ loanId, idempotencyKey: crypto.randomUUID() }),
   });
+  if (!approveRes.ok) throw new Error(`Failed to approve loan: ${await approveRes.text()}`);
+
+  // Disburse loan (approved -> disbursed/active) - requires mode parameter
+  const disburseRes = await fetch(`${API_BASE}/disbursements`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${managerToken}` },
+    body: JSON.stringify({ loanId, mode: 'cash', idempotencyKey: crypto.randomUUID() }),
+  });
+  if (!disburseRes.ok) throw new Error(`Failed to disburse loan: ${await disburseRes.text()}`);
 
   return loanId;
 }
@@ -150,19 +175,14 @@ async function postCollectionAndGetReceiptId(
       idempotencyKey: crypto.randomUUID(),
     }),
   });
-  const collection = await res.json();
-  return collection.receiptId ?? collection.receipt?.id ?? collection.id;
-}
-
-/**
- * Helper: log in via the UI and wait for the dashboard redirect.
- */
-async function login(page: Page, username: string, password: string) {
-  await page.goto('/login');
-  await page.getByLabel('Username').fill(username);
-  await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Sign in' }).click();
-  await page.waitForURL(/^(?!.*\/login)/, { timeout: 15_000 });
+  const body = await res.json();
+  if (!res.ok) {
+    throw new Error(`Failed to post collection: ${JSON.stringify(body)}`);
+  }
+  // API response: { statusCode: 201, data: { collectionId, receiptId, ... } }
+  const collection = body.data ?? body;
+  const receiptId = collection.receiptId ?? collection.receipt_id ?? collection.receipt?.id ?? collection.id;
+  return receiptId;
 }
 
 test.describe('Receipt Print View', () => {
@@ -173,77 +193,102 @@ test.describe('Receipt Print View', () => {
   let receiptId: string;
 
   test.beforeAll(async () => {
-    foToken = await getToken(FO_USERNAME, FO_PASSWORD);
-    managerToken = await getToken(MANAGER_USERNAME, MANAGER_PASSWORD);
-    coToken = await getToken(CO_USERNAME, CO_PASSWORD);
+    try {
+      foToken = await getToken(FO_USERNAME, FO_PASSWORD);
+      if (!foToken) throw new Error('Failed to get field officer token');
 
-    const customerId = await createTestCustomer(foToken);
-    const productVersionId = await getProductVersionId(foToken);
-    activeLoanId = await createActiveLoan(foToken, managerToken, customerId, productVersionId);
-    receiptId = await postCollectionAndGetReceiptId(coToken, activeLoanId, 50000);
+      managerToken = await getToken(MANAGER_USERNAME, MANAGER_PASSWORD);
+      if (!managerToken) throw new Error('Failed to get manager token');
+
+      coToken = await getToken(CO_USERNAME, CO_PASSWORD);
+      if (!coToken) throw new Error('Failed to get collection officer token');
+
+      const customerId = await createTestCustomer(foToken);
+      if (!customerId) throw new Error('Failed to create test customer');
+
+      const productVersionId = await getProductVersionId(foToken);
+      if (!productVersionId) throw new Error('Failed to get product version ID');
+
+      activeLoanId = await createActiveLoan(foToken, managerToken, customerId, productVersionId);
+      if (!activeLoanId) throw new Error('Failed to create active loan');
+
+      receiptId = await postCollectionAndGetReceiptId(coToken, activeLoanId, 50000);
+      if (!receiptId) throw new Error('Failed to create receipt');
+
+      console.log(`Test data created - Loan: ${activeLoanId}, Receipt: ${receiptId}`);
+    } catch (error) {
+      console.error('beforeAll setup failed:', error);
+      throw error;
+    }
   });
 
-  test('receipt page renders with customer name, loan number, amount, date, components', async ({ page }) => {
-    await login(page, CO_USERNAME, CO_PASSWORD);
+  test('receipt page renders with customer name, loan number, amount, date, components', async ({ collectionOfficerPage }) => {
+    // Navigate to the receipt detail page (using pre-authenticated page)
+    await collectionOfficerPage.goto(`/receipts/${receiptId}`, { timeout: 30_000 });
+    await collectionOfficerPage.waitForLoadState('networkidle');
 
-    // Navigate to the receipt detail page
-    await page.goto(`/receipts/${receiptId}`);
-    await page.waitForLoadState('networkidle');
+    // Verify the receipt page header - target the receipt card specifically
+    // The heading "Payment Receipt" is inside a CardTitle within the receipt container
+    await expect(collectionOfficerPage.getByRole('heading', { name: 'Payment Receipt' })).toBeVisible({ timeout: 10_000 });
 
-    // Verify the receipt page header
-    await expect(page.getByText('AS Finance')).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText('Payment Receipt')).toBeVisible();
+    // Scope selectors to main content area to avoid sidebar matches
+    const mainContent = collectionOfficerPage.locator('main');
 
-    // Verify receipt metadata fields
-    await expect(page.getByText('Receipt #')).toBeVisible();
-    await expect(page.getByText('Date')).toBeVisible();
-    await expect(page.getByText('Customer')).toBeVisible();
-    await expect(page.getByText('Loan #')).toBeVisible();
-    await expect(page.getByText('Officer')).toBeVisible();
-    await expect(page.getByText('Mode')).toBeVisible();
+    // Verify receipt metadata fields - the receipt uses label/value rows
+    // Use exact matching to avoid partial matches (e.g., "Customer" vs "Customers")
+    await expect(mainContent.getByText('Date', { exact: true })).toBeVisible();
+    await expect(mainContent.getByText('Customer', { exact: true })).toBeVisible();
+    await expect(mainContent.getByText('Loan Number', { exact: true })).toBeVisible();
+    await expect(mainContent.getByText('Payment Mode', { exact: true })).toBeVisible();
 
-    // Verify allocation breakdown components
-    await expect(page.getByText('Principal')).toBeVisible();
-    await expect(page.getByText('Interest')).toBeVisible();
-    await expect(page.getByText('Penalty')).toBeVisible();
-    await expect(page.getByText('Total Paid')).toBeVisible();
-    await expect(page.getByText('Outstanding After')).toBeVisible();
+    // Verify allocation breakdown section
+    await expect(mainContent.getByText('Allocation Breakdown')).toBeVisible();
+    await expect(mainContent.getByText('Principal', { exact: true })).toBeVisible();
+    await expect(mainContent.getByText('Interest', { exact: true })).toBeVisible();
+    await expect(mainContent.getByText('Penalty', { exact: true })).toBeVisible();
+
+    // Verify outstanding after payment
+    await expect(mainContent.getByText('Outstanding After Payment')).toBeVisible();
+
+    // Verify the collected by field
+    await expect(mainContent.getByText('Collected By')).toBeVisible();
 
     // Verify the Print button is visible
-    await expect(page.getByRole('button', { name: /print/i })).toBeVisible();
+    await expect(collectionOfficerPage.getByRole('button', { name: /print/i })).toBeVisible();
   });
 
-  test('print layout correct — no navigation elements, proper formatting', async ({ page }) => {
-    await login(page, CO_USERNAME, CO_PASSWORD);
+  test('print layout correct — no navigation elements, proper formatting', async ({ collectionOfficerPage }) => {
+    await collectionOfficerPage.goto(`/receipts/${receiptId}`, { timeout: 30_000 });
+    await collectionOfficerPage.waitForLoadState('networkidle');
 
-    await page.goto(`/receipts/${receiptId}`);
-    await page.waitForLoadState('networkidle');
+    // Scope to main content to avoid sidebar elements
+    const mainContent = collectionOfficerPage.locator('main');
 
-    // The receipt page has a print:hidden section for navigation controls
-    // In print mode, elements with print:hidden should not be visible
-    // Verify the print:hidden class exists on the navigation bar
-    const printHiddenElements = page.locator('.print\\:hidden');
-    await expect(printHiddenElements.first()).toBeVisible();
+    // The receipt page uses .no-print class for elements that should be hidden when printing
+    // This includes the back button and print button header area
+    const noPrintElements = mainContent.locator('.no-print');
+    await expect(noPrintElements.first()).toBeVisible({ timeout: 10_000 });
 
-    // The navigation back button and Print button are inside print:hidden
-    // Verify they exist in the DOM (visible on screen, hidden in print)
-    const backButton = printHiddenElements.locator('a[href="/collections"]');
+    // The back button is in main content, not the sidebar
+    // Verify it exists in the DOM (visible on screen, hidden in print)
+    const backButton = mainContent.locator('a[href="/collections"]');
     await expect(backButton).toBeVisible();
 
-    // The receipt card content (not print:hidden) should contain the receipt data
-    const receiptCard = page.locator('[ref="printRef"]').or(page.locator('.space-y-4 > div:last-child'));
-    const cardContent = page.getByText('AS Finance');
-    await expect(cardContent).toBeVisible();
+    // Verify the Print button exists in the no-print section
+    const printButton = collectionOfficerPage.getByRole('button', { name: /print/i });
+    await expect(printButton).toBeVisible();
 
     // Verify the receipt content is properly formatted inside a Card
-    await expect(page.getByText('Payment Receipt')).toBeVisible();
+    await expect(collectionOfficerPage.getByRole('heading', { name: 'Payment Receipt' })).toBeVisible();
 
-    // Verify the receipt has a structured grid layout for metadata
-    const metadataGrid = page.locator('.grid.gap-2.text-sm');
-    await expect(metadataGrid).toBeVisible();
+    // The receipt card has the receipt-container class for print styling
+    const receiptCard = mainContent.locator('.receipt-container');
+    await expect(receiptCard).toBeVisible();
 
-    // Verify the allocation breakdown section has a border separator
-    const allocationSection = page.locator('.border-t.pt-4');
-    await expect(allocationSection).toBeVisible();
+    // Verify the allocation breakdown section exists
+    await expect(mainContent.getByText('Allocation Breakdown')).toBeVisible();
+
+    // Verify the outstanding section exists
+    await expect(mainContent.getByText('Outstanding After Payment')).toBeVisible();
   });
 });

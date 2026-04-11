@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { Plus } from 'lucide-react';
 import { useLoans } from '@/hooks/useLoans';
-import { StatusBadge, MoneyDisplay, LoadingSpinner, ErrorMessage, PaginationControls } from '@/components/shared';
+import { StatusBadge, MoneyDisplay, LoadingSpinner, ErrorMessage, PaginationControls, PermissionGate } from '@/components/shared';
 import { Button } from '@/components/ui/button';
 
 const STATUS_FILTERS = [
@@ -32,11 +32,13 @@ export default function LoansPage() {
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold">Loans</h1>
-        <Button asChild>
-          <Link href="/loans/new">
-            <Plus className="mr-2 h-4 w-4" />New Loan
-          </Link>
-        </Button>
+        <PermissionGate permission="loan.create">
+          <Button asChild>
+            <Link href="/loans/new">
+              <Plus className="mr-2 h-4 w-4" />New Loan
+            </Link>
+          </Button>
+        </PermissionGate>
       </div>
 
       <div className="flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Filter by status">

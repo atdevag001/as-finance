@@ -26,8 +26,10 @@ async function getProductVersionId(token: string): Promise<string> {
   const body = await res.json();
   const products = Array.isArray(body) ? body : body.data ?? [];
   const product = products[0];
-  // The product may expose versionId directly or via a nested versions array
+  // API returns snake_case fields: current_version_id, current_version.id
   return (
+    product?.current_version_id ??
+    product?.current_version?.id ??
     product?.currentVersionId ??
     product?.versionId ??
     product?.versions?.[0]?.id ??
@@ -70,6 +72,7 @@ test.describe('Loan Application', () => {
 
   test('submit loan → verify status changes to submitted', async ({ fieldOfficerPage }) => {
     // Create a loan via API so we have a known loan to work with
+    // Principal must be within product's allowed range (min 5000000 paise = ₹50,000)
     const loanRes = await fetch(`${API_BASE}/loans`, {
       method: 'POST',
       headers: {
@@ -79,20 +82,24 @@ test.describe('Loan Application', () => {
       body: JSON.stringify({
         customerId,
         productVersionId,
-        principalPaise: 1000000,
+        principalPaise: 5000000, // ₹50,000 - minimum allowed
         tenureMonths: 12,
         purpose: 'PW submit test',
       }),
     });
     const loan = await loanRes.json();
+    if (!loan.id) {
+      console.error('Loan creation failed:', loan);
+    }
     const loanId = loan.id;
 
     // Navigate to the loan detail page
     await fieldOfficerPage.goto(`/loans/${loanId}`);
     await fieldOfficerPage.waitForLoadState('domcontentloaded');
 
-    // Verify current status is draft
-    await expect(fieldOfficerPage.getByText('draft')).toBeVisible({ timeout: 30_000 });
+    // Verify current status is draft (StatusBadge renders status text)
+    const draftBadge = fieldOfficerPage.locator('span', { hasText: /^draft$/i });
+    await expect(draftBadge).toBeVisible({ timeout: 30_000 });
 
     // Look for a Submit button on the detail page
     const submitButton = fieldOfficerPage.getByRole('button', { name: /submit/i });
@@ -103,14 +110,18 @@ test.describe('Loan Application', () => {
       await submitButton.click();
 
       // Handle confirmation dialog if one appears
-      const confirmButton = fieldOfficerPage.getByRole('button', { name: /confirm|yes|ok/i });
-      const confirmVisible = await confirmButton.isVisible({ timeout: 5_000 }).catch(() => false);
-      if (confirmVisible) {
-        await confirmButton.click();
+      const dialog = fieldOfficerPage.getByRole('dialog');
+      const dialogVisible = await dialog.isVisible({ timeout: 5_000 }).catch(() => false);
+      if (dialogVisible) {
+        // Click the Submit/Confirm button inside the dialog
+        await dialog.getByRole('button', { name: /submit|confirm|yes|ok/i }).click();
       }
 
+      // Wait for dialog to close
+      await expect(dialog).not.toBeVisible({ timeout: 10_000 }).catch(() => {});
+
       // Wait for status to update
-      await expect(fieldOfficerPage.getByText('submitted')).toBeVisible({ timeout: 15_000 });
+      await expect(fieldOfficerPage.locator('span', { hasText: /^submitted$/i })).toBeVisible({ timeout: 15_000 });
     } else {
       // Submit via API and verify the UI reflects the change after reload
       await fetch(`${API_BASE}/loans/${loanId}/submit`, {
@@ -126,12 +137,13 @@ test.describe('Loan Application', () => {
       await fieldOfficerPage.waitForLoadState('domcontentloaded');
 
       // Verify the status badge now shows "submitted"
-      await expect(fieldOfficerPage.getByText('submitted')).toBeVisible({ timeout: 30_000 });
+      await expect(fieldOfficerPage.locator('span', { hasText: /^submitted$/i })).toBeVisible({ timeout: 30_000 });
     }
   });
 
   test('approve loan as manager → verify maker-checker enforcement', async ({ managerPage }) => {
     // Create and submit a loan via API as field_officer (the maker)
+    // Principal must be within product's allowed range (min 5000000 paise = ₹50,000)
     const createRes = await fetch(`${API_BASE}/loans`, {
       method: 'POST',
       headers: {
@@ -141,12 +153,15 @@ test.describe('Loan Application', () => {
       body: JSON.stringify({
         customerId,
         productVersionId,
-        principalPaise: 1000000,
+        principalPaise: 5000000, // ₹50,000 - minimum allowed
         tenureMonths: 12,
         purpose: 'PW approve test',
       }),
     });
     const loan = await createRes.json();
+    if (!loan.id) {
+      console.error('Loan creation failed:', loan);
+    }
     const loanId = loan.id;
 
     // Submit the loan as field_officer
@@ -163,7 +178,7 @@ test.describe('Loan Application', () => {
     await managerPage.waitForLoadState('domcontentloaded');
 
     // Verify the loan is in submitted status
-    await expect(managerPage.getByText('submitted')).toBeVisible({ timeout: 30_000 });
+    await expect(managerPage.locator('span', { hasText: /^submitted$/i })).toBeVisible({ timeout: 30_000 });
 
     // Look for an Approve button on the detail page
     const approveButton = managerPage.getByRole('button', { name: /approve/i });
@@ -173,12 +188,16 @@ test.describe('Loan Application', () => {
       // Click the approve button on the UI
       await approveButton.click();
 
-      // Handle confirmation dialog if one appears
-      const confirmButton = managerPage.getByRole('button', { name: /confirm|yes|ok/i });
-      const confirmVisible = await confirmButton.isVisible({ timeout: 5_000 }).catch(() => false);
-      if (confirmVisible) {
-        await confirmButton.click();
+      // Handle confirmation dialog - button text is "Approve" in the dialog
+      const dialog = managerPage.getByRole('dialog');
+      const dialogVisible = await dialog.isVisible({ timeout: 5_000 }).catch(() => false);
+      if (dialogVisible) {
+        // Click the Approve button inside the dialog (not the page button)
+        await dialog.getByRole('button', { name: /approve/i }).click();
       }
+
+      // Wait for dialog to close and status to update
+      await expect(dialog).not.toBeVisible({ timeout: 10_000 }).catch(() => {});
 
       // Wait for status to update to approved (or under_review depending on workflow)
       const approvedOrReviewed = managerPage.getByText('approved').or(managerPage.getByText('under review'));

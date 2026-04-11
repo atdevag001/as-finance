@@ -59,9 +59,9 @@ function ProfitLossContent() {
           <Card>
             <CardHeader><CardTitle className="text-green-700">Income</CardTitle></CardHeader>
             <CardContent className="space-y-2">
-              {data.income.map((item) => (
-                <div key={item.category} className="flex justify-between text-sm">
-                  <span className="capitalize">{item.category.replace(/_/g, ' ')}</span>
+              {data.income.map((item, idx) => (
+                <div key={item.category ?? idx} className="flex justify-between text-sm">
+                  <span className="capitalize">{(item.category ?? 'Other').replace(/_/g, ' ')}</span>
                   <MoneyDisplay paise={item.totalPaise} />
                 </div>
               ))}
@@ -76,9 +76,9 @@ function ProfitLossContent() {
           <Card>
             <CardHeader><CardTitle className="text-red-700">Expenses</CardTitle></CardHeader>
             <CardContent className="space-y-2">
-              {data.expenses.map((item) => (
-                <div key={item.category} className="flex justify-between text-sm">
-                  <span className="capitalize">{item.category.replace(/_/g, ' ')}</span>
+              {data.expenses.map((item, idx) => (
+                <div key={item.category ?? idx} className="flex justify-between text-sm">
+                  <span className="capitalize">{(item.category ?? 'Other').replace(/_/g, ' ')}</span>
                   <MoneyDisplay paise={item.totalPaise} />
                 </div>
               ))}

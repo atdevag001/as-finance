@@ -368,14 +368,8 @@ test.describe('RBAC Action Permissions', () => {
       // Wait for page heading to confirm page loaded
       await expect(managerPage.getByRole('heading', { name: /collection summary/i })).toBeVisible({ timeout: 30_000 });
 
-      // Export buttons should be visible - check for export link/button with common patterns
-      await expect(
-        managerPage.getByRole('button', { name: /pdf/i }).or(
-          managerPage.getByRole('button', { name: /excel/i })
-        ).or(managerPage.getByRole('button', { name: /export/i })).or(
-          managerPage.getByRole('link', { name: /export/i })
-        ),
-      ).toBeVisible({ timeout: 15_000 });
+      // Export buttons should be visible - check for PDF button specifically
+      await expect(managerPage.getByRole('button', { name: /pdf/i })).toBeVisible({ timeout: 15_000 });
     });
 
     test('accountant can see Export buttons on reports', async ({ accountantPage }) => {
@@ -385,13 +379,8 @@ test.describe('RBAC Action Permissions', () => {
       // Wait for page heading to confirm page loaded
       await expect(accountantPage.getByRole('heading', { name: /collection summary/i })).toBeVisible({ timeout: 30_000 });
 
-      await expect(
-        accountantPage.getByRole('button', { name: /pdf/i }).or(
-          accountantPage.getByRole('button', { name: /excel/i })
-        ).or(accountantPage.getByRole('button', { name: /export/i })).or(
-          accountantPage.getByRole('link', { name: /export/i })
-        ),
-      ).toBeVisible({ timeout: 15_000 });
+      // Export buttons should be visible - check for PDF button specifically
+      await expect(accountantPage.getByRole('button', { name: /pdf/i })).toBeVisible({ timeout: 15_000 });
     });
 
     test('field_officer CANNOT see Export buttons on reports', async ({ fieldOfficerPage }) => {
@@ -456,12 +445,8 @@ test.describe('RBAC Audit Log Access', () => {
     // Wait for page heading to confirm page loaded
     await expect(auditorPage.getByRole('heading', { name: 'Audit Log' })).toBeVisible({ timeout: 30_000 });
 
-    // Filter inputs or select elements should be visible
-    const entityFilter = auditorPage.getByPlaceholder(/entity/i);
-    const actionFilter = auditorPage.getByPlaceholder(/action/i);
-    const selectFilters = auditorPage.locator('select');
-
-    await expect(entityFilter.or(actionFilter).or(selectFilters.first())).toBeVisible({ timeout: 15_000 });
+    // Filter inputs should be visible - check for entity filter specifically
+    await expect(auditorPage.getByPlaceholder(/filter by entity/i)).toBeVisible({ timeout: 15_000 });
   });
 
   test('field_officer gets Access Denied on /audit', async ({ fieldOfficerPage }) => {

@@ -30,7 +30,7 @@ test.describe('Error Handling', () => {
       // Loading spinner should appear briefly (or page loads fast)
       // Just verify page eventually loads without error
       await expect(
-        managerPage.getByRole('heading', { name: /customers/i }).or(managerPage.getByText('Loading')),
+        managerPage.getByRole('heading', { name: /customers/i }).or(managerPage.getByText('Loading')).first(),
       ).toBeVisible({ timeout: 30_000 });
     });
 
@@ -55,9 +55,9 @@ test.describe('Error Handling', () => {
       // Submit empty form
       await submitButton.click();
 
-      // Inline errors should appear
+      // Inline errors should appear (use .first() since multiple validation errors appear)
       await expect(
-        fieldOfficerPage.locator('.text-destructive').or(fieldOfficerPage.locator('[aria-invalid="true"]')),
+        fieldOfficerPage.locator('.text-destructive').or(fieldOfficerPage.locator('[aria-invalid="true"]')).first(),
       ).toBeVisible({ timeout: 10_000 });
     });
 
@@ -72,9 +72,9 @@ test.describe('Error Handling', () => {
       if (await submitButton.isVisible()) {
         await submitButton.click();
 
-        // Validation errors should appear
+        // Validation errors should appear (use .first() since multiple validation errors appear)
         await expect(
-          fieldOfficerPage.locator('.text-destructive').or(fieldOfficerPage.getByText(/required/i)),
+          fieldOfficerPage.locator('.text-destructive').or(fieldOfficerPage.getByText(/required/i)).first(),
         ).toBeVisible({ timeout: 10_000 });
       }
     });
@@ -141,35 +141,31 @@ test.describe('Error Handling', () => {
       // Just verify the error handling mechanism exists
     });
 
-    test('duplicate username shows error on user create', async ({ managerPage }) => {
-      // Skip if not admin
-      const hasAccess = await managerPage.goto('/users/new', { timeout: 30_000 }).then(() => true).catch(() => false);
-      if (!hasAccess) {
-        test.skip();
-        return;
-      }
+    test('duplicate username shows error on user create', async ({ adminPage }) => {
+      // Use adminPage instead of managerPage for user creation access
+      await adminPage.goto('/users/new', { timeout: 30_000 });
+      await adminPage.waitForLoadState('domcontentloaded');
 
-      await managerPage.waitForLoadState('domcontentloaded');
-
-      // Wait for form to be ready
-      await managerPage.getByLabel('Username').waitFor({ state: 'visible', timeout: 30_000 });
+      // Wait for form to be ready - use input[name] since labels are not associated with inputs via htmlFor
+      const usernameInput = adminPage.locator('input[name="username"]');
+      await usernameInput.waitFor({ state: 'visible', timeout: 30_000 });
 
       // Try to create user with existing username
-      await managerPage.getByLabel('Username').fill('admin'); // Existing user
-      await managerPage.getByLabel('Full Name').fill('Test User');
-      await managerPage.getByLabel('Mobile').fill('9876543210');
-      await managerPage.getByLabel('Password').fill('ValidPass1');
+      await usernameInput.fill('admin'); // Existing user
+      await adminPage.locator('input[name="fullName"]').fill('Test User');
+      await adminPage.locator('input[name="mobile"]').fill('9876543210');
+      await adminPage.locator('input[name="password"]').fill('ValidPass1!');
 
-      const roleSelect = managerPage.locator('select').first();
+      const roleSelect = adminPage.locator('select').first();
       if (await roleSelect.isVisible()) {
         await roleSelect.selectOption({ index: 1 });
       }
 
-      await managerPage.getByRole('button', { name: /create user/i }).click();
+      await adminPage.getByRole('button', { name: /create user/i }).click();
 
-      // Should show duplicate error (exclude Next.js route announcer)
+      // Should show duplicate error (use .first() since multiple elements may match)
       await expect(
-        managerPage.getByText(/already exists|duplicate/i).or(managerPage.locator('[role="alert"]:not(#__next-route-announcer__)')),
+        adminPage.getByText(/already exists|duplicate/i).or(adminPage.locator('[role="alert"]:not(#__next-route-announcer__)')).first(),
       ).toBeVisible({ timeout: 15_000 });
     });
   });
@@ -200,8 +196,8 @@ test.describe('Error Handling', () => {
       const submitButton = fieldOfficerPage.getByRole('button', { name: /register customer|create customer|submit/i });
       await submitButton.waitFor({ state: 'visible', timeout: 30_000 });
 
-      // Fill valid form data
-      await fieldOfficerPage.getByLabel('Full Name').fill('Test Customer');
+      // Fill valid form data - use input[name] since labels are not associated with inputs via htmlFor
+      await fieldOfficerPage.locator('input[name="fullName"]').fill('Test Customer');
       // ... fill other fields
 
       // The submit button should disable itself on click
@@ -257,9 +253,9 @@ test.describe('Error Handling', () => {
       await managerPage.goto('/nonexistent-page-12345', { timeout: 30_000 });
       await managerPage.waitForLoadState('domcontentloaded');
 
-      // Should show 404 or redirect
+      // Should show 404 or redirect (use .first() since 404 page has multiple headings)
       await expect(
-        managerPage.getByText(/not found|404/i).or(managerPage.getByRole('heading')),
+        managerPage.getByText(/not found|404/i).or(managerPage.getByRole('heading')).first(),
       ).toBeVisible({ timeout: 30_000 });
     });
 
@@ -267,9 +263,9 @@ test.describe('Error Handling', () => {
       await managerPage.goto('/customers/invalid-uuid-12345', { timeout: 30_000 });
       await managerPage.waitForLoadState('domcontentloaded');
 
-      // Should show error or not found (exclude Next.js route announcer)
+      // Should show error or not found (use .first() since error message may appear in multiple elements)
       await expect(
-        managerPage.getByText(/not found|error/i).or(managerPage.locator('[role="alert"]:not(#__next-route-announcer__)')),
+        managerPage.getByText(/not found|error/i).or(managerPage.locator('[role="alert"]:not(#__next-route-announcer__)')).first(),
       ).toBeVisible({ timeout: 30_000 });
     });
   });

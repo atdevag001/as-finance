@@ -110,25 +110,33 @@ test.describe('Loan Products Module', () => {
       await adminPage.goto('/loan-products/new');
       await adminPage.waitForLoadState('domcontentloaded');
 
-      const interestTypeSelect = adminPage.locator('#interest_type').or(adminPage.getByLabel('Interest Type'));
-      if (await interestTypeSelect.isVisible()) {
-        await interestTypeSelect.click();
-        await expect(adminPage.getByText('Flat')).toBeVisible({ timeout: 5_000 });
-        await expect(adminPage.getByText('Reducing Balance')).toBeVisible();
-      }
+      // Wait for form to load
+      await expect(adminPage.getByText('Interest Type')).toBeVisible({ timeout: 15_000 });
+
+      // Click the select trigger to open dropdown
+      const interestTypeSelect = adminPage.locator('#interest_type');
+      await interestTypeSelect.click();
+
+      // Radix UI renders options in a portal - use role selectors
+      await expect(adminPage.getByRole('option', { name: 'Flat' })).toBeVisible({ timeout: 5_000 });
+      await expect(adminPage.getByRole('option', { name: 'Reducing Balance' })).toBeVisible();
     });
 
     test('frequency dropdown has daily, weekly, monthly options', async ({ adminPage }) => {
       await adminPage.goto('/loan-products/new');
       await adminPage.waitForLoadState('domcontentloaded');
 
-      const frequencySelect = adminPage.locator('#frequency').or(adminPage.getByLabel('Repayment Frequency'));
-      if (await frequencySelect.isVisible()) {
-        await frequencySelect.click();
-        await expect(adminPage.getByText('Daily')).toBeVisible({ timeout: 5_000 });
-        await expect(adminPage.getByText('Weekly')).toBeVisible();
-        await expect(adminPage.getByText('Monthly')).toBeVisible();
-      }
+      // Wait for form to load
+      await expect(adminPage.getByText('Repayment Frequency')).toBeVisible({ timeout: 15_000 });
+
+      // Click the select trigger to open dropdown
+      const frequencySelect = adminPage.locator('#frequency');
+      await frequencySelect.click();
+
+      // Radix UI renders options in a portal - use role selectors
+      await expect(adminPage.getByRole('option', { name: 'Daily' })).toBeVisible({ timeout: 5_000 });
+      await expect(adminPage.getByRole('option', { name: 'Weekly' })).toBeVisible();
+      await expect(adminPage.getByRole('option', { name: 'Monthly' })).toBeVisible();
     });
 
     test('validates product name is required', async ({ adminPage }) => {
@@ -137,16 +145,18 @@ test.describe('Loan Products Module', () => {
       // Wait for form to load
       await expect(adminPage.getByText('Product Name')).toBeVisible({ timeout: 30_000 });
 
-      await adminPage.getByLabel('Annual Rate').fill('24');
-      await adminPage.getByLabel('Min Principal').fill('5000');
-      await adminPage.getByLabel('Max Principal').fill('100000');
-      await adminPage.getByLabel('Min Tenure').fill('3');
-      await adminPage.getByLabel('Max Tenure').fill('24');
+      // Use locators by ID since labels include extra text like (%) and *
+      await adminPage.locator('#annual_rate').fill('24');
+      await adminPage.locator('#min_principal').fill('5000');
+      await adminPage.locator('#max_principal').fill('100000');
+      await adminPage.locator('#min_tenure_months').fill('3');
+      await adminPage.locator('#max_tenure_months').fill('24');
 
       await adminPage.getByRole('button', { name: /create product/i }).click();
 
+      // The form shows an error message via ErrorMessage component
       await expect(
-        adminPage.getByText(/name.*required/i).or(adminPage.locator('[role="alert"]:not(#__next-route-announcer__)')),
+        adminPage.getByText(/name.*required/i).or(adminPage.getByText(/Product name is required/i)),
       ).toBeVisible({ timeout: 10_000 });
     });
 
@@ -156,50 +166,64 @@ test.describe('Loan Products Module', () => {
       // Wait for form to load
       await expect(adminPage.getByText('Product Name')).toBeVisible({ timeout: 30_000 });
 
-      await adminPage.getByLabel('Product Name').fill('Test Product');
-      await adminPage.getByLabel('Annual Rate').fill('0');
-      await adminPage.getByLabel('Min Principal').fill('5000');
-      await adminPage.getByLabel('Max Principal').fill('100000');
-      await adminPage.getByLabel('Min Tenure').fill('3');
-      await adminPage.getByLabel('Max Tenure').fill('24');
+      // Use locators by ID since labels include extra text like (%) and *
+      await adminPage.locator('#name').fill('Test Product');
+      await adminPage.locator('#annual_rate').fill('0');
+      await adminPage.locator('#min_principal').fill('5000');
+      await adminPage.locator('#max_principal').fill('100000');
+      await adminPage.locator('#min_tenure_months').fill('3');
+      await adminPage.locator('#max_tenure_months').fill('24');
 
       await adminPage.getByRole('button', { name: /create product/i }).click();
 
+      // The form shows an error message via ErrorMessage component
       await expect(
-        adminPage.getByText(/rate.*positive/i).or(adminPage.locator('[role="alert"]:not(#__next-route-announcer__)')),
+        adminPage.getByText(/rate.*positive/i).or(adminPage.getByText(/Annual rate must be positive/i)),
       ).toBeVisible({ timeout: 10_000 });
     });
 
     test('validates min principal cannot exceed max principal', async ({ adminPage }) => {
       await adminPage.goto('/loan-products/new');
       await adminPage.waitForLoadState('domcontentloaded');
+      // Wait for form to load
+      await expect(adminPage.getByText('Product Name')).toBeVisible({ timeout: 30_000 });
 
-      await adminPage.getByLabel('Product Name').fill('Test Product');
-      await adminPage.getByLabel('Annual Rate').fill('24');
-      await adminPage.getByLabel('Min Principal').fill('100000');
-      await adminPage.getByLabel('Max Principal').fill('5000');
-      await adminPage.getByLabel('Min Tenure').fill('3');
-      await adminPage.getByLabel('Max Tenure').fill('24');
+      // Use locators by ID since labels include extra text like (Rs) and *
+      await adminPage.locator('#name').fill('Test Product');
+      await adminPage.locator('#annual_rate').fill('24');
+      await adminPage.locator('#min_principal').fill('100000');
+      await adminPage.locator('#max_principal').fill('5000');
+      await adminPage.locator('#min_tenure_months').fill('3');
+      await adminPage.locator('#max_tenure_months').fill('24');
 
       await adminPage.getByRole('button', { name: /create product/i }).click();
 
-      await expect(adminPage.locator('[role="alert"]:not(#__next-route-announcer__)')).toBeVisible({ timeout: 10_000 });
+      // The API returns validation errors shown in the ErrorMessage component (role="alert")
+      // ErrorMessage component wraps errors in a role="alert" div
+      const errorAlert = adminPage.locator('[role="alert"]:not(#__next-route-announcer__)');
+      await expect(errorAlert).toBeVisible({ timeout: 10_000 });
     });
 
     test('validates tenure range', async ({ adminPage }) => {
       await adminPage.goto('/loan-products/new');
       await adminPage.waitForLoadState('domcontentloaded');
+      // Wait for form to load
+      await expect(adminPage.getByText('Product Name')).toBeVisible({ timeout: 30_000 });
 
-      await adminPage.getByLabel('Product Name').fill('Test Product');
-      await adminPage.getByLabel('Annual Rate').fill('24');
-      await adminPage.getByLabel('Min Principal').fill('5000');
-      await adminPage.getByLabel('Max Principal').fill('100000');
-      await adminPage.getByLabel('Min Tenure').fill('24');
-      await adminPage.getByLabel('Max Tenure').fill('3');
+      // Use locators by ID since labels include extra text like (months) and *
+      await adminPage.locator('#name').fill('Test Product');
+      await adminPage.locator('#annual_rate').fill('24');
+      await adminPage.locator('#min_principal').fill('5000');
+      await adminPage.locator('#max_principal').fill('100000');
+      await adminPage.locator('#min_tenure_months').fill('24');
+      await adminPage.locator('#max_tenure_months').fill('3');
 
       await adminPage.getByRole('button', { name: /create product/i }).click();
 
-      await expect(adminPage.locator('[role="alert"]:not(#__next-route-announcer__)')).toBeVisible({ timeout: 10_000 });
+      // The API returns validation errors shown in the ErrorMessage component (role="alert")
+      // ErrorMessage component wraps errors in a role="alert" div
+      const errorAlert = adminPage.locator('[role="alert"]:not(#__next-route-announcer__)');
+      await expect(errorAlert).toBeVisible({ timeout: 10_000 });
     });
 
     test('cancel button returns to list', async ({ adminPage }) => {
@@ -219,26 +243,40 @@ test.describe('Loan Products Module', () => {
       // Verify page loads
       await expect(adminPage.getByRole('heading', { name: /loan products/i })).toBeVisible({ timeout: 10_000 });
 
-      // Deactivate button visibility depends on having active products - check table exists
+      // Wait for table to load
       const table = adminPage.locator('table');
-      if (await table.isVisible()) {
-        // If products exist, deactivate button should be visible for active ones
-        const deactivateButton = adminPage.getByRole('button', { name: /deactivate/i }).first();
-        // Button may or may not be visible depending on product state
-        await deactivateButton.or(table).isVisible();
-      }
+      await expect(table).toBeVisible({ timeout: 10_000 });
+
+      // Check if there are any active products with deactivate buttons
+      const deactivateButton = adminPage.getByRole('button', { name: /deactivate/i }).first();
+      // If active products exist, deactivate button should be visible
+      // This test passes if either no products exist OR deactivate button is visible for active products
+      const hasDeactivateButton = await deactivateButton.isVisible({ timeout: 5_000 }).catch(() => false);
+      const hasNoProducts = await adminPage.getByText('No loan products found').isVisible({ timeout: 1_000 }).catch(() => false);
+
+      // Test passes if either we have deactivate buttons or no products
+      expect(hasDeactivateButton || hasNoProducts).toBeTruthy();
     });
 
     test('deactivate shows confirmation dialog', async ({ adminPage }) => {
       await adminPage.goto('/loan-products');
       await adminPage.waitForLoadState('domcontentloaded');
 
+      // Wait for page to load
+      await expect(adminPage.getByRole('heading', { name: /loan products/i })).toBeVisible({ timeout: 10_000 });
+
       const deactivateButton = adminPage.getByRole('button', { name: /deactivate/i }).first();
-      if (await deactivateButton.isVisible()) {
+      const isVisible = await deactivateButton.isVisible({ timeout: 5_000 }).catch(() => false);
+
+      if (isVisible) {
         await deactivateButton.click();
+        // The ConfirmDialog component shows "Deactivate Product" title and "Are you sure" text
         await expect(
-          adminPage.getByRole('dialog').or(adminPage.getByText(/are you sure/i)),
+          adminPage.getByRole('alertdialog').or(adminPage.getByText(/are you sure/i)),
         ).toBeVisible({ timeout: 10_000 });
+      } else {
+        // Skip test if no active products to deactivate
+        test.skip();
       }
     });
 

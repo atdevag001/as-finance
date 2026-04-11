@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Plus, Search } from 'lucide-react';
 import { useCustomers } from '@/hooks/useCustomers';
-import { StatusBadge, LoadingSpinner, ErrorMessage, PaginationControls } from '@/components/shared';
+import { StatusBadge, LoadingSpinner, ErrorMessage, PaginationControls, PermissionGate } from '@/components/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -45,11 +45,13 @@ export default function CustomersPage() {
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold">Customers</h1>
-        <Button asChild>
-          <Link href="/customers/new">
-            <Plus className="mr-2 h-4 w-4" />New Customer
-          </Link>
-        </Button>
+        <PermissionGate permission="customer.create">
+          <Button asChild>
+            <Link href="/customers/new">
+              <Plus className="mr-2 h-4 w-4" />New Customer
+            </Link>
+          </Button>
+        </PermissionGate>
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">

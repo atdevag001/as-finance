@@ -43,10 +43,14 @@ test.describe('Customer Management', () => {
     await expect(fieldOfficerPage.getByRole('heading', { name: 'Register Customer' })).toBeVisible({ timeout: 30_000 });
 
     // Try submitting empty form
-    await fieldOfficerPage.getByRole('button', { name: /register|submit|save/i }).click();
+    const submitButton = fieldOfficerPage.getByRole('button', { name: 'Register Customer' });
+    await expect(submitButton).toBeVisible({ timeout: 10_000 });
+    await submitButton.click();
 
-    // Validation errors should appear
-    await expect(fieldOfficerPage.getByText(/required/i)).toBeVisible({ timeout: 10_000 });
+    // Validation errors should appear in .text-destructive elements
+    await expect(
+      fieldOfficerPage.locator('.text-destructive').first()
+    ).toBeVisible({ timeout: 10_000 });
   });
 
   test('should search customers', async ({ managerPage }) => {
