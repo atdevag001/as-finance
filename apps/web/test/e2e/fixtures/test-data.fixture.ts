@@ -91,18 +91,16 @@ export async function createTestCustomer(
   overrides: Partial<{
     fullName: string;
     mobile: string;
-    aadhaar: string;
-    pan: string;
-    dateOfBirth: string;
+    aadhaarNumber: string;
+    panNumber: string;
+    dob: string;
     gender: 'male' | 'female' | 'other';
     monthlyIncomePaise: number;
-    address: {
-      line1: string;
-      city: string;
-      district: string;
-      state: string;
-      pincode: string;
-    };
+    addressLine1: string;
+    city: string;
+    district: string;
+    state: string;
+    pincode: string;
   }> = {},
 ): Promise<string> {
   // Generate unique test data
@@ -110,24 +108,22 @@ export async function createTestCustomer(
   const randomSuffix = Math.floor(Math.random() * 10000);
 
   const customer = {
-    full_name: overrides.fullName ?? `Test Customer ${timestamp}`,
+    fullName: overrides.fullName ?? `Test Customer ${timestamp}`,
     mobile: overrides.mobile ?? `9${String(timestamp).slice(-9)}`,
-    aadhaar: overrides.aadhaar ?? generateValidAadhaar(),
-    pan: overrides.pan ?? generateValidPAN(),
-    date_of_birth: overrides.dateOfBirth ?? '1990-01-15',
+    aadhaarNumber: overrides.aadhaarNumber ?? generateValidAadhaar(),
+    panNumber: overrides.panNumber ?? generateValidPAN(),
+    dob: overrides.dob ?? '1990-01-15',
     gender: overrides.gender ?? 'male',
-    monthly_income_paise: overrides.monthlyIncomePaise ?? 5000000, // ₹50,000
-    address: overrides.address ?? {
-      line1: `${randomSuffix} Test Street`,
-      city: 'Mumbai',
-      district: 'Mumbai',
-      state: 'Maharashtra',
-      pincode: '400001',
-    },
+    monthlyIncomePaise: overrides.monthlyIncomePaise ?? 5000000, // ₹50,000
+    addressLine1: overrides.addressLine1 ?? `${randomSuffix} Test Street`,
+    city: overrides.city ?? 'Mumbai',
+    district: overrides.district ?? 'Mumbai',
+    state: overrides.state ?? 'Maharashtra',
+    pincode: overrides.pincode ?? '400001',
   };
 
-  const result = await apiRequest<{ id: string }>('POST', '/customers', token, customer);
-  return result.id;
+  const result = await apiRequest<{ customer: { id: string } }>('POST', '/customers', token, customer);
+  return result.customer.id;
 }
 
 /**

@@ -124,11 +124,43 @@ EOF
   success "Report generated: $RESULTS_DIR/report.md"
 }
 
+# Phase 0: Check Auth Token Freshness
+check_auth_freshness() {
+  log "Checking auth token freshness..."
+  AUTH_MAX_AGE_SEC=600  # 10 minutes
+  STALE_COUNT=0
+
+  for role in manager super_admin field_officer; do
+    AUTH_FILE="apps/web/test/e2e/.auth/${role}.json"
+    if [ -f "$AUTH_FILE" ]; then
+      FILE_AGE=$(( $(date +%s) - $(stat -c %Y "$AUTH_FILE" 2>/dev/null || stat -f %m "$AUTH_FILE" 2>/dev/null) ))
+      if [ "$FILE_AGE" -gt "$AUTH_MAX_AGE_SEC" ]; then
+        STALE_COUNT=$((STALE_COUNT + 1))
+      fi
+    else
+      STALE_COUNT=$((STALE_COUNT + 1))
+    fi
+  done
+
+  if [ "$STALE_COUNT" -gt 0 ]; then
+    warning "Auth tokens stale or missing. Refreshing..."
+    rm -f apps/web/test/e2e/.auth/*.json
+    cd apps/web/test && npx playwright test --project=auth-setup 2>&1 | tee "$RESULTS_DIR/auth-setup.txt" || true
+    cd ../../..
+    success "Auth tokens refreshed"
+  else
+    success "Auth tokens are fresh"
+  fi
+}
+
 # Main Loop
 main() {
   log "Starting Autonomous Test Cycle"
   log "Target Coverage: $COVERAGE_TARGET%"
   log "Max Iterations: $MAX_ITERATIONS"
+
+  # Phase 0: Check and refresh auth
+  check_auth_freshness
 
   for iteration in $(seq 1 $MAX_ITERATIONS); do
     log "=== ITERATION $iteration ==="

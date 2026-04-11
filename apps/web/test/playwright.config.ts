@@ -17,6 +17,9 @@ export default defineConfig({
   timeout: 120_000, // 2 minutes per test
   expect: { timeout: 30_000 }, // 30 seconds for assertions
 
+  // Global setup runs before all tests (health checks, auth validation)
+  globalSetup: require.resolve('./e2e/global-setup'),
+
   reporter: CI
     ? [['html', { open: 'never' }], ['junit', { outputFile: 'test-results/junit.xml' }], ['list']]
     : [['html', { open: 'on-failure' }], ['list']],

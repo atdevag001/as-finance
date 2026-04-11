@@ -33,9 +33,26 @@ Run pre-flight validation before any testing:
 ```
 
 If pre-flight fails, fix the issues before proceeding:
-- Start API: `pnpm dev:api`
-- Start Web: `pnpm dev:web`
+- Start API: `cd apps/api && DATABASE_URL="postgresql://asfinance:asfinance_dev@localhost:5432/asfinance_lms" JWT_SECRET="as_finance_development_secret_key_2024" pnpm dev`
+- Start Web: `cd apps/web && pnpm dev`
 - Install browsers: `npx playwright install chromium`
+
+### Step 0b: Token Freshness Check (CRITICAL)
+JWT tokens expire in **15 minutes**. Auth files older than 10 minutes need refresh:
+
+```bash
+# Check token age (included in preflight-check.sh output)
+# If tokens are stale, refresh them:
+rm -f apps/web/test/e2e/.auth/*.json
+cd apps/web/test && npx playwright test --project=auth-setup
+```
+
+**Symptoms of expired tokens:**
+- Tests redirect to `/login` instead of expected page
+- "401 Unauthorized" in test output
+- Screenshots show login form
+
+**Important:** After refreshing tokens, run tests within 10 minutes!
 
 ### Step 1: Load State
 Read the test state to understand current progress:

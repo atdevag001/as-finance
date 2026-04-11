@@ -76,7 +76,7 @@ export class ReversalService {
     }
 
     // 2. Execute atomic reversal transaction
-    const result = await this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx: TxClient) => {
       return this.executeReversal(tx, dto, actorId, actorRole);
     });
 
@@ -148,7 +148,7 @@ export class ReversalService {
     await this.restoreInstallments(originalAllocations, loan.schedules, tx);
 
     // ── Step e: Create mirror journal entry ──
-    const mirrorJournalLines = originalJournal.lines.map((line) => ({
+    const mirrorJournalLines = originalJournal.lines.map((line: { account_id: string; credit_paise: bigint; debit_paise: bigint }) => ({
       accountId: line.account_id,
       debitPaise: Number(line.credit_paise),
       creditPaise: Number(line.debit_paise),
@@ -229,11 +229,13 @@ export class ReversalService {
       );
 
       // Mark original receipt as reversed and link to compensating receipt
-      await this.receiptService.markAsReversed(
-        originalReceipt.id,
-        compensatingReceipt.id,
-        tx,
-      );
+      if (compensatingReceipt) {
+        await this.receiptService.markAsReversed(
+          originalReceipt.id,
+          compensatingReceipt.id,
+          tx,
+        );
+      }
     }
 
     // ── Step g: Update loan cached_outstanding, DPD, overdue_bucket ──

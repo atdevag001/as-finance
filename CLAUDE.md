@@ -11,43 +11,122 @@ AS-Finance is a microfinance loan management system with:
 ### Quick Start Commands
 
 ```bash
-# Run full test suite
-pnpm test
+# Option 1: Run full autonomous test cycle (recommended)
+./scripts/auto-test-runner.sh
 
-# Run E2E tests only
-cd apps/web/test && npx playwright test
+# Option 2: Run individual components
+./scripts/preflight-check.sh          # Pre-flight validation
+./scripts/coverage-analyzer.sh        # Gap analysis
+./scripts/flakiness-detector.sh 5     # Flakiness detection (5 runs)
 
-# Run with coverage
-pnpm --filter @as-finance/api test:unit --coverage
+# Option 3: Run E2E tests directly
+cd apps/web/test && npx playwright test --project=desktop-chrome
+
+# Refresh auth tokens (if tests fail with 401 or redirect to login)
+rm -f apps/web/test/e2e/.auth/*.json && cd apps/web/test && npx playwright test --project=auth-setup
+```
+
+### State Persistence
+
+The autonomous testing system maintains state across sessions:
+```bash
+# Check current state
+cat .claude/auto-test-system/state/test-state.json
+
+# Key fields:
+# - currentPhase: INIT | ANALYSIS | TESTING | FIXING | COMPLETE
+# - coverage.e2e.percentage: Current E2E coverage %
+# - modules: Status of each module (PENDING | IN_PROGRESS | COMPLETE)
+# - auth.lastRefresh: When tokens were last refreshed
 ```
 
 ### Autonomous Testing Cycle
 
 When asked to "run autonomous testing" or "auto-test", execute this cycle:
 
+#### Phase 0: Pre-flight Checks (CRITICAL)
+```bash
+./scripts/preflight-check.sh
+```
+This validates:
+- Node.js and pnpm installed
+- API server running at localhost:3001
+- Web server running at localhost:3000
+- Database connectivity
+- Auth state files exist and are fresh (< 10 min old)
+- Disk space available
+
+**If pre-flight fails**, fix issues:
+```bash
+# Start API server
+cd apps/api && DATABASE_URL="postgresql://asfinance:asfinance_dev@localhost:5432/asfinance_lms" JWT_SECRET="as_finance_development_secret_key_2024" pnpm dev
+
+# Start Web server (in another terminal)
+cd apps/web && pnpm dev
+
+# Refresh auth tokens
+rm -f apps/web/test/e2e/.auth/*.json && cd apps/web/test && npx playwright test --project=auth-setup
+```
+
 #### Phase 1: Analyze
-1. Run `pnpm test` to get current test status
-2. Identify failing tests
-3. Calculate coverage gaps (pages without E2E tests)
+```bash
+./scripts/coverage-analyzer.sh
+```
+1. Run coverage analyzer to see pages vs specs
+2. Read test-state.json to identify priority gaps
+3. Categorize any failures:
+   - **Auth Issues**: Token expired → refresh auth
+   - **Selector Issues**: DOM changed → fix selectors
+   - **App Bugs**: API errors → fix app code
 
 #### Phase 2: Fix Failures
 For each failing test:
 1. Read the test file and error message
-2. Determine if it's a test bug or app bug
-3. Fix the issue
-4. Re-run the specific test to verify
+2. Check screenshot in `apps/web/test/test-results/`
+3. Determine root cause (test bug vs app bug)
+4. Fix the issue
+5. Re-run specific test: `npx playwright test "test-name" --project=desktop-chrome`
 
 #### Phase 3: Generate Missing Tests
 For pages without E2E coverage:
-1. Read the page component
-2. Generate Playwright spec following the pattern in `apps/web/test/e2e/`
-3. Run the new test
-4. Fix any issues
+```bash
+# Use intelligent test generator for AST analysis
+npx ts-node scripts/intelligent-test-generator.ts apps/web/src/app/(dashboard)/[MODULE]/page.tsx
+```
+1. Read the page component in `apps/web/src/app/(dashboard)/`
+2. Generate Playwright spec following existing patterns
+3. Use pre-authenticated fixtures (managerPage, adminPage, etc.)
+4. Run the new test and fix any issues
 
-#### Phase 4: Iterate
-Repeat until:
-- All tests pass
-- All pages have E2E coverage
+#### Phase 4: Update State & Iterate
+```bash
+# Update test-state.json after each phase
+# Continue until:
+# - All tests pass
+# - Coverage target met (default: 80%)
+```
+
+### Token Expiration Handling
+
+JWT tokens expire in **15 minutes**. Auth setup creates tokens for 7 roles.
+
+**Symptoms of expired tokens:**
+- Tests redirect to login page
+- "401 Unauthorized" errors
+- Screenshot shows login form instead of expected page
+
+**Detection:**
+```bash
+# Check token age (built into preflight-check.sh)
+./scripts/preflight-check.sh | grep -A2 "token freshness"
+```
+
+**Resolution:**
+```bash
+rm -f apps/web/test/e2e/.auth/*.json
+cd apps/web/test && npx playwright test --project=auth-setup
+# Then immediately run tests (within 10 minutes)
+```
 
 ### Test File Locations
 

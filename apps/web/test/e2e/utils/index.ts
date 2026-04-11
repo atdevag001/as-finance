@@ -44,3 +44,13 @@ export {
   COMMON_MASKS,
   type VisualComparisonOptions,
 } from './visual-regression';
+
+// Token refresh utilities (for long test runs)
+export {
+  authFileNeedsRefresh,
+  refreshTokenViaApi,
+  ensureFreshAuth,
+  getAuthTimeRemaining,
+  formatTimeRemaining,
+  printAuthStatus,
+} from './token-refresh';

@@ -61,6 +61,8 @@ export function deriveInstallmentCount(
       return tenureMonths * 4;
     case Frequency.DAILY:
       return tenureMonths * 30;
+    default:
+      throw new Error(`Unsupported frequency: ${frequency}`);
   }
 }
 
@@ -84,6 +86,8 @@ export function derivePeriodicRate(
       return annualRate.div(52);
     case Frequency.DAILY:
       return annualRate.div(365);
+    default:
+      throw new Error(`Unsupported frequency: ${frequency}`);
   }
 }
 

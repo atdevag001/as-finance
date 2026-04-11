@@ -77,7 +77,7 @@ fi
 # Check 7: Database connectivity (via API health)
 echo -n "Checking Database connectivity... "
 DB_STATUS=$(curl -s http://localhost:3001/health/ready 2>/dev/null | grep -o '"database":"[^"]*"' | cut -d'"' -f4 || echo "unknown")
-if [[ "$DB_STATUS" == "up" ]] || [[ "$DB_STATUS" == "ok" ]]; then
+if [[ "$DB_STATUS" == "up" ]] || [[ "$DB_STATUS" == "ok" ]] || [[ "$DB_STATUS" == "connected" ]]; then
   echo -e "${GREEN}OK${NC}"
 elif [[ "$DB_STATUS" == "unknown" ]]; then
   echo -e "${YELLOW}WARN${NC} - Cannot verify (API not responding)"
@@ -94,6 +94,26 @@ if [ "$AUTH_FILES" -ge 7 ]; then
 else
   echo -e "${YELLOW}WARN${NC} - Only $AUTH_FILES roles cached"
   echo "       Run: cd apps/web/test && npx playwright test --project=auth-setup"
+fi
+
+# Check 8b: Auth token freshness (JWT expires in 15 min)
+echo -n "Checking auth token freshness... "
+AUTH_MAX_AGE_SEC=600  # 10 minutes (refresh before 15 min expiry)
+STALE_TOKENS=0
+for role in manager super_admin field_officer collection_officer accountant office_staff viewer_auditor; do
+  AUTH_FILE="apps/web/test/e2e/.auth/${role}.json"
+  if [ -f "$AUTH_FILE" ]; then
+    FILE_AGE=$(( $(date +%s) - $(stat -c %Y "$AUTH_FILE" 2>/dev/null || stat -f %m "$AUTH_FILE" 2>/dev/null) ))
+    if [ "$FILE_AGE" -gt "$AUTH_MAX_AGE_SEC" ]; then
+      STALE_TOKENS=$((STALE_TOKENS + 1))
+    fi
+  fi
+done
+if [ "$STALE_TOKENS" -eq 0 ]; then
+  echo -e "${GREEN}OK${NC} - All tokens fresh"
+else
+  echo -e "${YELLOW}WARN${NC} - $STALE_TOKENS token(s) may be expired"
+  echo "       Run: rm -f apps/web/test/e2e/.auth/*.json && cd apps/web/test && npx playwright test --project=auth-setup"
 fi
 
 # Check 9: Environment variables

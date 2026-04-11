@@ -2,7 +2,9 @@
   "extends": "@as-finance/config/tsconfig/base",
   "compilerOptions": {
     "outDir": "./dist",
-    "rootDir": "./src"
+    "rootDir": "./src",
+    "module": "CommonJS",
+    "moduleResolution": "Node"
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "**/*.spec.ts", "**/*.test.ts"]

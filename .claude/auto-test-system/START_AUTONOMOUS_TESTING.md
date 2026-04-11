@@ -14,6 +14,17 @@ Execute autonomous testing cycle for as-finance with the following protocol:
 2. Check current git status
 3. Ensure no uncommitted changes that could interfere
 
+## PRE-FLIGHT (MANDATORY BEFORE TESTING)
+```bash
+# Run pre-flight checks
+./scripts/preflight-check.sh
+
+# If pre-flight fails with auth token warning, refresh:
+rm -f apps/web/test/e2e/.auth/*.json
+cd apps/web/test && npx playwright test --project=auth-setup
+# IMPORTANT: Run tests within 10 minutes of auth refresh!
+```
+
 ## PHASE 1: BASELINE ANALYSIS (MANDATORY FIRST STEP)
 
 ### 1.1 Run All Existing Tests
