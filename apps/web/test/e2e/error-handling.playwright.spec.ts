@@ -160,8 +160,8 @@ test.describe('Error Handling', () => {
       await managerPage.goto('/loans');
       await managerPage.waitForLoadState('networkidle');
 
-      // This would require finding a closed loan
-      // Just verify the mechanism exists
+      // Verify the loans page loads - actual closed loan test would require test data setup
+      await expect(managerPage.getByRole('heading', { name: /loans/i })).toBeVisible({ timeout: 10_000 });
     });
 
     test('cannot reverse already reversed collection', async ({ managerPage }) => {

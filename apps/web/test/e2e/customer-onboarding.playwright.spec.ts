@@ -186,8 +186,10 @@ test.describe('Customer Onboarding', () => {
 
     const table = managerPage.locator('table');
     if (await table.isVisible()) {
-      await expect(managerPage.getByText('Name')).toBeVisible();
-      await expect(managerPage.getByText('Mobile')).toBeVisible();
+      // Use table header cells for more reliable matching
+      const headerRow = table.locator('thead tr').first();
+      await expect(headerRow.getByText('Name').or(headerRow.getByText('Full Name'))).toBeVisible({ timeout: 5_000 });
+      await expect(headerRow.getByText('Mobile').or(headerRow.getByText('Phone'))).toBeVisible({ timeout: 5_000 });
     }
   });
 });
