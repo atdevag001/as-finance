@@ -84,12 +84,12 @@ export default function LoanProductsPage() {
                       <span className="ml-1 text-xs text-muted-foreground">v{p.version}</span>
                     </td>
                     <td className="px-4 py-3 hidden sm:table-cell capitalize">
-                      {p.interest_type.replace(/_/g, ' ')}
+                      {p.interest_type?.replace(/_/g, ' ') ?? '-'}
                     </td>
-                    <td className="px-4 py-3 text-right">{(p.annual_rate / 100).toFixed(2)}</td>
-                    <td className="px-4 py-3 hidden md:table-cell capitalize">{p.frequency}</td>
+                    <td className="px-4 py-3 text-right">{((p.annual_rate ?? 0) / 100).toFixed(2)}</td>
+                    <td className="px-4 py-3 hidden md:table-cell capitalize">{p.frequency ?? '-'}</td>
                     <td className="px-4 py-3 text-right hidden lg:table-cell">
-                      <MoneyDisplay paise={p.min_principal_paise} /> – <MoneyDisplay paise={p.max_principal_paise} />
+                      <MoneyDisplay paise={p.min_principal_paise ?? 0} /> – <MoneyDisplay paise={p.max_principal_paise ?? 0} />
                     </td>
                     <td className="px-4 py-3">
                       <StatusBadge status={p.is_active ? 'active' : 'inactive'} type="product" />

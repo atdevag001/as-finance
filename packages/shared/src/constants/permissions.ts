@@ -20,6 +20,12 @@ export const PERMISSIONS: Record<string, readonly UserRole[]> = {
   'customer.blacklist': [SUPER_ADMIN, MANAGER],
   'customer.upload_doc': [SUPER_ADMIN, MANAGER, FIELD_OFFICER, OFFICE_STAFF],
 
+  // Loan Product
+  'loan_product.create': [SUPER_ADMIN],
+  'loan_product.read': READ_ALL,
+  'loan_product.update': [SUPER_ADMIN],
+  'loan_product.deactivate': [SUPER_ADMIN],
+
   // Loan
   'loan.create': [SUPER_ADMIN, MANAGER, FIELD_OFFICER, OFFICE_STAFF],
   'loan.read': READ_ALL,

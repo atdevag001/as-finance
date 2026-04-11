@@ -22,7 +22,7 @@ test.describe('Loan Products Module', () => {
 
     test('displays products table with columns', async ({ adminPage }) => {
       await adminPage.goto('/loan-products');
-      await adminPage.waitForLoadState('networkidle');
+      await adminPage.waitForLoadState('domcontentloaded');
 
       const table = adminPage.locator('table');
       if (await table.isVisible()) {
@@ -34,7 +34,7 @@ test.describe('Loan Products Module', () => {
 
     test('shows status badges for active/inactive products', async ({ adminPage }) => {
       await adminPage.goto('/loan-products');
-      await adminPage.waitForLoadState('networkidle');
+      await adminPage.waitForLoadState('domcontentloaded');
 
       const statusBadges = adminPage.locator('[class*="badge"]').or(adminPage.locator('[class*="status"]'));
       if ((await statusBadges.count()) > 0) {
@@ -44,7 +44,7 @@ test.describe('Loan Products Module', () => {
 
     test('admin sees "New Product" button', async ({ adminPage }) => {
       await adminPage.goto('/loan-products');
-      await adminPage.waitForLoadState('networkidle');
+      await adminPage.waitForLoadState('domcontentloaded');
       await expect(adminPage.getByRole('link', { name: /new product/i })).toBeVisible({ timeout: 15_000 });
     });
 
@@ -56,7 +56,7 @@ test.describe('Loan Products Module', () => {
 
     test('displays interest rate in percentage format', async ({ adminPage }) => {
       await adminPage.goto('/loan-products');
-      await adminPage.waitForLoadState('networkidle');
+      await adminPage.waitForLoadState('domcontentloaded');
       // Look for percentage values in table
       const percentageValues = adminPage.locator('td').filter({ hasText: /\d+\.\d+/ });
       // Values should be formatted as percentages
@@ -64,14 +64,14 @@ test.describe('Loan Products Module', () => {
 
     test('displays principal range in INR format', async ({ adminPage }) => {
       await adminPage.goto('/loan-products');
-      await adminPage.waitForLoadState('networkidle');
+      await adminPage.waitForLoadState('domcontentloaded');
       // Look for INR formatted values
       const currencyValues = adminPage.locator('td').filter({ hasText: /₹|Rs/ });
     });
 
     test('clicking product name navigates to detail', async ({ adminPage }) => {
       await adminPage.goto('/loan-products');
-      await adminPage.waitForLoadState('networkidle');
+      await adminPage.waitForLoadState('domcontentloaded');
 
       const productLink = adminPage.locator('table tbody tr a').first();
       if (await productLink.isVisible()) {
@@ -84,7 +84,7 @@ test.describe('Loan Products Module', () => {
   test.describe('Create Product Form', () => {
     test('navigates to create product page', async ({ adminPage }) => {
       await adminPage.goto('/loan-products');
-      await adminPage.waitForLoadState('networkidle');
+      await adminPage.waitForLoadState('domcontentloaded');
       await adminPage.getByRole('link', { name: /new product/i }).click();
       await adminPage.waitForURL('**/loan-products/new', { timeout: 15_000 });
       await expect(adminPage.getByRole('heading', { name: /new loan product/i })).toBeVisible();
@@ -92,7 +92,7 @@ test.describe('Loan Products Module', () => {
 
     test('form has all required fields', async ({ adminPage }) => {
       await adminPage.goto('/loan-products/new');
-      await adminPage.waitForLoadState('networkidle');
+      await adminPage.waitForLoadState('domcontentloaded');
 
       await expect(adminPage.getByText('Product Name')).toBeVisible({ timeout: 15_000 });
       await expect(adminPage.getByText('Interest Type')).toBeVisible();
@@ -106,7 +106,7 @@ test.describe('Loan Products Module', () => {
 
     test('interest type dropdown has flat and reducing balance options', async ({ adminPage }) => {
       await adminPage.goto('/loan-products/new');
-      await adminPage.waitForLoadState('networkidle');
+      await adminPage.waitForLoadState('domcontentloaded');
 
       const interestTypeSelect = adminPage.locator('#interest_type').or(adminPage.getByLabel('Interest Type'));
       if (await interestTypeSelect.isVisible()) {
@@ -118,7 +118,7 @@ test.describe('Loan Products Module', () => {
 
     test('frequency dropdown has daily, weekly, monthly options', async ({ adminPage }) => {
       await adminPage.goto('/loan-products/new');
-      await adminPage.waitForLoadState('networkidle');
+      await adminPage.waitForLoadState('domcontentloaded');
 
       const frequencySelect = adminPage.locator('#frequency').or(adminPage.getByLabel('Repayment Frequency'));
       if (await frequencySelect.isVisible()) {
@@ -131,7 +131,7 @@ test.describe('Loan Products Module', () => {
 
     test('validates product name is required', async ({ adminPage }) => {
       await adminPage.goto('/loan-products/new');
-      await adminPage.waitForLoadState('networkidle');
+      await adminPage.waitForLoadState('domcontentloaded');
 
       await adminPage.getByLabel('Annual Rate').fill('24');
       await adminPage.getByLabel('Min Principal').fill('5000');
@@ -148,7 +148,7 @@ test.describe('Loan Products Module', () => {
 
     test('validates annual rate is required and positive', async ({ adminPage }) => {
       await adminPage.goto('/loan-products/new');
-      await adminPage.waitForLoadState('networkidle');
+      await adminPage.waitForLoadState('domcontentloaded');
 
       await adminPage.getByLabel('Product Name').fill('Test Product');
       await adminPage.getByLabel('Annual Rate').fill('0');
@@ -166,7 +166,7 @@ test.describe('Loan Products Module', () => {
 
     test('validates min principal cannot exceed max principal', async ({ adminPage }) => {
       await adminPage.goto('/loan-products/new');
-      await adminPage.waitForLoadState('networkidle');
+      await adminPage.waitForLoadState('domcontentloaded');
 
       await adminPage.getByLabel('Product Name').fill('Test Product');
       await adminPage.getByLabel('Annual Rate').fill('24');
@@ -177,12 +177,12 @@ test.describe('Loan Products Module', () => {
 
       await adminPage.getByRole('button', { name: /create product/i }).click();
 
-      await expect(adminPage.locator('[role="alert"]')).toBeVisible({ timeout: 10_000 });
+      await expect(adminPage.locator('[role="alert"]:not(#__next-route-announcer__)')).toBeVisible({ timeout: 10_000 });
     });
 
     test('validates tenure range', async ({ adminPage }) => {
       await adminPage.goto('/loan-products/new');
-      await adminPage.waitForLoadState('networkidle');
+      await adminPage.waitForLoadState('domcontentloaded');
 
       await adminPage.getByLabel('Product Name').fill('Test Product');
       await adminPage.getByLabel('Annual Rate').fill('24');
@@ -193,12 +193,12 @@ test.describe('Loan Products Module', () => {
 
       await adminPage.getByRole('button', { name: /create product/i }).click();
 
-      await expect(adminPage.locator('[role="alert"]')).toBeVisible({ timeout: 10_000 });
+      await expect(adminPage.locator('[role="alert"]:not(#__next-route-announcer__)')).toBeVisible({ timeout: 10_000 });
     });
 
     test('cancel button returns to list', async ({ adminPage }) => {
       await adminPage.goto('/loan-products/new');
-      await adminPage.waitForLoadState('networkidle');
+      await adminPage.waitForLoadState('domcontentloaded');
 
       await adminPage.getByRole('link', { name: /cancel/i }).click();
       await adminPage.waitForURL('**/loan-products', { timeout: 15_000 });
@@ -208,7 +208,7 @@ test.describe('Loan Products Module', () => {
   test.describe('Deactivate Product', () => {
     test('deactivate button shows for active products', async ({ adminPage }) => {
       await adminPage.goto('/loan-products');
-      await adminPage.waitForLoadState('networkidle');
+      await adminPage.waitForLoadState('domcontentloaded');
 
       // Verify page loads
       await expect(adminPage.getByRole('heading', { name: /loan products/i })).toBeVisible({ timeout: 10_000 });
@@ -225,7 +225,7 @@ test.describe('Loan Products Module', () => {
 
     test('deactivate shows confirmation dialog', async ({ adminPage }) => {
       await adminPage.goto('/loan-products');
-      await adminPage.waitForLoadState('networkidle');
+      await adminPage.waitForLoadState('domcontentloaded');
 
       const deactivateButton = adminPage.getByRole('button', { name: /deactivate/i }).first();
       if (await deactivateButton.isVisible()) {
@@ -246,7 +246,7 @@ test.describe('Loan Products Module', () => {
   test.describe('Edit Product', () => {
     test('admin sees edit button', async ({ adminPage }) => {
       await adminPage.goto('/loan-products');
-      await adminPage.waitForLoadState('networkidle');
+      await adminPage.waitForLoadState('domcontentloaded');
       const editButton = adminPage.getByRole('link', { name: /edit/i }).first();
       // Edit button may be visible for admin
     });
