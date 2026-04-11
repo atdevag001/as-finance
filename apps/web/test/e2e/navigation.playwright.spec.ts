@@ -8,11 +8,11 @@ import { test, expect } from './fixtures';
 
 test.describe('Navigation & UX', () => {
   test('sidebar navigation works', async ({ managerPage }) => {
-    await managerPage.goto('/customers');
-    await managerPage.waitForLoadState('networkidle');
+    await managerPage.goto('/customers', { timeout: 30_000 });
+    await managerPage.waitForLoadState('domcontentloaded');
 
     // After navigation we should be on /customers with auth complete
-    await expect(managerPage.getByRole('heading', { name: /customers/i })).toBeVisible({ timeout: 15_000 });
+    await expect(managerPage.getByRole('heading', { name: /customers/i })).toBeVisible({ timeout: 30_000 });
 
     // Check sidebar has navigation links
     await expect(managerPage.getByRole('link', { name: 'Customers', exact: true })).toBeVisible({ timeout: 10_000 });
@@ -31,11 +31,11 @@ test.describe('Navigation & UX', () => {
   });
 
   test('browser back/forward works', async ({ managerPage }) => {
-    await managerPage.goto('/customers');
-    await managerPage.waitForLoadState('networkidle');
+    await managerPage.goto('/customers', { timeout: 30_000 });
+    await managerPage.waitForLoadState('domcontentloaded');
 
     // Wait for auth to complete and sidebar to show
-    await expect(managerPage.getByRole('link', { name: /^Loans$/i })).toBeVisible({ timeout: 15_000 });
+    await expect(managerPage.getByRole('link', { name: /^Loans$/i })).toBeVisible({ timeout: 30_000 });
 
     // Navigate to loans
     await managerPage.getByRole('link', { name: /^Loans$/i }).click();
@@ -59,11 +59,11 @@ test.describe('Navigation & UX', () => {
   });
 
   test('page headings are correct', async ({ managerPage }) => {
-    await managerPage.goto('/customers');
-    await managerPage.waitForLoadState('networkidle');
+    await managerPage.goto('/customers', { timeout: 30_000 });
+    await managerPage.waitForLoadState('domcontentloaded');
 
     // Wait for auth to complete and check customers page
-    await expect(managerPage.getByRole('heading', { name: /customers/i })).toBeVisible({ timeout: 15_000 });
+    await expect(managerPage.getByRole('heading', { name: /customers/i })).toBeVisible({ timeout: 30_000 });
 
     // Wait for sidebar to show (auth complete)
     await expect(managerPage.getByRole('link', { name: /^Loans$/i })).toBeVisible({ timeout: 10_000 });

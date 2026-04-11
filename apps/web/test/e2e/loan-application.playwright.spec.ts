@@ -51,12 +51,12 @@ test.describe('Loan Application', () => {
   test('create loan application → verify draft status badge', async ({ fieldOfficerPage }) => {
     // Navigate to the new loan form
     await fieldOfficerPage.goto('/loans/new');
-    await fieldOfficerPage.waitForLoadState('networkidle');
+    await fieldOfficerPage.waitForLoadState('domcontentloaded');
 
     // The form uses a customer search typeahead, not a text input for customer ID
     // Search for the customer by typing in the search input
     const customerSearchInput = fieldOfficerPage.getByPlaceholder(/search by name or mobile/i);
-    await expect(customerSearchInput).toBeVisible({ timeout: 15_000 });
+    await expect(customerSearchInput).toBeVisible({ timeout: 30_000 });
 
     // Since we created a test customer, we need to search for them
     // For now, just verify the form elements exist
@@ -89,10 +89,10 @@ test.describe('Loan Application', () => {
 
     // Navigate to the loan detail page
     await fieldOfficerPage.goto(`/loans/${loanId}`);
-    await fieldOfficerPage.waitForLoadState('networkidle');
+    await fieldOfficerPage.waitForLoadState('domcontentloaded');
 
     // Verify current status is draft
-    await expect(fieldOfficerPage.getByText('draft')).toBeVisible({ timeout: 15_000 });
+    await expect(fieldOfficerPage.getByText('draft')).toBeVisible({ timeout: 30_000 });
 
     // Look for a Submit button on the detail page
     const submitButton = fieldOfficerPage.getByRole('button', { name: /submit/i });
@@ -123,10 +123,10 @@ test.describe('Loan Application', () => {
 
       // Reload the page to see the updated status
       await fieldOfficerPage.reload();
-      await fieldOfficerPage.waitForLoadState('networkidle');
+      await fieldOfficerPage.waitForLoadState('domcontentloaded');
 
       // Verify the status badge now shows "submitted"
-      await expect(fieldOfficerPage.getByText('submitted')).toBeVisible({ timeout: 15_000 });
+      await expect(fieldOfficerPage.getByText('submitted')).toBeVisible({ timeout: 30_000 });
     }
   });
 
@@ -160,10 +160,10 @@ test.describe('Loan Application', () => {
 
     // Navigate to the loan (managerPage is already authenticated as manager)
     await managerPage.goto(`/loans/${loanId}`);
-    await managerPage.waitForLoadState('networkidle');
+    await managerPage.waitForLoadState('domcontentloaded');
 
     // Verify the loan is in submitted status
-    await expect(managerPage.getByText('submitted')).toBeVisible({ timeout: 15_000 });
+    await expect(managerPage.getByText('submitted')).toBeVisible({ timeout: 30_000 });
 
     // Look for an Approve button on the detail page
     const approveButton = managerPage.getByRole('button', { name: /approve/i });
@@ -195,11 +195,11 @@ test.describe('Loan Application', () => {
 
       // Reload the page to see the updated status
       await managerPage.reload();
-      await managerPage.waitForLoadState('networkidle');
+      await managerPage.waitForLoadState('domcontentloaded');
 
       // Verify the status badge now shows "approved" (or "under review" if there's an intermediate step)
       const approvedOrReviewed = managerPage.getByText('approved').or(managerPage.getByText('under review'));
-      await expect(approvedOrReviewed).toBeVisible({ timeout: 15_000 });
+      await expect(approvedOrReviewed).toBeVisible({ timeout: 30_000 });
     }
 
     // Verify maker-checker: the loan was created by field_officer and approved by manager

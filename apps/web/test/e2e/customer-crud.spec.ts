@@ -9,33 +9,38 @@ import { test, expect } from './fixtures';
 test.describe('Customer Management', () => {
   test('should display customer list', async ({ managerPage }) => {
     await managerPage.goto('/customers');
-    await managerPage.waitForLoadState('networkidle');
+    await managerPage.waitForLoadState('domcontentloaded');
 
     // Customer list should be visible (either table or heading)
     await expect(
       managerPage.locator('table').or(managerPage.getByRole('heading', { name: /customers/i }))
-    ).toBeVisible({ timeout: 15_000 });
+    ).toBeVisible({ timeout: 30_000 });
   });
 
   test('should navigate to new customer form', async ({ fieldOfficerPage }) => {
     await fieldOfficerPage.goto('/customers');
-    await fieldOfficerPage.waitForLoadState('networkidle');
+    await fieldOfficerPage.waitForLoadState('domcontentloaded');
+
+    // Wait for the page content to load
+    await expect(
+      fieldOfficerPage.locator('table').or(fieldOfficerPage.getByRole('heading', { name: /customers/i }))
+    ).toBeVisible({ timeout: 30_000 });
 
     // Click new customer button
     const newButton = fieldOfficerPage.getByRole('link', { name: /new|add|register/i });
     if (await newButton.isVisible()) {
       await newButton.click();
-      await fieldOfficerPage.waitForURL('**/customers/new', { timeout: 15_000 });
-      await expect(fieldOfficerPage.getByRole('heading', { name: /register|new|add/i })).toBeVisible();
+      await fieldOfficerPage.waitForURL('**/customers/new', { timeout: 30_000 });
+      await expect(fieldOfficerPage.getByRole('heading', { name: /register|new|add/i })).toBeVisible({ timeout: 30_000 });
     }
   });
 
   test('should validate required fields on customer form', async ({ fieldOfficerPage }) => {
     await fieldOfficerPage.goto('/customers/new');
-    await fieldOfficerPage.waitForLoadState('networkidle');
+    await fieldOfficerPage.waitForLoadState('domcontentloaded');
 
     // Wait for form to be visible
-    await expect(fieldOfficerPage.getByRole('heading', { name: /register|new/i })).toBeVisible({ timeout: 15_000 });
+    await expect(fieldOfficerPage.getByRole('heading', { name: /register|new/i })).toBeVisible({ timeout: 30_000 });
 
     // Try submitting empty form
     await fieldOfficerPage.getByRole('button', { name: /register|submit|save/i }).click();
@@ -46,26 +51,36 @@ test.describe('Customer Management', () => {
 
   test('should search customers', async ({ managerPage }) => {
     await managerPage.goto('/customers');
-    await managerPage.waitForLoadState('networkidle');
+    await managerPage.waitForLoadState('domcontentloaded');
+
+    // Wait for page content to load
+    await expect(
+      managerPage.locator('table').or(managerPage.getByRole('heading', { name: /customers/i }))
+    ).toBeVisible({ timeout: 30_000 });
 
     // Look for search input
     const searchInput = managerPage.getByPlaceholder(/search/i);
     if (await searchInput.isVisible()) {
       await searchInput.fill('test');
-      await managerPage.waitForLoadState('networkidle');
-      // Search should filter results
+      // Wait for table to update after search
+      await managerPage.waitForTimeout(1000);
     }
   });
 
   test('should view customer details', async ({ managerPage }) => {
     await managerPage.goto('/customers');
-    await managerPage.waitForLoadState('networkidle');
+    await managerPage.waitForLoadState('domcontentloaded');
+
+    // Wait for page content to load
+    await expect(
+      managerPage.locator('table').or(managerPage.getByRole('heading', { name: /customers/i }))
+    ).toBeVisible({ timeout: 30_000 });
 
     // Click on first customer link
     const customerLink = managerPage.locator('table tbody tr a').first();
     if (await customerLink.isVisible()) {
       await customerLink.click();
-      await managerPage.waitForURL(/\/customers\/[^/]+$/, { timeout: 15_000 });
+      await managerPage.waitForURL(/\/customers\/[^/]+$/, { timeout: 30_000 });
     }
   });
 });

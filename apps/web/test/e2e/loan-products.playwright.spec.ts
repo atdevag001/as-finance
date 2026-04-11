@@ -50,7 +50,9 @@ test.describe('Loan Products Module', () => {
 
     test('manager does NOT see "New Product" button', async ({ managerPage }) => {
       await managerPage.goto('/loan-products');
-      await managerPage.waitForLoadState('networkidle');
+      await managerPage.waitForLoadState('domcontentloaded');
+      // Wait for page heading to appear before checking button visibility
+      await expect(managerPage.getByRole('heading', { name: /loan products/i })).toBeVisible({ timeout: 30_000 });
       await expect(managerPage.getByRole('link', { name: /new product/i })).not.toBeVisible({ timeout: 5_000 });
     });
 
@@ -132,6 +134,8 @@ test.describe('Loan Products Module', () => {
     test('validates product name is required', async ({ adminPage }) => {
       await adminPage.goto('/loan-products/new');
       await adminPage.waitForLoadState('domcontentloaded');
+      // Wait for form to load
+      await expect(adminPage.getByText('Product Name')).toBeVisible({ timeout: 30_000 });
 
       await adminPage.getByLabel('Annual Rate').fill('24');
       await adminPage.getByLabel('Min Principal').fill('5000');
@@ -142,13 +146,15 @@ test.describe('Loan Products Module', () => {
       await adminPage.getByRole('button', { name: /create product/i }).click();
 
       await expect(
-        adminPage.getByText(/name.*required/i).or(adminPage.locator('[role="alert"]')),
+        adminPage.getByText(/name.*required/i).or(adminPage.locator('[role="alert"]:not(#__next-route-announcer__)')),
       ).toBeVisible({ timeout: 10_000 });
     });
 
     test('validates annual rate is required and positive', async ({ adminPage }) => {
       await adminPage.goto('/loan-products/new');
       await adminPage.waitForLoadState('domcontentloaded');
+      // Wait for form to load
+      await expect(adminPage.getByText('Product Name')).toBeVisible({ timeout: 30_000 });
 
       await adminPage.getByLabel('Product Name').fill('Test Product');
       await adminPage.getByLabel('Annual Rate').fill('0');
@@ -160,7 +166,7 @@ test.describe('Loan Products Module', () => {
       await adminPage.getByRole('button', { name: /create product/i }).click();
 
       await expect(
-        adminPage.getByText(/rate.*positive/i).or(adminPage.locator('[role="alert"]')),
+        adminPage.getByText(/rate.*positive/i).or(adminPage.locator('[role="alert"]:not(#__next-route-announcer__)')),
       ).toBeVisible({ timeout: 10_000 });
     });
 
@@ -238,7 +244,9 @@ test.describe('Loan Products Module', () => {
 
     test('manager cannot see deactivate button', async ({ managerPage }) => {
       await managerPage.goto('/loan-products');
-      await managerPage.waitForLoadState('networkidle');
+      await managerPage.waitForLoadState('domcontentloaded');
+      // Wait for page heading to appear before checking button visibility
+      await expect(managerPage.getByRole('heading', { name: /loan products/i })).toBeVisible({ timeout: 30_000 });
       await expect(managerPage.getByRole('button', { name: /deactivate/i })).not.toBeVisible({ timeout: 5_000 });
     });
   });
@@ -253,7 +261,9 @@ test.describe('Loan Products Module', () => {
 
     test('manager does NOT see edit button', async ({ managerPage }) => {
       await managerPage.goto('/loan-products');
-      await managerPage.waitForLoadState('networkidle');
+      await managerPage.waitForLoadState('domcontentloaded');
+      // Wait for page heading to appear before checking button visibility
+      await expect(managerPage.getByRole('heading', { name: /loan products/i })).toBeVisible({ timeout: 30_000 });
       await expect(managerPage.getByRole('link', { name: /edit/i })).not.toBeVisible({ timeout: 5_000 });
     });
   });

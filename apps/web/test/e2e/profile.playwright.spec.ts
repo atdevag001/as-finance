@@ -21,16 +21,20 @@ test.describe('Profile Module', () => {
 
     test('form has all required fields', async ({ fieldOfficerPage }) => {
       await fieldOfficerPage.goto('/profile/change-password');
-      await fieldOfficerPage.waitForLoadState('networkidle');
+      await fieldOfficerPage.waitForLoadState('domcontentloaded');
 
+      // Wait for the form to be visible first
       await expect(fieldOfficerPage.locator('#currentPassword')).toBeVisible({ timeout: 15_000 });
-      await expect(fieldOfficerPage.locator('#newPassword')).toBeVisible();
-      await expect(fieldOfficerPage.locator('#confirmPassword')).toBeVisible();
+      await expect(fieldOfficerPage.locator('#newPassword')).toBeVisible({ timeout: 10_000 });
+      await expect(fieldOfficerPage.locator('#confirmPassword')).toBeVisible({ timeout: 10_000 });
     });
 
     test('has password visibility toggle buttons', async ({ fieldOfficerPage }) => {
       await fieldOfficerPage.goto('/profile/change-password');
-      await fieldOfficerPage.waitForLoadState('networkidle');
+      await fieldOfficerPage.waitForLoadState('domcontentloaded');
+
+      // Wait for form to load first
+      await expect(fieldOfficerPage.locator('#currentPassword')).toBeVisible({ timeout: 15_000 });
 
       // Should have eye toggle buttons (3 password fields)
       const toggleButtons = fieldOfficerPage.locator('button').filter({ has: fieldOfficerPage.locator('svg') });
@@ -39,7 +43,7 @@ test.describe('Profile Module', () => {
 
     test('eye toggle shows/hides password', async ({ fieldOfficerPage }) => {
       await fieldOfficerPage.goto('/profile/change-password');
-      await fieldOfficerPage.waitForLoadState('networkidle');
+      await fieldOfficerPage.waitForLoadState('domcontentloaded');
 
       const currentPasswordInput = fieldOfficerPage.locator('#currentPassword');
       await expect(currentPasswordInput).toBeVisible({ timeout: 15_000 });
@@ -62,7 +66,10 @@ test.describe('Profile Module', () => {
 
     test('validates current password is required', async ({ fieldOfficerPage }) => {
       await fieldOfficerPage.goto('/profile/change-password');
-      await fieldOfficerPage.waitForLoadState('networkidle');
+      await fieldOfficerPage.waitForLoadState('domcontentloaded');
+
+      // Wait for form to load
+      await expect(fieldOfficerPage.locator('#currentPassword')).toBeVisible({ timeout: 15_000 });
 
       // Fill new password but not current
       await fieldOfficerPage.locator('#newPassword').fill('NewPass123');
@@ -78,7 +85,10 @@ test.describe('Profile Module', () => {
 
     test('validates new password minimum length', async ({ fieldOfficerPage }) => {
       await fieldOfficerPage.goto('/profile/change-password');
-      await fieldOfficerPage.waitForLoadState('networkidle');
+      await fieldOfficerPage.waitForLoadState('domcontentloaded');
+
+      // Wait for form to load
+      await expect(fieldOfficerPage.locator('#currentPassword')).toBeVisible({ timeout: 15_000 });
 
       await fieldOfficerPage.locator('#currentPassword').fill('Admin@123');
       await fieldOfficerPage.locator('#newPassword').fill('Short1'); // Too short
@@ -94,7 +104,10 @@ test.describe('Profile Module', () => {
 
     test('validates new password requires uppercase', async ({ fieldOfficerPage }) => {
       await fieldOfficerPage.goto('/profile/change-password');
-      await fieldOfficerPage.waitForLoadState('networkidle');
+      await fieldOfficerPage.waitForLoadState('domcontentloaded');
+
+      // Wait for form to load
+      await expect(fieldOfficerPage.locator('#currentPassword')).toBeVisible({ timeout: 15_000 });
 
       await fieldOfficerPage.locator('#currentPassword').fill('Admin@123');
       await fieldOfficerPage.locator('#newPassword').fill('lowercase1'); // No uppercase
@@ -110,7 +123,10 @@ test.describe('Profile Module', () => {
 
     test('validates new password requires lowercase', async ({ fieldOfficerPage }) => {
       await fieldOfficerPage.goto('/profile/change-password');
-      await fieldOfficerPage.waitForLoadState('networkidle');
+      await fieldOfficerPage.waitForLoadState('domcontentloaded');
+
+      // Wait for form to load
+      await expect(fieldOfficerPage.locator('#currentPassword')).toBeVisible({ timeout: 15_000 });
 
       await fieldOfficerPage.locator('#currentPassword').fill('Admin@123');
       await fieldOfficerPage.locator('#newPassword').fill('UPPERCASE1'); // No lowercase
@@ -126,7 +142,10 @@ test.describe('Profile Module', () => {
 
     test('validates new password requires digit', async ({ fieldOfficerPage }) => {
       await fieldOfficerPage.goto('/profile/change-password');
-      await fieldOfficerPage.waitForLoadState('networkidle');
+      await fieldOfficerPage.waitForLoadState('domcontentloaded');
+
+      // Wait for form to load
+      await expect(fieldOfficerPage.locator('#currentPassword')).toBeVisible({ timeout: 15_000 });
 
       await fieldOfficerPage.locator('#currentPassword').fill('Admin@123');
       await fieldOfficerPage.locator('#newPassword').fill('NoDigitsHere'); // No digit
@@ -142,7 +161,10 @@ test.describe('Profile Module', () => {
 
     test('validates passwords must match', async ({ fieldOfficerPage }) => {
       await fieldOfficerPage.goto('/profile/change-password');
-      await fieldOfficerPage.waitForLoadState('networkidle');
+      await fieldOfficerPage.waitForLoadState('domcontentloaded');
+
+      // Wait for form to load
+      await expect(fieldOfficerPage.locator('#currentPassword')).toBeVisible({ timeout: 15_000 });
 
       await fieldOfficerPage.locator('#currentPassword').fill('Admin@123');
       await fieldOfficerPage.locator('#newPassword').fill('NewPass123');
@@ -157,7 +179,10 @@ test.describe('Profile Module', () => {
 
     test('validates new password must be different from current', async ({ fieldOfficerPage }) => {
       await fieldOfficerPage.goto('/profile/change-password');
-      await fieldOfficerPage.waitForLoadState('networkidle');
+      await fieldOfficerPage.waitForLoadState('domcontentloaded');
+
+      // Wait for form to load
+      await expect(fieldOfficerPage.locator('#currentPassword')).toBeVisible({ timeout: 15_000 });
 
       await fieldOfficerPage.locator('#currentPassword').fill('Admin@123');
       await fieldOfficerPage.locator('#newPassword').fill('Admin@123'); // Same as current
@@ -172,7 +197,10 @@ test.describe('Profile Module', () => {
 
     test('shows error for incorrect current password', async ({ fieldOfficerPage }) => {
       await fieldOfficerPage.goto('/profile/change-password');
-      await fieldOfficerPage.waitForLoadState('networkidle');
+      await fieldOfficerPage.waitForLoadState('domcontentloaded');
+
+      // Wait for form to load
+      await expect(fieldOfficerPage.locator('#currentPassword')).toBeVisible({ timeout: 15_000 });
 
       await fieldOfficerPage.locator('#currentPassword').fill('WrongPassword1');
       await fieldOfficerPage.locator('#newPassword').fill('NewValidPass1');
@@ -188,7 +216,10 @@ test.describe('Profile Module', () => {
 
     test('back button returns to dashboard', async ({ fieldOfficerPage }) => {
       await fieldOfficerPage.goto('/profile/change-password');
-      await fieldOfficerPage.waitForLoadState('networkidle');
+      await fieldOfficerPage.waitForLoadState('domcontentloaded');
+
+      // Wait for page to load
+      await expect(fieldOfficerPage.getByRole('heading', { name: /change password/i })).toBeVisible({ timeout: 15_000 });
 
       const backButton = fieldOfficerPage.getByRole('link').filter({ has: fieldOfficerPage.locator('svg') }).first();
       if (await backButton.isVisible()) {

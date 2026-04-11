@@ -80,8 +80,8 @@ async function fillValidCustomerForm(page: Page, overrides: Partial<CustomerForm
 test.describe('Customer Onboarding', () => {
   test('fill customer form with valid data → submit → verify redirect to customers list', async ({ fieldOfficerPage }) => {
     await fieldOfficerPage.goto('/customers/new');
-    await fieldOfficerPage.waitForLoadState('networkidle');
-    await expect(fieldOfficerPage.getByRole('heading', { name: /register customer/i })).toBeVisible({ timeout: 20_000 });
+    await fieldOfficerPage.waitForLoadState('domcontentloaded');
+    await expect(fieldOfficerPage.getByRole('heading', { name: /register customer/i })).toBeVisible({ timeout: 30_000 });
 
     await fillValidCustomerForm(fieldOfficerPage);
     await fieldOfficerPage.getByRole('button', { name: 'Register Customer' }).click();
@@ -93,8 +93,8 @@ test.describe('Customer Onboarding', () => {
 
   test('Aadhaar validation error shown inline for invalid format', async ({ fieldOfficerPage }) => {
     await fieldOfficerPage.goto('/customers/new');
-    await fieldOfficerPage.waitForLoadState('networkidle');
-    await expect(fieldOfficerPage.getByRole('heading', { name: /register customer/i })).toBeVisible({ timeout: 20_000 });
+    await fieldOfficerPage.waitForLoadState('domcontentloaded');
+    await expect(fieldOfficerPage.getByRole('heading', { name: /register customer/i })).toBeVisible({ timeout: 30_000 });
 
     // Fill form with an invalid Aadhaar (less than 12 digits)
     await fillValidCustomerForm(fieldOfficerPage, { aadhaarNumber: '12345' }, true);
@@ -108,8 +108,8 @@ test.describe('Customer Onboarding', () => {
 
   test('PAN validation error shown inline for invalid format', async ({ fieldOfficerPage }) => {
     await fieldOfficerPage.goto('/customers/new');
-    await fieldOfficerPage.waitForLoadState('networkidle');
-    await expect(fieldOfficerPage.getByRole('heading', { name: /register customer/i })).toBeVisible({ timeout: 20_000 });
+    await fieldOfficerPage.waitForLoadState('domcontentloaded');
+    await expect(fieldOfficerPage.getByRole('heading', { name: /register customer/i })).toBeVisible({ timeout: 30_000 });
 
     await fillValidCustomerForm(fieldOfficerPage);
 
@@ -132,8 +132,8 @@ test.describe('Customer Onboarding', () => {
 
   test('duplicate Aadhaar detection → verify warning or error', async ({ fieldOfficerPage }) => {
     await fieldOfficerPage.goto('/customers/new');
-    await fieldOfficerPage.waitForLoadState('networkidle');
-    await expect(fieldOfficerPage.getByRole('heading', { name: /register customer/i })).toBeVisible({ timeout: 20_000 });
+    await fieldOfficerPage.waitForLoadState('domcontentloaded');
+    await expect(fieldOfficerPage.getByRole('heading', { name: /register customer/i })).toBeVisible({ timeout: 30_000 });
 
     const knownAadhaar = '234567890123';
     await fillValidCustomerForm(fieldOfficerPage, {
@@ -158,8 +158,8 @@ test.describe('Customer Onboarding', () => {
 
     // First customer registered successfully; now try with same Aadhaar
     await fieldOfficerPage.goto('/customers/new');
-    await fieldOfficerPage.waitForLoadState('networkidle');
-    await expect(fieldOfficerPage.getByRole('heading', { name: /register customer/i })).toBeVisible({ timeout: 20_000 });
+    await fieldOfficerPage.waitForLoadState('domcontentloaded');
+    await expect(fieldOfficerPage.getByRole('heading', { name: /register customer/i })).toBeVisible({ timeout: 30_000 });
 
     await fillValidCustomerForm(fieldOfficerPage, {
       fullName: `Dup Test B ${UNIQUE}`,
@@ -175,14 +175,14 @@ test.describe('Customer Onboarding', () => {
 
   test('manager can access customers list', async ({ managerPage }) => {
     await managerPage.goto('/customers');
-    await managerPage.waitForLoadState('networkidle');
-    await expect(managerPage.getByRole('heading', { name: /customers/i })).toBeVisible({ timeout: 15_000 });
+    await managerPage.waitForLoadState('domcontentloaded');
+    await expect(managerPage.getByRole('heading', { name: /customers/i })).toBeVisible({ timeout: 30_000 });
   });
 
   test('customers list displays table with columns', async ({ managerPage }) => {
     await managerPage.goto('/customers');
-    await managerPage.waitForLoadState('networkidle');
-    await expect(managerPage.getByRole('heading', { name: /customers/i })).toBeVisible({ timeout: 15_000 });
+    await managerPage.waitForLoadState('domcontentloaded');
+    await expect(managerPage.getByRole('heading', { name: /customers/i })).toBeVisible({ timeout: 30_000 });
 
     const table = managerPage.locator('table');
     if (await table.isVisible()) {

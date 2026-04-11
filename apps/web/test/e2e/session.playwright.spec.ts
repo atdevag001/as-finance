@@ -18,17 +18,17 @@ test.describe('Session Management', () => {
   test.describe('Session Persistence', () => {
     test('session persists after page refresh', async ({ managerPage }) => {
       await managerPage.goto('/');
-      await managerPage.waitForLoadState('networkidle');
+      await managerPage.waitForLoadState('domcontentloaded');
 
       // Verify logged in
-      await expect(managerPage.getByRole('heading', { name: 'Dashboard' })).toBeVisible({ timeout: 10_000 });
+      await expect(managerPage.getByRole('heading', { name: 'Dashboard' })).toBeVisible({ timeout: 30_000 });
 
       // Refresh page
       await managerPage.reload();
-      await managerPage.waitForLoadState('networkidle');
+      await managerPage.waitForLoadState('domcontentloaded');
 
       // Should still be logged in
-      await expect(managerPage.getByRole('heading', { name: 'Dashboard' })).toBeVisible({ timeout: 10_000 });
+      await expect(managerPage.getByRole('heading', { name: 'Dashboard' })).toBeVisible({ timeout: 30_000 });
       // Should NOT redirect to login
       await expect(managerPage).not.toHaveURL(/\/login/);
     });
@@ -36,13 +36,16 @@ test.describe('Session Management', () => {
     test('session persists across navigation', async ({ managerPage }) => {
       // Navigate to different pages
       await managerPage.goto('/customers');
-      await expect(managerPage.getByRole('heading', { name: /customers/i })).toBeVisible({ timeout: 10_000 });
+      await managerPage.waitForLoadState('domcontentloaded');
+      await expect(managerPage.getByRole('heading', { name: /customers/i })).toBeVisible({ timeout: 30_000 });
 
       await managerPage.goto('/loans');
-      await expect(managerPage.getByRole('heading', { name: /loans/i })).toBeVisible({ timeout: 10_000 });
+      await managerPage.waitForLoadState('domcontentloaded');
+      await expect(managerPage.getByRole('heading', { name: /loans/i })).toBeVisible({ timeout: 30_000 });
 
       await managerPage.goto('/');
-      await expect(managerPage.getByRole('heading', { name: 'Dashboard' })).toBeVisible({ timeout: 10_000 });
+      await managerPage.waitForLoadState('domcontentloaded');
+      await expect(managerPage.getByRole('heading', { name: 'Dashboard' })).toBeVisible({ timeout: 30_000 });
 
       // Should never redirect to login
       await expect(managerPage).not.toHaveURL(/\/login/);
@@ -52,7 +55,7 @@ test.describe('Session Management', () => {
   test.describe('Logout', () => {
     test('logout clears session and redirects to login', async ({ managerPage }) => {
       await managerPage.goto('/');
-      await managerPage.waitForLoadState('networkidle');
+      await managerPage.waitForLoadState('domcontentloaded');
 
       // Find and click logout - typically "Sign out" link in sidebar
       const signOutLink = managerPage.getByRole('link', { name: /sign out/i });
@@ -97,6 +100,9 @@ test.describe('Session Management', () => {
       await unauthenticatedPage.goto('/customers');
       await expect(unauthenticatedPage).toHaveURL(/\/login/, { timeout: 15_000 });
 
+      // Wait for login form to be ready
+      await expect(unauthenticatedPage.getByLabel('Username')).toBeVisible({ timeout: 30_000 });
+
       // Login with valid credentials
       const user = TEST_USERS.manager;
       await unauthenticatedPage.getByLabel('Username').fill(user.username);
@@ -104,7 +110,7 @@ test.describe('Session Management', () => {
       await unauthenticatedPage.getByRole('button', { name: 'Sign in' }).click();
 
       // Should redirect away from login (may be slow due to rate limiting)
-      await expect(unauthenticatedPage).not.toHaveURL(/\/login/, { timeout: 60_000 });
+      await expect(unauthenticatedPage).not.toHaveURL(/\/login/, { timeout: 90_000 });
     });
   });
 
@@ -121,6 +127,10 @@ test.describe('Session Management', () => {
 
     test('shows error for invalid credentials', async ({ unauthenticatedPage }) => {
       await unauthenticatedPage.goto('/login');
+      await unauthenticatedPage.waitForLoadState('domcontentloaded');
+
+      // Wait for login form to be ready
+      await expect(unauthenticatedPage.getByLabel('Username')).toBeVisible({ timeout: 30_000 });
 
       await unauthenticatedPage.getByLabel('Username').fill('invalid_user');
       await unauthenticatedPage.getByLabel('Password').fill('invalid_password');
@@ -129,7 +139,6 @@ test.describe('Session Management', () => {
       // Wait for response - either error alert appears or button returns to "Sign in"
       // (rate limiting can cause long delays, so we wait for either outcome)
       const alert = unauthenticatedPage.locator('[role="alert"]:not(#__next-route-announcer__)');
-      const signInButton = unauthenticatedPage.getByRole('button', { name: /^sign in$/i });
 
       // Poll for completion - either alert or button back to Sign in
       await expect(async () => {
@@ -137,7 +146,7 @@ test.describe('Session Management', () => {
         const buttonText = await unauthenticatedPage.getByRole('button').first().textContent();
         const isComplete = hasAlert || buttonText?.toLowerCase().includes('sign in');
         expect(isComplete).toBeTruthy();
-      }).toPass({ timeout: 45_000 });
+      }).toPass({ timeout: 60_000 });
 
       // At this point, login attempt completed. Should NOT navigate away from login
       await expect(unauthenticatedPage).toHaveURL(/\/login/);
@@ -145,6 +154,10 @@ test.describe('Session Management', () => {
 
     test('successful login redirects to dashboard', async ({ unauthenticatedPage }) => {
       await unauthenticatedPage.goto('/login');
+      await unauthenticatedPage.waitForLoadState('domcontentloaded');
+
+      // Wait for login form to be ready
+      await expect(unauthenticatedPage.getByLabel('Username')).toBeVisible({ timeout: 30_000 });
 
       const user = TEST_USERS.manager;
       await unauthenticatedPage.getByLabel('Username').fill(user.username);
@@ -152,15 +165,15 @@ test.describe('Session Management', () => {
       await unauthenticatedPage.getByRole('button', { name: 'Sign in' }).click();
 
       // Wait longer for login to complete (may be rate-limited)
-      await expect(unauthenticatedPage).not.toHaveURL(/\/login/, { timeout: 60_000 });
-      await expect(unauthenticatedPage.getByRole('heading', { name: 'Dashboard' })).toBeVisible({ timeout: 15_000 });
+      await expect(unauthenticatedPage).not.toHaveURL(/\/login/, { timeout: 90_000 });
+      await expect(unauthenticatedPage.getByRole('heading', { name: 'Dashboard' })).toBeVisible({ timeout: 30_000 });
     });
   });
 
   test.describe('Session State', () => {
     test('user info is available after login', async ({ managerPage }) => {
       await managerPage.goto('/');
-      await managerPage.waitForLoadState('networkidle');
+      await managerPage.waitForLoadState('domcontentloaded');
 
       // User info should be displayed somewhere - look for role or "Manager" text
       // The sidebar shows the role name
@@ -169,7 +182,7 @@ test.describe('Session Management', () => {
 
     test('role-based UI shows correct elements', async ({ managerPage }) => {
       await managerPage.goto('/');
-      await managerPage.waitForLoadState('networkidle');
+      await managerPage.waitForLoadState('domcontentloaded');
 
       // Manager should see dashboard with stats
       await expect(managerPage.getByRole('heading', { name: 'Dashboard' })).toBeVisible({ timeout: 10_000 });

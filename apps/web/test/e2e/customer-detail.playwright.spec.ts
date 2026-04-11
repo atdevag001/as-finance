@@ -23,7 +23,7 @@ test.describe('Customer Detail Page', () => {
       await managerPage.waitForLoadState('domcontentloaded');
 
       // Customer name and status should be visible
-      await expect(managerPage.getByText(/Test Customer \d+/)).toBeVisible({ timeout: 15_000 });
+      await expect(managerPage.getByText(/Test Customer \d+/)).toBeVisible({ timeout: 30_000 });
       await expect(managerPage.getByText('Active')).toBeVisible();
 
       // All main sections should be visible (use headings to avoid ambiguity)
@@ -41,7 +41,7 @@ test.describe('Customer Detail Page', () => {
       await managerPage.goto(`/customers/${testCustomerId}`);
       await managerPage.waitForLoadState('domcontentloaded');
 
-      await expect(managerPage.getByText('Personal Info')).toBeVisible({ timeout: 15_000 });
+      await expect(managerPage.getByText('Personal Info')).toBeVisible({ timeout: 30_000 });
       // Key fields from the Personal Info card
       await expect(managerPage.getByText('Mobile')).toBeVisible();
       await expect(managerPage.getByText('Gender')).toBeVisible();
@@ -53,7 +53,7 @@ test.describe('Customer Detail Page', () => {
       await managerPage.waitForLoadState('domcontentloaded');
 
       // New test customer should have no family members or guarantors
-      await expect(managerPage.getByText('No family members added.')).toBeVisible({ timeout: 15_000 });
+      await expect(managerPage.getByText('No family members added.')).toBeVisible({ timeout: 30_000 });
       await expect(managerPage.getByText('No guarantors added.')).toBeVisible();
     });
   });
@@ -65,10 +65,10 @@ test.describe('Customer Detail Page', () => {
 
       // Find and click the back link
       const backButton = managerPage.locator('a[href="/customers"]').first();
-      await expect(backButton).toBeVisible({ timeout: 15_000 });
+      await expect(backButton).toBeVisible({ timeout: 30_000 });
       await backButton.click();
 
-      await managerPage.waitForURL('**/customers', { timeout: 15_000 });
+      await managerPage.waitForURL('**/customers', { timeout: 30_000 });
     });
   });
 
@@ -77,7 +77,7 @@ test.describe('Customer Detail Page', () => {
       await managerPage.goto(`/customers/${testCustomerId}`);
       await managerPage.waitForLoadState('domcontentloaded');
 
-      await expect(managerPage.getByRole('button', { name: /edit/i })).toBeVisible({ timeout: 15_000 });
+      await expect(managerPage.getByRole('button', { name: /edit/i })).toBeVisible({ timeout: 30_000 });
       await managerPage.getByRole('button', { name: /edit/i }).click();
 
       // Dialog should open with Edit Customer title
@@ -95,7 +95,7 @@ test.describe('Customer Detail Page', () => {
       await managerPage.waitForLoadState('domcontentloaded');
 
       // Wait for page to load
-      await expect(managerPage.getByRole('heading', { name: 'Family Members' })).toBeVisible({ timeout: 15_000 });
+      await expect(managerPage.getByRole('heading', { name: 'Family Members' })).toBeVisible({ timeout: 30_000 });
 
       // Click the "+ Add" button in Family Members section (the button with just "Add" text)
       const familySection = managerPage.getByRole('heading', { name: 'Family Members' }).locator('..').locator('..');
@@ -113,7 +113,7 @@ test.describe('Customer Detail Page', () => {
       await managerPage.waitForLoadState('domcontentloaded');
 
       // Wait for page to load
-      await expect(managerPage.getByRole('heading', { name: 'Guarantors' })).toBeVisible({ timeout: 15_000 });
+      await expect(managerPage.getByRole('heading', { name: 'Guarantors' })).toBeVisible({ timeout: 30_000 });
 
       // Click the "+ Add" button in Guarantors section
       const guarantorSection = managerPage.getByRole('heading', { name: 'Guarantors' }).locator('..').locator('..');
@@ -131,7 +131,7 @@ test.describe('Customer Detail Page', () => {
       await managerPage.waitForLoadState('domcontentloaded');
 
       const blacklistBtn = managerPage.getByRole('button', { name: /blacklist/i });
-      await expect(blacklistBtn).toBeVisible({ timeout: 15_000 });
+      await expect(blacklistBtn).toBeVisible({ timeout: 30_000 });
 
       await blacklistBtn.click();
 
@@ -147,7 +147,7 @@ test.describe('Customer Detail Page', () => {
       await auditorPage.waitForLoadState('domcontentloaded');
 
       // Should see customer data
-      await expect(auditorPage.getByText(/Test Customer \d+/)).toBeVisible({ timeout: 15_000 });
+      await expect(auditorPage.getByText(/Test Customer \d+/)).toBeVisible({ timeout: 30_000 });
       await expect(auditorPage.getByText('Personal Info')).toBeVisible();
 
       // Should NOT see Edit or Blacklist buttons

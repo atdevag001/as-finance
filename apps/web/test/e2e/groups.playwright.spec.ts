@@ -73,7 +73,7 @@ test.describe('Groups Module', () => {
       if (await nextButton.isVisible()) {
         await nextButton.click();
         // Page should update (URL or content change)
-        await managerPage.waitForLoadState('networkidle');
+        await managerPage.waitForLoadState('domcontentloaded');
       }
     });
 
