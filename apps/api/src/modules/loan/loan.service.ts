@@ -595,4 +595,15 @@ export class LoanService {
       search: query.search,
     });
   }
+
+  /**
+   * Get status transition history for a loan.
+   */
+  async getStatusHistory(id: string) {
+    const loan = await this.loanRepository.findById(id);
+    if (!loan) {
+      throw new NotFoundError(`Loan not found: ${id}`);
+    }
+    return this.loanRepository.getStatusHistory(id);
+  }
 }

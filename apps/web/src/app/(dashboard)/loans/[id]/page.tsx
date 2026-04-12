@@ -291,7 +291,7 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
           </PermissionGate>
         )}
         {canForeclose && (
-          <PermissionGate permission="loan.foreclosure">
+          <PermissionGate permission="foreclosure.quote">
             <Button
               variant="outline"
               onClick={handleGenerateForeclosureQuote}

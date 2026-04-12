@@ -157,4 +157,18 @@ export class ReceiptRepository {
     ]);
     return { data, total };
   }
+
+  /** Find all receipts with pagination. */
+  async findAll(params?: { skip?: number; take?: number }) {
+    const [data, total] = await Promise.all([
+      this.prisma.receipts.findMany({
+        skip: params?.skip ?? 0,
+        take: params?.take ?? 50,
+        orderBy: { created_at: 'desc' },
+        select: RECEIPT_SELECT,
+      }),
+      this.prisma.receipts.count(),
+    ]);
+    return { data, total };
+  }
 }

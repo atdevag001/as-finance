@@ -242,6 +242,36 @@ export class LoanRepository {
     });
   }
 
+  async getStatusHistory(loanId: string) {
+    const history = await this.prisma['loan_status_history'].findMany({
+      where: { loan_id: loanId },
+      orderBy: { created_at: 'desc' },
+      select: {
+        id: true,
+        from_status: true,
+        to_status: true,
+        changed_by: true,
+        reason: true,
+        created_at: true,
+      },
+    });
+
+    // Get user names for actors
+    const actorIds = [...new Set(history.map(h => h.changed_by).filter(Boolean))];
+    if (actorIds.length === 0) return history;
+
+    const users = await this.prisma['users'].findMany({
+      where: { id: { in: actorIds } },
+      select: { id: true, full_name: true },
+    });
+    const userMap = new Map(users.map(u => [u.id, u.full_name]));
+
+    return history.map(h => ({
+      ...h,
+      changed_by_name: userMap.get(h.changed_by) ?? undefined,
+    }));
+  }
+
   async createApproval(data: {
     loan_id: string;
     action: string;

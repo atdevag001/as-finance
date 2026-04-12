@@ -129,6 +129,15 @@ export class LoanController {
     return this.loanService.closeLoan(id, req.user.sub, req.user.role);
   }
 
+  @Get(':id/status-history')
+  @RequirePermission('loan.read')
+  @ApiOperation({ summary: 'Get loan status transition history' })
+  @ApiResponse({ status: 200, description: 'Status history retrieved' })
+  @ApiResponse({ status: 404, description: 'Loan not found' })
+  async getStatusHistory(@Param('id') id: string) {
+    return this.loanService.getStatusHistory(id);
+  }
+
   @Post(':id/disburse')
   @RequirePermission('loan.disburse')
   @HttpCode(HttpStatus.CREATED)
