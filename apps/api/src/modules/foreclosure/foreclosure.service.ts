@@ -604,6 +604,14 @@ export class ForeclosureService {
     return foreclosure;
   }
 
+  /**
+   * Find pending (unexpired quote) foreclosure by loan ID.
+   * Returns null if no pending foreclosure exists.
+   */
+  async findPendingByLoanId(loanId: string) {
+    return this.foreclosureRepository.findPendingByLoanId(loanId);
+  }
+
   // ─── Private Helpers ─────────────────────────────────────────────────────────
 
   /**

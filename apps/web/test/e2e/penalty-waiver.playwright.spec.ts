@@ -93,12 +93,37 @@ async function activateLoan(foToken: string, managerToken: string, loanId: strin
 
 /**
  * Helper: Post a penalty via API.
+ * Note: Penalties require the installment to be overdue (past grace period).
+ * This helper will return null if the loan has no valid overdue installments.
  */
 async function postPenalty(
   token: string,
   loanId: string,
-  amountPaise: number = 50000,
 ): Promise<{ id: string; amount_paise: number; status: string } | null> {
+  // First, get the loan to find a valid installment ID
+  const loanRes = await fetch(`${API_BASE}/loans/${loanId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!loanRes.ok) {
+    console.log('Could not fetch loan:', loanRes.status);
+    return null;
+  }
+
+  const loan = await loanRes.json();
+  const schedules = loan.schedules || [];
+
+  // Find the first unpaid installment
+  const installment = schedules.find((s: { status: string }) => s.status !== 'paid');
+  if (!installment) {
+    console.log('No unpaid installments found');
+    return null;
+  }
+
+  // Generate penalty period in YYYY-MM format
+  const now = new Date();
+  const penaltyPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
   const res = await fetch(`${API_BASE}/penalties/calculate`, {
     method: 'POST',
     headers: {
@@ -107,16 +132,15 @@ async function postPenalty(
     },
     body: JSON.stringify({
       loanId,
-      amountPaise,
-      installmentNumber: 1,
-      period: 'monthly',
-      reason: 'Overdue payment - E2E penalty test',
+      installmentId: installment.id,
+      penaltyPeriod,
     }),
   });
 
   if (!res.ok) {
-    // Penalty API might not be fully set up - return null to skip tests gracefully
-    console.log('Penalty API returned:', res.status);
+    // Penalty calculation may fail if installment is not overdue past grace period
+    const errText = await res.text();
+    console.log('Penalty API returned:', res.status, errText);
     return null;
   }
 
@@ -143,7 +167,7 @@ test.describe('Penalty Waiver', () => {
       await activateLoan(foToken, managerToken, loanId);
 
       // Post a penalty via API
-      const penalty = await postPenalty(managerToken, loanId, 50000);
+      const penalty = await postPenalty(managerToken, loanId);
       if (!penalty) {
         test.skip();
         return;
@@ -162,7 +186,7 @@ test.describe('Penalty Waiver', () => {
       const { id: loanId } = await createLoan(foToken, customerId, productVersionId);
       await activateLoan(foToken, managerToken, loanId);
 
-      const penalty = await postPenalty(managerToken, loanId, 50000);
+      const penalty = await postPenalty(managerToken, loanId);
       if (!penalty) {
         test.skip();
         return;
@@ -193,7 +217,7 @@ test.describe('Penalty Waiver', () => {
       const { id: loanId } = await createLoan(foToken, customerId, productVersionId);
       await activateLoan(foToken, managerToken, loanId);
 
-      const penalty = await postPenalty(managerToken, loanId, 50000);
+      const penalty = await postPenalty(managerToken, loanId);
       if (!penalty) {
         test.skip();
         return;
@@ -222,7 +246,7 @@ test.describe('Penalty Waiver', () => {
       const { id: loanId } = await createLoan(foToken, customerId, productVersionId);
       await activateLoan(foToken, managerToken, loanId);
 
-      const penalty = await postPenalty(managerToken, loanId, 50000);
+      const penalty = await postPenalty(managerToken, loanId);
       if (!penalty) {
         test.skip();
         return;
@@ -254,7 +278,7 @@ test.describe('Penalty Waiver', () => {
       const { id: loanId } = await createLoan(foToken, customerId, productVersionId);
       await activateLoan(foToken, managerToken, loanId);
 
-      const penalty = await postPenalty(managerToken, loanId, 50000);
+      const penalty = await postPenalty(managerToken, loanId);
       if (!penalty) {
         test.skip();
         return;
@@ -293,7 +317,7 @@ test.describe('Penalty Waiver', () => {
       const { id: loanId } = await createLoan(foToken, customerId, productVersionId);
       await activateLoan(foToken, managerToken, loanId);
 
-      const penalty = await postPenalty(managerToken, loanId, 50000);
+      const penalty = await postPenalty(managerToken, loanId);
       if (!penalty) {
         test.skip();
         return;
@@ -311,7 +335,7 @@ test.describe('Penalty Waiver', () => {
       const { id: loanId } = await createLoan(foToken, customerId, productVersionId);
       await activateLoan(foToken, managerToken, loanId);
 
-      const penalty = await postPenalty(managerToken, loanId, 50000);
+      const penalty = await postPenalty(managerToken, loanId);
       if (!penalty) {
         test.skip();
         return;
@@ -329,7 +353,7 @@ test.describe('Penalty Waiver', () => {
       const { id: loanId } = await createLoan(foToken, customerId, productVersionId);
       await activateLoan(foToken, managerToken, loanId);
 
-      const penalty = await postPenalty(managerToken, loanId, 50000);
+      const penalty = await postPenalty(managerToken, loanId);
       if (!penalty) {
         test.skip();
         return;
@@ -349,7 +373,7 @@ test.describe('Penalty Waiver', () => {
       const { id: loanId } = await createLoan(foToken, customerId, productVersionId);
       await activateLoan(foToken, managerToken, loanId);
 
-      const penalty = await postPenalty(managerToken, loanId, 50000);
+      const penalty = await postPenalty(managerToken, loanId);
       if (!penalty) {
         test.skip();
         return;
@@ -387,7 +411,7 @@ test.describe('Penalty Waiver', () => {
       const { id: loanId } = await createLoan(foToken, customerId, productVersionId);
       await activateLoan(foToken, managerToken, loanId);
 
-      const penalty = await postPenalty(managerToken, loanId, 50000);
+      const penalty = await postPenalty(managerToken, loanId);
       if (!penalty) {
         test.skip();
         return;

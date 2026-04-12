@@ -7,7 +7,7 @@ import { useLoan, useLoanAction } from '@/hooks/useLoans';
 import { useCollections, type Collection } from '@/hooks/useCollections';
 import { useReceipts } from '@/hooks/useReceipts';
 import { usePenalties, useWaivePenalty, type Penalty } from '@/hooks/usePenalties';
-import { useGenerateForeclosureQuote, useExecuteForeclosure, type ForeclosureQuote } from '@/hooks/useForeclosures';
+import { useGenerateForeclosureQuote, useExecuteForeclosure, usePendingForeclosure, type ForeclosureQuote } from '@/hooks/useForeclosures';
 import { useToast } from '@/providers/toast-provider';
 import {
   StatusBadge,
@@ -48,6 +48,7 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
   const waivePenalty = useWaivePenalty();
   const generateQuote = useGenerateForeclosureQuote();
   const executeForeclosure = useExecuteForeclosure();
+  const { data: pendingForeclosure } = usePendingForeclosure(id, !!loan && ['active', 'overdue'].includes(loan.status));
   const { showToast } = useToast();
 
   // Status history query
@@ -89,7 +90,7 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
   useEffect(() => {
     if (foreclosureQuote) {
       const checkExpiry = () => {
-        const expired = new Date(foreclosureQuote.expires_at) <= new Date();
+        const expired = new Date(foreclosureQuote.quoteExpiresAt) <= new Date();
         setQuoteExpired(expired);
       };
       checkExpiry();
@@ -166,6 +167,14 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
   async function handleGenerateForeclosureQuote() {
     setActionError(null);
     try {
+      // Use existing pending foreclosure if available (maker-checker: different user can execute)
+      if (pendingForeclosure) {
+        setForeclosureQuote(pendingForeclosure);
+        setQuoteExpired(false);
+        setForeclosureOpen(true);
+        return;
+      }
+      // Otherwise, generate a new quote
       const quote = await generateQuote.mutateAsync({ loanId: id });
       setForeclosureQuote(quote);
       setQuoteExpired(false);
@@ -180,7 +189,7 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
     setActionError(null);
     try {
       const idempotencyKey = crypto.randomUUID();
-      await executeForeclosure.mutateAsync({ id: foreclosureQuote.id, idempotencyKey });
+      await executeForeclosure.mutateAsync({ foreclosureId: foreclosureQuote.foreclosureId, idempotencyKey });
       setForeclosureConfirmOpen(false);
       setForeclosureOpen(false);
       setForeclosureQuote(null);
@@ -677,32 +686,32 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
             <div className="grid gap-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Outstanding Principal</span>
-                <MoneyDisplay paise={foreclosureQuote.outstanding_principal_paise} />
+                <MoneyDisplay paise={foreclosureQuote.outstandingPrincipalPaise} />
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Accrued Interest</span>
-                <MoneyDisplay paise={foreclosureQuote.accrued_interest_paise} />
+                <MoneyDisplay paise={foreclosureQuote.accruedInterestPaise} />
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Pending Penalties</span>
-                <MoneyDisplay paise={foreclosureQuote.pending_penalties_paise} />
+                <MoneyDisplay paise={foreclosureQuote.pendingPenaltiesPaise} />
               </div>
-              {foreclosureQuote.rebate_paise > 0 && (
+              {foreclosureQuote.rebatePaise > 0 && (
                 <div className="flex justify-between text-green-600">
                   <span>Rebate</span>
-                  <span>-<MoneyDisplay paise={foreclosureQuote.rebate_paise} /></span>
+                  <span>-<MoneyDisplay paise={foreclosureQuote.rebatePaise} /></span>
                 </div>
               )}
               <div className="flex justify-between font-semibold border-t pt-2 mt-2">
                 <span>Settlement Amount</span>
-                <MoneyDisplay paise={foreclosureQuote.settlement_amount_paise} />
+                <MoneyDisplay paise={foreclosureQuote.settlementAmountPaise} />
               </div>
             </div>
             <div className={`text-xs ${quoteExpired ? 'text-destructive' : 'text-muted-foreground'}`}>
               {quoteExpired ? (
                 'Quote has expired'
               ) : (
-                `Expires: ${new Date(foreclosureQuote.expires_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`
+                `Expires: ${new Date(foreclosureQuote.quoteExpiresAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`
               )}
             </div>
           </div>
@@ -714,7 +723,7 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
         open={foreclosureConfirmOpen}
         onOpenChange={setForeclosureConfirmOpen}
         title="Confirm Foreclosure"
-        description={`This will close the loan with a final settlement of ₹${foreclosureQuote ? (foreclosureQuote.settlement_amount_paise / 100).toLocaleString('en-IN') : '0'}. This action cannot be undone.`}
+        description={`This will close the loan with a final settlement of ₹${foreclosureQuote ? (foreclosureQuote.settlementAmountPaise / 100).toLocaleString('en-IN') : '0'}. This action cannot be undone.`}
         confirmLabel="Execute Foreclosure"
         variant="destructive"
         loading={executeForeclosure.isPending}

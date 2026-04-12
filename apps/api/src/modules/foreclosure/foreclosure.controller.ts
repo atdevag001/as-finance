@@ -47,4 +47,13 @@ export class ForeclosureController {
   async findById(@Param('id') id: string) {
     return this.foreclosureService.findById(id);
   }
+
+  @Get('loan/:loanId/pending')
+  @RequirePermission('foreclosure.quote')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get pending foreclosure quote for a loan' })
+  @ApiResponse({ status: 200, description: 'Pending foreclosure quote or null' })
+  async findPendingByLoanId(@Param('loanId') loanId: string) {
+    return this.foreclosureService.findPendingByLoanId(loanId);
+  }
 }

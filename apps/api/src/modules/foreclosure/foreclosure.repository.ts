@@ -140,6 +140,21 @@ export class ForeclosureRepository {
   }
 
   /**
+   * Find pending (unexpired quote status) foreclosure by loan ID.
+   */
+  async findPendingByLoanId(loanId: string, tx?: TxClient) {
+    const client = tx ?? this.prisma;
+    return client.foreclosures.findFirst({
+      where: {
+        loan_id: loanId,
+        status: 'quote',
+        quote_expires_at: { gt: new Date() },
+      },
+      orderBy: { created_at: 'desc' },
+    });
+  }
+
+  /**
    * Update foreclosure status and related fields.
    */
   async updateForeclosure(

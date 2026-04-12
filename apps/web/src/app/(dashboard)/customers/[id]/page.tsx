@@ -67,6 +67,7 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
   // Reinstate state
   const [showReinstateDialog, setShowReinstateDialog] = useState(false);
   const [reinstating, setReinstating] = useState(false);
+  const [reinstateReason, setReinstateReason] = useState('');
 
   // Edit form state
   const [showEditDialog, setShowEditDialog] = useState(false);
@@ -78,7 +79,7 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
   const [familyFormData, setFamilyFormData] = useState({
     name: '',
     relationship: '',
-    contact_number: '',
+    contactNumber: '',
     occupation: '',
   });
   const [familyError, setFamilyError] = useState<string | null>(null);
@@ -89,7 +90,7 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
     name: '',
     relationship: '',
     mobile: '',
-    aadhaar: '',
+    aadhaarNumber: '',
     address: '',
   });
   const [guarantorError, setGuarantorError] = useState<string | null>(null);
@@ -164,9 +165,10 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
   async function handleReinstate() {
     setReinstating(true);
     try {
-      await apiClient.post(`/customers/${id}/reinstate`);
+      await apiClient.post(`/customers/${id}/reinstate`, { reason: reinstateReason || 'Reinstated by manager' });
       showToast({ message: 'Customer reinstated.' });
       setShowReinstateDialog(false);
+      setReinstateReason('');
       queryClient.invalidateQueries({ queryKey: ['customers', id] });
       queryClient.invalidateQueries({ queryKey: ['customers'] });
     } catch (err) {
@@ -255,7 +257,7 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
       });
       showToast({ message: 'Family member added.' });
       setShowAddFamilyDialog(false);
-      setFamilyFormData({ name: '', relationship: '', contact_number: '', occupation: '' });
+      setFamilyFormData({ name: '', relationship: '', contactNumber: '', occupation: '' });
     } catch (err) {
       setFamilyError((err as Error).message || 'Failed to add family member.');
     }
@@ -274,7 +276,7 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
       });
       showToast({ message: 'Guarantor added.' });
       setShowAddGuarantorDialog(false);
-      setGuarantorFormData({ name: '', relationship: '', mobile: '', aadhaar: '', address: '' });
+      setGuarantorFormData({ name: '', relationship: '', mobile: '', aadhaarNumber: '', address: '' });
     } catch (err) {
       setGuarantorError((err as Error).message || 'Failed to add guarantor.');
     }
@@ -549,13 +551,27 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
       {/* Reinstate Confirm Dialog */}
       <ConfirmDialog
         open={showReinstateDialog}
-        onOpenChange={setShowReinstateDialog}
+        onOpenChange={(open) => {
+          setShowReinstateDialog(open);
+          if (!open) setReinstateReason('');
+        }}
         title="Reinstate Customer"
         description={`Are you sure you want to reinstate ${customer.full_name}?`}
         confirmLabel="Reinstate"
         loading={reinstating}
         onConfirm={handleReinstate}
-      />
+      >
+        <div className="py-2">
+          <label htmlFor="reinstate-reason" className="text-sm font-medium">Reason (optional)</label>
+          <Input
+            id="reinstate-reason"
+            placeholder="Enter reason for reinstating…"
+            value={reinstateReason}
+            onChange={(e) => setReinstateReason(e.target.value)}
+            className="mt-1"
+          />
+        </div>
+      </ConfirmDialog>
 
       {/* Edit Customer Dialog */}
       <ConfirmDialog
@@ -686,7 +702,7 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
         onOpenChange={(open) => {
           setShowAddFamilyDialog(open);
           if (!open) {
-            setFamilyFormData({ name: '', relationship: '', contact_number: '', occupation: '' });
+            setFamilyFormData({ name: '', relationship: '', contactNumber: '', occupation: '' });
             setFamilyError(null);
           }
         }}
@@ -726,8 +742,8 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
             <Label htmlFor="family-contact">Contact Number</Label>
             <Input
               id="family-contact"
-              value={familyFormData.contact_number}
-              onChange={(e) => setFamilyFormData(prev => ({ ...prev, contact_number: e.target.value }))}
+              value={familyFormData.contactNumber}
+              onChange={(e) => setFamilyFormData(prev => ({ ...prev, contactNumber: e.target.value }))}
               placeholder="Enter phone number…"
             />
           </div>
@@ -749,7 +765,7 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
         onOpenChange={(open) => {
           setShowAddGuarantorDialog(open);
           if (!open) {
-            setGuarantorFormData({ name: '', relationship: '', mobile: '', aadhaar: '', address: '' });
+            setGuarantorFormData({ name: '', relationship: '', mobile: '', aadhaarNumber: '', address: '' });
             setGuarantorError(null);
           }
         }}
@@ -798,8 +814,8 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
             <Label htmlFor="guarantor-aadhaar">Aadhaar</Label>
             <Input
               id="guarantor-aadhaar"
-              value={guarantorFormData.aadhaar}
-              onChange={(e) => setGuarantorFormData(prev => ({ ...prev, aadhaar: e.target.value }))}
+              value={guarantorFormData.aadhaarNumber}
+              onChange={(e) => setGuarantorFormData(prev => ({ ...prev, aadhaarNumber: e.target.value }))}
               placeholder="Enter Aadhaar number…"
             />
           </div>
