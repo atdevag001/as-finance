@@ -268,4 +268,73 @@ export class CollectionRepository {
     // The actual paid tracking is done via installment penalty_paid_paise
     return 0n;
   }
+
+  /**
+   * Find collections by loan ID with pagination.
+   */
+  async findByLoanId(loanId: string, params?: { skip?: number; take?: number }) {
+    const [data, total] = await Promise.all([
+      this.prisma['collections'].findMany({
+        where: { loan_id: loanId },
+        skip: params?.skip ?? 0,
+        take: params?.take ?? 50,
+        orderBy: { created_at: 'desc' as const },
+        select: {
+          ...COLLECTION_SELECT,
+          loan: {
+            select: { loan_number: true, customer: { select: { full_name: true } } },
+          },
+        },
+      }),
+      this.prisma['collections'].count({ where: { loan_id: loanId } }),
+    ]);
+    return { data, total };
+  }
+
+  /**
+   * Find all collections with optional filters and pagination.
+   */
+  async findAll(params?: {
+    skip?: number;
+    take?: number;
+    loanId?: string;
+    startDate?: string;
+    endDate?: string;
+    loanNumber?: string;
+  }) {
+    const where: Record<string, unknown> = {};
+
+    if (params?.loanId) {
+      where['loan_id'] = params.loanId;
+    }
+    if (params?.startDate || params?.endDate) {
+      where['payment_date'] = {};
+      if (params?.startDate) {
+        (where['payment_date'] as Record<string, unknown>)['gte'] = new Date(params.startDate);
+      }
+      if (params?.endDate) {
+        (where['payment_date'] as Record<string, unknown>)['lte'] = new Date(params.endDate);
+      }
+    }
+    if (params?.loanNumber) {
+      where['loan'] = { loan_number: { contains: params.loanNumber, mode: 'insensitive' } };
+    }
+
+    const [data, total] = await Promise.all([
+      this.prisma['collections'].findMany({
+        where,
+        skip: params?.skip ?? 0,
+        take: params?.take ?? 50,
+        orderBy: { created_at: 'desc' as const },
+        select: {
+          ...COLLECTION_SELECT,
+          loan: {
+            select: { loan_number: true, customer: { select: { full_name: true } } },
+          },
+        },
+      }),
+      this.prisma['collections'].count({ where }),
+    ]);
+    return { data, total };
+  }
 }

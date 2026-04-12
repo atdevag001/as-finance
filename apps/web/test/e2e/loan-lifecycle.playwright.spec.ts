@@ -410,7 +410,7 @@ test.describe('Loan Lifecycle', () => {
 
       // Wait for collection table to have data (not "No collections" message)
       const collectionTable = collectionOfficerPage.locator('table').filter({ hasText: 'Mode' });
-      await expect(collectionTable.getByText('₹5,000')).toBeVisible({ timeout: 15_000 });
+      await expect(collectionTable.getByText(/₹5,000/).first()).toBeVisible({ timeout: 15_000 });
       await expect(collectionTable.locator('tbody tr').first()).toBeVisible();
     });
 
@@ -623,7 +623,7 @@ test.describe('Loan Lifecycle', () => {
       await expect(collectionOfficerPage.getByText(/RCP-\d{4}-\d{5}/)).toBeVisible({ timeout: 15_000 });
 
       // Verify the receipt amount shows
-      await expect(collectionOfficerPage.getByText('₹5,000').first()).toBeVisible();
+      await expect(collectionOfficerPage.getByText(/₹5,000/).first()).toBeVisible();
     });
 
     test('receipt number links to receipt detail page', async ({ collectionOfficerPage }) => {

@@ -87,30 +87,37 @@ export class AuthService {
   }
 
   async refreshToken(currentRefreshToken: string): Promise<RefreshResult> {
-    // Find all non-revoked, non-expired refresh tokens and check against hash
-    const tokens = await this.prisma['refresh_tokens'].findMany({
+    // Extract selector (first 32 hex chars = 16 bytes) for O(1) lookup
+    const selector = currentRefreshToken.slice(0, 32);
+    const validator = currentRefreshToken.slice(32);
+
+    // Find token by selector (indexed lookup)
+    const token = await this.prisma['refresh_tokens'].findFirst({
       where: {
+        token_selector: selector,
         is_revoked: false,
         expires_at: { gt: new Date() },
       },
       include: { user: true },
     });
 
-    let matchedToken: (typeof tokens)[0] | null = null;
-    for (const token of tokens) {
-      const isMatch = await bcrypt.compare(currentRefreshToken, token.token_hash);
-      if (isMatch) {
-        matchedToken = token;
-        break;
-      }
-    }
-
-    if (!matchedToken) {
+    if (!token) {
       throw new AuthorizationError(
         'Invalid or expired refresh token',
         'INVALID_REFRESH_TOKEN',
       );
     }
+
+    // Verify the validator portion against the hash
+    const isValid = await bcrypt.compare(validator, token.token_hash);
+    if (!isValid) {
+      throw new AuthorizationError(
+        'Invalid or expired refresh token',
+        'INVALID_REFRESH_TOKEN',
+      );
+    }
+
+    const matchedToken = token;
 
     if (!matchedToken.user.is_active) {
       throw new AuthorizationError('Account is inactive', 'ACCOUNT_INACTIVE');
@@ -214,8 +221,16 @@ export class AuthService {
   }
 
   private async createRefreshToken(userId: string): Promise<string> {
-    const rawToken = crypto.randomBytes(48).toString('hex');
-    const tokenHash = await bcrypt.hash(rawToken, BCRYPT_COST);
+    // Generate 64 bytes: first 16 for selector (stored plaintext), remaining 48 for validator (hashed)
+    const selectorBytes = crypto.randomBytes(16);
+    const validatorBytes = crypto.randomBytes(48);
+
+    const selector = selectorBytes.toString('hex'); // 32 hex chars
+    const validator = validatorBytes.toString('hex'); // 96 hex chars
+    const rawToken = selector + validator; // 128 hex chars total
+
+    // Only hash the validator portion (not the selector)
+    const validatorHash = await bcrypt.hash(validator, BCRYPT_COST);
 
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_DAYS);
@@ -223,7 +238,8 @@ export class AuthService {
     await this.prisma['refresh_tokens'].create({
       data: {
         user_id: userId,
-        token_hash: tokenHash,
+        token_selector: selector,
+        token_hash: validatorHash,
         expires_at: expiresAt,
       },
     });

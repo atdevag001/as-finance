@@ -287,17 +287,18 @@ model users {
 
 /// JWT refresh tokens for session management
 model refresh_tokens {
-  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id    String   @db.Uuid
-  token_hash String   @db.VarChar(255)
-  expires_at DateTime @db.Timestamptz()
-  is_revoked Boolean  @default(false)
-  created_at DateTime @default(now()) @db.Timestamptz()
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id        String   @db.Uuid
+  token_selector String   @db.VarChar(32) /// First 16 bytes of raw token (hex) for O(1) lookup
+  token_hash     String   @db.VarChar(255)
+  expires_at     DateTime @db.Timestamptz()
+  is_revoked     Boolean  @default(false)
+  created_at     DateTime @default(now()) @db.Timestamptz()
 
   user users @relation(fields: [user_id], references: [id])
 
   @@index([user_id], name: "idx_refresh_tokens_user_id")
-  @@index([token_hash], name: "idx_refresh_tokens_token_hash")
+  @@index([token_selector], name: "idx_refresh_tokens_selector")
 }
 
 /// Area/route assignments for field and collection officers (RBAC scope)

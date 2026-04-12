@@ -633,4 +633,18 @@ export class CollectionService {
 
     return { dpd, overdueBucket };
   }
+
+  /**
+   * List collections with optional filters and pagination.
+   */
+  async listCollections(params: {
+    loanId?: string;
+    skip?: number;
+    take?: number;
+    startDate?: string;
+    endDate?: string;
+    loanNumber?: string;
+  }) {
+    return this.collectionRepository.findAll(params);
+  }
 }
