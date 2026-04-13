@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Plus, Search } from 'lucide-react';
 import { useCustomers } from '@/hooks/useCustomers';
-import { StatusBadge, LoadingSpinner, ErrorMessage, PaginationControls, PermissionGate } from '@/components/shared';
+import { StatusBadge, LoadingSpinner, ErrorMessage, PaginationControls, PermissionGate, MobileCardList, TappablePhone, type MobileCardItem } from '@/components/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -89,13 +89,29 @@ export default function CustomersPage() {
 
       {data && (
         <>
-          <div className="overflow-x-auto rounded-lg border">
+          {/* Mobile Card List */}
+          <div className="lg:hidden">
+            <MobileCardList
+              items={data.data.map((c): MobileCardItem => ({
+                id: c.id,
+                title: c.full_name,
+                subtitle: <TappablePhone phone={c.mobile} />,
+                badge: <StatusBadge status={c.status} type="customer" />,
+                secondaryInfo: c.city,
+                href: `/customers/${c.id}`,
+              }))}
+              emptyMessage="No customers found."
+            />
+          </div>
+
+          {/* Desktop Table */}
+          <div className="hidden lg:block overflow-x-auto rounded-lg border">
             <table className="w-full text-sm">
               <thead className="border-b bg-muted/50">
                 <tr>
                   <th className="px-4 py-3 text-left font-medium">Name</th>
                   <th className="px-4 py-3 text-left font-medium">Mobile</th>
-                  <th className="px-4 py-3 text-left font-medium hidden md:table-cell">City</th>
+                  <th className="px-4 py-3 text-left font-medium">City</th>
                   <th className="px-4 py-3 text-left font-medium">Status</th>
                 </tr>
               </thead>
@@ -111,7 +127,7 @@ export default function CustomersPage() {
                       </Link>
                     </td>
                     <td className="px-4 py-3">{c.mobile}</td>
-                    <td className="px-4 py-3 hidden md:table-cell">{c.city}</td>
+                    <td className="px-4 py-3">{c.city}</td>
                     <td className="px-4 py-3">
                       <StatusBadge status={c.status} type="customer" />
                     </td>
@@ -127,6 +143,7 @@ export default function CustomersPage() {
               </tbody>
             </table>
           </div>
+
           <PaginationControls
             page={page}
             totalPages={Math.ceil((data.total || 0) / 20)}

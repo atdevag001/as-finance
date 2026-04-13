@@ -64,33 +64,61 @@ export default function GroupCollectPage({ params }: { params: Promise<{ id: str
       <form onSubmit={handleSubmit}>
         <Card>
           <CardHeader><CardTitle className="text-base">Member Payments</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-4">
             {group.members.map((m) => (
-              <div key={m.id} className="flex flex-col gap-2 border-b pb-3 last:border-0 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="font-medium">{m.customerName}</p>
-                  <p className="text-xs text-muted-foreground">{m.loanNumber ?? 'No active loan'}</p>
-                  {m.duePaise != null && <p className="text-xs">Due: <MoneyDisplay paise={m.duePaise} /></p>}
+              <div key={m.id} className="rounded-lg border bg-card p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-foreground">{m.customerName}</p>
+                    <p className="text-sm text-muted-foreground">{m.loanNumber ?? 'No active loan'}</p>
+                    {m.duePaise != null && (
+                      <p className="mt-1 text-sm font-medium text-primary">
+                        Due: <MoneyDisplay paise={m.duePaise} />
+                      </p>
+                    )}
+                  </div>
+                  {m.loanId && (
+                    <div className="shrink-0">
+                      <Input
+                        type="number"
+                        inputMode="numeric"
+                        placeholder="Amount (paise)"
+                        className="w-32 text-right font-medium"
+                        value={amounts[m.id] ?? ''}
+                        onChange={(e) => setAmounts((prev) => ({ ...prev, [m.id]: e.target.value }))}
+                      />
+                      {m.duePaise != null && (
+                        <button
+                          type="button"
+                          className="mt-1 text-xs text-primary hover:underline"
+                          onClick={() => setAmounts((prev) => ({ ...prev, [m.id]: String(m.duePaise) }))}
+                        >
+                          Fill due amount
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
-                {m.loanId && (
-                  <Input
-                    type="number"
-                    inputMode="numeric"
-                    placeholder="Amount (paise)"
-                    className="w-40"
-                    value={amounts[m.id] ?? ''}
-                    onChange={(e) => setAmounts((prev) => ({ ...prev, [m.id]: e.target.value }))}
-                  />
-                )}
               </div>
             ))}
           </CardContent>
         </Card>
 
-        <div className="mt-4 flex justify-end">
-          <Button type="submit" disabled={mutation.isPending} className="min-w-[180px]">
-            {mutation.isPending ? 'Posting…' : 'Post Group Collection'}
-          </Button>
+        {/* Running Total - Sticky on mobile */}
+        <div className="sticky bottom-20 mt-4 rounded-lg border bg-background p-4 shadow-lg lg:static lg:bottom-auto lg:shadow-none">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground">Total Collection</p>
+              <p className="text-2xl font-bold">
+                <MoneyDisplay
+                  paise={Object.values(amounts).reduce((sum, val) => sum + (Number(val) || 0), 0)}
+                />
+              </p>
+            </div>
+            <Button type="submit" disabled={mutation.isPending} className="min-h-[48px] min-w-[140px] text-base">
+              {mutation.isPending ? 'Posting…' : 'Post Collection'}
+            </Button>
+          </div>
         </div>
       </form>
     </div>

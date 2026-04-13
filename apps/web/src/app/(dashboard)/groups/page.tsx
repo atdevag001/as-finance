@@ -10,6 +10,8 @@ import {
   ErrorMessage,
   PaginationControls,
   PermissionGate,
+  MobileCardList,
+  type MobileCardItem,
 } from '@/components/shared';
 import { Button } from '@/components/ui/button';
 
@@ -40,14 +42,31 @@ export default function GroupsPage() {
 
       {data && (
         <>
-          <div className="overflow-x-auto rounded-lg border">
+          {/* Mobile Card List */}
+          <div className="lg:hidden">
+            <MobileCardList
+              items={data.data.map((g): MobileCardItem => ({
+                id: g.id,
+                title: g.name,
+                subtitle: `Leader: ${g.leader_name}`,
+                rightValue: `${g.member_count} members`,
+                badge: <StatusBadge status={g.status} type="group" />,
+                secondaryInfo: g.meeting_day ? `Meets: ${g.meeting_day}` : undefined,
+                href: `/groups/${g.id}`,
+              }))}
+              emptyMessage="No groups found."
+            />
+          </div>
+
+          {/* Desktop Table */}
+          <div className="hidden lg:block overflow-x-auto rounded-lg border">
             <table className="w-full text-sm">
               <thead className="border-b bg-muted/50">
                 <tr>
                   <th className="px-4 py-3 text-left font-medium">Name</th>
                   <th className="px-4 py-3 text-left font-medium">Leader</th>
                   <th className="px-4 py-3 text-right font-medium">Members</th>
-                  <th className="px-4 py-3 text-left font-medium hidden md:table-cell">Meeting Day</th>
+                  <th className="px-4 py-3 text-left font-medium">Meeting Day</th>
                   <th className="px-4 py-3 text-left font-medium">Status</th>
                 </tr>
               </thead>
@@ -64,7 +83,7 @@ export default function GroupsPage() {
                     </td>
                     <td className="px-4 py-3">{g.leader_name}</td>
                     <td className="px-4 py-3 text-right">{g.member_count}</td>
-                    <td className="px-4 py-3 hidden md:table-cell capitalize">{g.meeting_day}</td>
+                    <td className="px-4 py-3 capitalize">{g.meeting_day}</td>
                     <td className="px-4 py-3">
                       <StatusBadge status={g.status} type="group" />
                     </td>
@@ -80,6 +99,7 @@ export default function GroupsPage() {
               </tbody>
             </table>
           </div>
+
           <PaginationControls
             page={page}
             totalPages={Math.ceil((data.total || 0) / 20)}

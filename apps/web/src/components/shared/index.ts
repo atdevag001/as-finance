@@ -9,3 +9,4 @@ export { AccessDenied } from './access-denied';
 export { DateDisplay } from './date-display';
 export { ToastContainer } from './toast';
 export { ReversalDialog, type ReversalCollection } from './reversal-dialog';
+export { MobileCardList, TappablePhone, type MobileCardItem } from './mobile-card-list';

@@ -1,10 +1,12 @@
 'use client';
 
 import Link from 'next/link';
+import { Banknote, Search, Users } from 'lucide-react';
 import { useDashboard } from '@/hooks/useDashboard';
 import { useAuth } from '@/providers/auth-provider';
 import { MoneyDisplay, LoadingSpinner, ErrorMessage } from '@/components/shared';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -15,6 +17,28 @@ export default function DashboardPage() {
       <div>
         <h1 className="text-2xl font-bold">Dashboard</h1>
         <p className="text-muted-foreground">Welcome back, {user?.fullName ?? 'User'}.</p>
+      </div>
+
+      {/* Quick Actions - Mobile optimized */}
+      <div className="grid grid-cols-3 gap-3 lg:hidden">
+        <Button asChild variant="outline" className="flex h-auto flex-col gap-2 py-4">
+          <Link href="/collections/new">
+            <Banknote className="h-6 w-6 text-primary" />
+            <span className="text-xs font-medium">Post Collection</span>
+          </Link>
+        </Button>
+        <Button asChild variant="outline" className="flex h-auto flex-col gap-2 py-4">
+          <Link href="/customers">
+            <Search className="h-6 w-6 text-primary" />
+            <span className="text-xs font-medium">Find Customer</span>
+          </Link>
+        </Button>
+        <Button asChild variant="outline" className="flex h-auto flex-col gap-2 py-4">
+          <Link href="/groups">
+            <Users className="h-6 w-6 text-primary" />
+            <span className="text-xs font-medium">Groups</span>
+          </Link>
+        </Button>
       </div>
 
       {isLoading && (
@@ -79,12 +103,12 @@ export default function DashboardPage() {
 function KPICard({ title, value, variant, href }: { title: string; value: string; variant?: 'danger'; href: string }) {
   return (
     <Link href={href}>
-      <Card className={`transition-colors hover:bg-muted/30 ${variant === 'danger' ? 'border-destructive' : ''}`}>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm text-muted-foreground">{title}</CardTitle>
+      <Card className={`min-h-[100px] transition-colors hover:bg-muted/30 active:bg-accent ${variant === 'danger' ? 'border-destructive' : ''}`}>
+        <CardHeader className="pb-2 px-3 pt-3 lg:px-6 lg:pt-6">
+          <CardTitle className="text-xs lg:text-sm text-muted-foreground">{title}</CardTitle>
         </CardHeader>
-        <CardContent>
-          <span className={`text-2xl font-bold ${variant === 'danger' ? 'text-destructive' : ''}`}>{value}</span>
+        <CardContent className="px-3 pb-3 lg:px-6 lg:pb-6">
+          <span className={`text-2xl lg:text-3xl font-bold ${variant === 'danger' ? 'text-destructive' : ''}`}>{value}</span>
         </CardContent>
       </Card>
     </Link>

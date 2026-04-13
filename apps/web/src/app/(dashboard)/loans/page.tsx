@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { Plus } from 'lucide-react';
 import { useLoans } from '@/hooks/useLoans';
-import { StatusBadge, MoneyDisplay, LoadingSpinner, ErrorMessage, PaginationControls, PermissionGate } from '@/components/shared';
+import { StatusBadge, MoneyDisplay, LoadingSpinner, ErrorMessage, PaginationControls, PermissionGate, MobileCardList, type MobileCardItem } from '@/components/shared';
 import { Button } from '@/components/ui/button';
 
 const STATUS_FILTERS = [
@@ -64,15 +64,34 @@ export default function LoansPage() {
 
       {data && (
         <>
-          <div className="overflow-x-auto rounded-lg border">
+          {/* Mobile Card List */}
+          <div className="lg:hidden">
+            <MobileCardList
+              items={data.data.map((l): MobileCardItem => ({
+                id: l.id,
+                title: l.loan_number,
+                subtitle: l.customer?.full_name ?? '—',
+                rightValue: <MoneyDisplay paise={l.principal_paise} />,
+                badge: <StatusBadge status={l.status} type="loan" />,
+                secondaryInfo: l.cached_outstanding_paise != null ? (
+                  <>Due: <MoneyDisplay paise={l.cached_outstanding_paise} /></>
+                ) : undefined,
+                href: `/loans/${l.id}`,
+              }))}
+              emptyMessage="No loans found."
+            />
+          </div>
+
+          {/* Desktop Table */}
+          <div className="hidden lg:block overflow-x-auto rounded-lg border">
             <table className="w-full text-sm">
               <thead className="border-b bg-muted/50">
                 <tr>
                   <th className="px-4 py-3 text-left font-medium">Loan #</th>
-                  <th className="px-4 py-3 text-left font-medium hidden sm:table-cell">Customer</th>
+                  <th className="px-4 py-3 text-left font-medium">Customer</th>
                   <th className="px-4 py-3 text-right font-medium">Principal (INR)</th>
                   <th className="px-4 py-3 text-left font-medium">Status</th>
-                  <th className="px-4 py-3 text-right font-medium hidden md:table-cell">Outstanding (INR)</th>
+                  <th className="px-4 py-3 text-right font-medium">Outstanding (INR)</th>
                 </tr>
               </thead>
               <tbody>
@@ -83,14 +102,14 @@ export default function LoansPage() {
                         {l.loan_number}
                       </Link>
                     </td>
-                    <td className="px-4 py-3 hidden sm:table-cell">{l.customer?.full_name ?? '—'}</td>
+                    <td className="px-4 py-3">{l.customer?.full_name ?? '—'}</td>
                     <td className="px-4 py-3 text-right">
                       <MoneyDisplay paise={l.principal_paise} />
                     </td>
                     <td className="px-4 py-3">
                       <StatusBadge status={l.status} type="loan" />
                     </td>
-                    <td className="px-4 py-3 text-right hidden md:table-cell">
+                    <td className="px-4 py-3 text-right">
                       {l.cached_outstanding_paise != null ? <MoneyDisplay paise={l.cached_outstanding_paise} /> : '—'}
                     </td>
                   </tr>
@@ -105,6 +124,7 @@ export default function LoansPage() {
               </tbody>
             </table>
           </div>
+
           <PaginationControls
             page={page}
             totalPages={Math.ceil((data.total || 0) / 20)}

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Menu, X, LogOut } from 'lucide-react';
 import { useAuth } from '@/providers/auth-provider';
 import { SidebarNav } from '@/components/sidebar-nav';
+import { MobileBottomNav } from '@/components/mobile-bottom-nav';
 import { Button } from '@/components/ui/button';
 import { LoadingSpinner } from '@/components/shared/loading-spinner';
 
@@ -93,8 +94,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <span className="text-sm font-semibold">AS Finance LMS</span>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
+        <main className="flex-1 overflow-y-auto p-4 pb-20 md:p-6 lg:pb-6">{children}</main>
       </div>
+
+      {/* Mobile Bottom Navigation */}
+      <MobileBottomNav onMoreClick={() => setSidebarOpen(true)} />
     </div>
   );
 }
