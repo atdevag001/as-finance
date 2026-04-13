@@ -1,10 +1,10 @@
 {
-  "version": "2.6.0",
-  "lastRun": "2026-04-12T18:45:00Z",
+  "version": "2.7.0",
+  "lastRun": "2026-04-12T19:30:00Z",
   "currentPhase": "COMPLETE",
-  "iterations": 6,
+  "iterations": 7,
   "auth": {
-    "lastRefresh": "2026-04-12T18:30:00Z",
+    "lastRefresh": "2026-04-12T19:15:00Z",
     "tokenMaxAgeMinutes": 10,
     "jwtExpiryMinutes": 15,
     "roles": ["super_admin", "manager", "field_officer", "collection_officer", "accountant", "office_staff", "viewer_auditor"],
@@ -48,7 +48,9 @@
     "rbac": { "status": "COMPLETE", "tests": 35, "passing": 35, "failing": 0 },
     "error-handling": { "status": "COMPLETE", "tests": 14, "passing": 14, "failing": 0 },
     "navigation": { "status": "COMPLETE", "tests": 3, "passing": 3, "failing": 0 },
-    "mobile": { "status": "COMPLETE", "tests": 3, "passing": 3, "failing": 0 }
+    "mobile": { "status": "COMPLETE", "tests": 3, "passing": 3, "failing": 0 },
+    "confirmation-dialogs": { "status": "COMPLETE", "tests": 4, "passing": 4, "failing": 0 },
+    "loan-application": { "status": "COMPLETE", "tests": 3, "passing": 3, "failing": 0 }
   },
   "failures": [],
   "bugsFixed": [
@@ -71,7 +73,9 @@
     "Maker-checker violation - added GET /foreclosures/loan/:loanId/pending and usePendingForeclosure hook",
     "Customer reinstate - added reason parameter to API call",
     "Family/Guarantor field names - fixed to camelCase (contactNumber, aadhaarNumber)",
-    "Penalty-management tests - made conditional on penalties existing, fixed loan activation workflow"
+    "Penalty-management tests - made conditional on penalties existing, fixed loan activation workflow",
+    "Confirmation dialogs - fixed strict mode violation by adding .first() to cancelBtn selector",
+    "Loan application - fixed strict mode violation by adding .first() to submitted status selector"
   ],
   "testsGenerated": [
     "document-management.playwright.spec.ts - 12 tests for document upload/view/permissions"
@@ -90,14 +94,15 @@
     "2156732 - fix(web): handle undefined values in loan products page and add permissions",
     "22e1338 - fix(e2e): fix test selectors and loan products page crash",
     "2425cb8 - fix(e2e): comprehensive test fixes and app bug fixes",
-    "4e3aacc - feat(api): add /loans/:id/disburse endpoint and E2E loan lifecycle tests"
+    "4e3aacc - feat(api): add /loans/:id/disburse endpoint and E2E loan lifecycle tests",
+    "b97bc24 - fix(e2e): add .first() to selectors to avoid strict mode violations"
   ],
   "flakiness": {
-    "dashboard.KPI": "API timing",
+    "dashboard.KPI": "API timing - test data creation during run can cause count mismatch",
     "confirmation-dialogs.reversal": "Dialog animation timing",
     "users.edit-link": "Table render timing",
     "customer-crud.list": "Table load timing",
-    "navigation.headings": "Page transition timing"
+    "navigation.headings": "Page transition timing - sidebar clicks can be slow"
   },
   "runCommand": "cd apps/web/test && rm -f e2e/.auth/*.json && npx playwright test --project=auth-setup && npx playwright test --project=desktop-chrome --workers=8"
 }
