@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowLeft, Printer } from 'lucide-react';
+import { ArrowLeft, Printer, Share2 } from 'lucide-react';
 import { useReceiptDetail } from '@/hooks/useReceipts';
 import {
   MoneyDisplay,
@@ -113,17 +113,35 @@ export default function ReceiptViewPage({ params }: { params: { id: string } }) 
 
       <div className="space-y-4">
         {/* Header - hidden in print */}
-        <div className="flex items-center justify-between no-print">
+        <div className="flex items-center justify-between gap-2 no-print">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" asChild>
-              <Link href="/collections"><ArrowLeft className="h-4 w-4" /></Link>
+            <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px]" asChild>
+              <Link href="/collections"><ArrowLeft className="h-5 w-5" /></Link>
             </Button>
-            <h1 className="text-2xl font-bold">Receipt</h1>
+            <h1 className="text-xl sm:text-2xl font-bold">Receipt</h1>
           </div>
-          <Button onClick={() => window.print()} className="gap-2">
-            <Printer className="h-4 w-4" />
-            Print
-          </Button>
+          <div className="flex gap-2">
+            {typeof navigator !== 'undefined' && navigator.share && (
+              <Button
+                variant="outline"
+                className="min-h-[44px] gap-2"
+                onClick={() => {
+                  navigator.share({
+                    title: `Receipt ${receipt.receipt_number}`,
+                    text: `Payment receipt for ₹${(Number(receipt.amount_paise) / 100).toLocaleString('en-IN')}`,
+                    url: window.location.href,
+                  }).catch(() => {});
+                }}
+              >
+                <Share2 className="h-4 w-4" />
+                <span className="hidden sm:inline">Share</span>
+              </Button>
+            )}
+            <Button onClick={() => window.print()} className="min-h-[44px] gap-2">
+              <Printer className="h-4 w-4" />
+              <span className="hidden sm:inline">Print</span>
+            </Button>
+          </div>
         </div>
 
         {/* Receipt card */}

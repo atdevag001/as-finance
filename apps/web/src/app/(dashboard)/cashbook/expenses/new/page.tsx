@@ -89,7 +89,7 @@ function ExpenseForm() {
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value)}
-            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            className="flex min-h-[44px] w-full rounded-md border border-input bg-background px-3 py-2 text-base md:min-h-[40px] md:text-sm"
           >
             {EXPENSE_CATEGORIES.map((c) => (
               <option key={c} value={c}>{c.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())}</option>
@@ -129,7 +129,7 @@ function ExpenseForm() {
           <select
             value={paymentMode}
             onChange={(e) => setPaymentMode(e.target.value)}
-            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            className="flex min-h-[44px] w-full rounded-md border border-input bg-background px-3 py-2 text-base md:min-h-[40px] md:text-sm"
           >
             {PAYMENT_MODES.map((m) => (
               <option key={m} value={m}>{m.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())}</option>
@@ -137,7 +137,7 @@ function ExpenseForm() {
           </select>
         </div>
 
-        <Button onClick={handleSubmitClick} disabled={createExpense.isPending} className="w-full">
+        <Button onClick={handleSubmitClick} disabled={createExpense.isPending} className="w-full min-h-[48px]">
           {createExpense.isPending ? 'Recording…' : 'Record Expense'}
         </Button>
       </div>

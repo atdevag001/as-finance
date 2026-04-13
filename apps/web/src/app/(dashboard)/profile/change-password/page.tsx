@@ -138,10 +138,10 @@ export default function ChangePasswordPage() {
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 h-10 w-10 p-0"
                   onClick={() => setShowCurrent(!showCurrent)}
                 >
-                  {showCurrent ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  {showCurrent ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </Button>
               </div>
             </div>
@@ -161,10 +161,10 @@ export default function ChangePasswordPage() {
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 h-10 w-10 p-0"
                   onClick={() => setShowNew(!showNew)}
                 >
-                  {showNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  {showNew ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </Button>
               </div>
             </div>
@@ -184,15 +184,15 @@ export default function ChangePasswordPage() {
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 h-10 w-10 p-0"
                   onClick={() => setShowConfirm(!showConfirm)}
                 >
-                  {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  {showConfirm ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </Button>
               </div>
             </div>
 
-            <Button type="submit" disabled={isSubmitting} className="w-full">
+            <Button type="submit" disabled={isSubmitting} className="w-full min-h-[48px]">
               {isSubmitting ? 'Changing…' : 'Change Password'}
             </Button>
           </form>

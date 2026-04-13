@@ -48,15 +48,42 @@ function AuditContent() {
 
       {data && (
         <>
-          <div className="overflow-x-auto rounded-lg border">
+          {/* Mobile Card View */}
+          <div className="space-y-3 lg:hidden">
+            {data.data.map((log) => (
+              <div key={log.id} className="rounded-lg border p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium capitalize">{log.action_type.replace(/_/g, ' ')}</p>
+                    <p className="text-sm text-muted-foreground capitalize">
+                      {log.target_entity.replace(/_/g, ' ')}
+                    </p>
+                  </div>
+                  <div className="text-right text-xs text-muted-foreground shrink-0">
+                    <DateDisplay date={log.created_at} showTime />
+                  </div>
+                </div>
+                <div className="mt-2 text-sm text-muted-foreground">
+                  <span className="capitalize">{log.actor_role.replace(/_/g, ' ')}</span>
+                  {log.remarks && <p className="mt-1 truncate">{log.remarks}</p>}
+                </div>
+              </div>
+            ))}
+            {data.data.length === 0 && (
+              <div className="py-8 text-center text-muted-foreground">No audit logs found.</div>
+            )}
+          </div>
+
+          {/* Desktop Table */}
+          <div className="hidden lg:block overflow-x-auto rounded-lg border">
             <table className="w-full text-sm">
               <thead className="border-b bg-muted/50">
                 <tr>
                   <th className="px-4 py-3 text-left font-medium">Timestamp</th>
                   <th className="px-4 py-3 text-left font-medium">Action</th>
-                  <th className="px-4 py-3 text-left font-medium hidden sm:table-cell">Actor</th>
-                  <th className="px-4 py-3 text-left font-medium hidden md:table-cell">Entity</th>
-                  <th className="px-4 py-3 text-left font-medium hidden lg:table-cell">Remarks</th>
+                  <th className="px-4 py-3 text-left font-medium">Actor</th>
+                  <th className="px-4 py-3 text-left font-medium">Entity</th>
+                  <th className="px-4 py-3 text-left font-medium">Remarks</th>
                 </tr>
               </thead>
               <tbody>
@@ -66,15 +93,15 @@ function AuditContent() {
                       <DateDisplay date={log.created_at} showTime />
                     </td>
                     <td className="px-4 py-3 capitalize">{log.action_type.replace(/_/g, ' ')}</td>
-                    <td className="px-4 py-3 hidden sm:table-cell">
+                    <td className="px-4 py-3">
                       <span>{log.actor_id.slice(0, 8)}</span>
                       <span className="ml-1 text-xs text-muted-foreground">({log.actor_role.replace(/_/g, ' ')})</span>
                     </td>
-                    <td className="px-4 py-3 hidden md:table-cell">
+                    <td className="px-4 py-3">
                       <span className="capitalize">{log.target_entity.replace(/_/g, ' ')}</span>
                       <span className="ml-1 text-xs text-muted-foreground">{log.target_id.slice(0, 8)}</span>
                     </td>
-                    <td className="px-4 py-3 hidden lg:table-cell text-muted-foreground">{log.remarks ?? '—'}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{log.remarks ?? '—'}</td>
                   </tr>
                 ))}
                 {data.data.length === 0 && (

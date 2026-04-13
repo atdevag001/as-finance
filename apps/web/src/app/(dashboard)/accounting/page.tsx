@@ -35,10 +35,10 @@ function AccountingContent() {
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold">Accounting</h1>
-        <div className="flex gap-2">
-          <Button asChild variant="outline" size="sm"><Link href="/accounting/trial-balance">Trial Balance</Link></Button>
-          <Button asChild variant="outline" size="sm"><Link href="/accounting/profit-loss">P&amp;L</Link></Button>
-          <Button asChild variant="outline" size="sm"><Link href="/accounting/balance-sheet">Balance Sheet</Link></Button>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline" size="sm" className="min-h-[44px] flex-1 sm:flex-none"><Link href="/accounting/trial-balance">Trial Balance</Link></Button>
+          <Button asChild variant="outline" size="sm" className="min-h-[44px] flex-1 sm:flex-none"><Link href="/accounting/profit-loss">P&amp;L</Link></Button>
+          <Button asChild variant="outline" size="sm" className="min-h-[44px] flex-1 sm:flex-none"><Link href="/accounting/balance-sheet">Balance Sheet</Link></Button>
         </div>
       </div>
 
@@ -52,29 +52,50 @@ function AccountingContent() {
           {coa.isLoading && <div className="flex justify-center py-8"><LoadingSpinner size="lg" /></div>}
           {coa.error && <ErrorMessage message={(coa.error as Error).message} />}
           {coa.data && (
-            <div className="overflow-x-auto rounded-lg border">
-              <table className="w-full text-sm">
-                <thead className="border-b bg-muted/50">
-                  <tr>
-                    <th className="px-4 py-3 text-left font-medium">Code</th>
-                    <th className="px-4 py-3 text-left font-medium">Name</th>
-                    <th className="px-4 py-3 text-left font-medium">Category</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {coa.data.map((a) => (
-                    <tr key={a.id} className="border-b last:border-0">
-                      <td className="px-4 py-3 font-mono">{a.code}</td>
-                      <td className="px-4 py-3">{a.name}</td>
-                      <td className="px-4 py-3 capitalize">{a.category.replace(/_/g, ' ')}</td>
+            <>
+              {/* Mobile Card View */}
+              <div className="space-y-3 lg:hidden">
+                {coa.data.map((a) => (
+                  <div key={a.id} className="rounded-lg border p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="font-medium">{a.name}</p>
+                        <p className="text-sm text-muted-foreground capitalize">{a.category.replace(/_/g, ' ')}</p>
+                      </div>
+                      <span className="font-mono text-sm text-muted-foreground">{a.code}</span>
+                    </div>
+                  </div>
+                ))}
+                {coa.data.length === 0 && (
+                  <div className="py-8 text-center text-muted-foreground">No accounts found.</div>
+                )}
+              </div>
+
+              {/* Desktop Table */}
+              <div className="hidden lg:block overflow-x-auto rounded-lg border">
+                <table className="w-full text-sm">
+                  <thead className="border-b bg-muted/50">
+                    <tr>
+                      <th className="px-4 py-3 text-left font-medium">Code</th>
+                      <th className="px-4 py-3 text-left font-medium">Name</th>
+                      <th className="px-4 py-3 text-left font-medium">Category</th>
                     </tr>
-                  ))}
-                  {coa.data.length === 0 && (
-                    <tr><td colSpan={3} className="px-4 py-8 text-center text-muted-foreground">No accounts found.</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {coa.data.map((a) => (
+                      <tr key={a.id} className="border-b last:border-0">
+                        <td className="px-4 py-3 font-mono">{a.code}</td>
+                        <td className="px-4 py-3">{a.name}</td>
+                        <td className="px-4 py-3 capitalize">{a.category.replace(/_/g, ' ')}</td>
+                      </tr>
+                    ))}
+                    {coa.data.length === 0 && (
+                      <tr><td colSpan={3} className="px-4 py-8 text-center text-muted-foreground">No accounts found.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </>
       )}

@@ -58,15 +58,69 @@ export default function LoanProductsPage() {
 
       {data && (
         <>
-          <div className="overflow-x-auto rounded-lg border">
+          {/* Mobile Card View */}
+          <div className="space-y-3 lg:hidden">
+            {data.data.map((p) => (
+              <div key={p.id} className="rounded-lg border p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <Link
+                      href={`/loan-products/${p.id}`}
+                      className="font-medium text-primary hover:underline"
+                    >
+                      {p.name}
+                    </Link>
+                    <span className="ml-1 text-xs text-muted-foreground">v{p.version}</span>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {p.interest_type?.replace(/_/g, ' ') ?? '-'} @ {((p.annual_rate ?? 0) / 100).toFixed(2)}%
+                    </p>
+                  </div>
+                  <StatusBadge status={p.is_active ? 'active' : 'inactive'} type="product" />
+                </div>
+                <div className="mt-3 text-sm text-muted-foreground">
+                  <span className="capitalize">{p.frequency ?? '-'}</span>
+                  <span className="mx-2">•</span>
+                  <MoneyDisplay paise={p.min_principal_paise ?? 0} /> – <MoneyDisplay paise={p.max_principal_paise ?? 0} />
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <PermissionGate permission="loan_product.update">
+                    <Button variant="outline" size="sm" className="min-h-[40px] flex-1" asChild>
+                      <Link href={`/loan-products/${p.id}/edit`}>Edit</Link>
+                    </Button>
+                  </PermissionGate>
+                  {p.is_active && (
+                    <PermissionGate permission="loan_product.deactivate">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="min-h-[40px] flex-1"
+                        onClick={() => setDeactivateProduct(p)}
+                        disabled={deactivate.isPending}
+                      >
+                        Deactivate
+                      </Button>
+                    </PermissionGate>
+                  )}
+                </div>
+              </div>
+            ))}
+            {data.data.length === 0 && (
+              <div className="py-8 text-center text-muted-foreground">
+                No loan products found.
+              </div>
+            )}
+          </div>
+
+          {/* Desktop Table */}
+          <div className="hidden lg:block overflow-x-auto rounded-lg border">
             <table className="w-full text-sm">
               <thead className="border-b bg-muted/50">
                 <tr>
                   <th className="px-4 py-3 text-left font-medium">Name</th>
-                  <th className="px-4 py-3 text-left font-medium hidden sm:table-cell">Interest Type</th>
+                  <th className="px-4 py-3 text-left font-medium">Interest Type</th>
                   <th className="px-4 py-3 text-right font-medium">Rate (%)</th>
-                  <th className="px-4 py-3 text-left font-medium hidden md:table-cell">Frequency</th>
-                  <th className="px-4 py-3 text-right font-medium hidden lg:table-cell">Principal Range</th>
+                  <th className="px-4 py-3 text-left font-medium">Frequency</th>
+                  <th className="px-4 py-3 text-right font-medium">Principal Range</th>
                   <th className="px-4 py-3 text-left font-medium">Status</th>
                   <th className="px-4 py-3 text-right font-medium">Actions</th>
                 </tr>
@@ -83,12 +137,12 @@ export default function LoanProductsPage() {
                       </Link>
                       <span className="ml-1 text-xs text-muted-foreground">v{p.version}</span>
                     </td>
-                    <td className="px-4 py-3 hidden sm:table-cell capitalize">
+                    <td className="px-4 py-3 capitalize">
                       {p.interest_type?.replace(/_/g, ' ') ?? '-'}
                     </td>
                     <td className="px-4 py-3 text-right">{((p.annual_rate ?? 0) / 100).toFixed(2)}</td>
-                    <td className="px-4 py-3 hidden md:table-cell capitalize">{p.frequency ?? '-'}</td>
-                    <td className="px-4 py-3 text-right hidden lg:table-cell">
+                    <td className="px-4 py-3 capitalize">{p.frequency ?? '-'}</td>
+                    <td className="px-4 py-3 text-right">
                       <MoneyDisplay paise={p.min_principal_paise ?? 0} /> – <MoneyDisplay paise={p.max_principal_paise ?? 0} />
                     </td>
                     <td className="px-4 py-3">

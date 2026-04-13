@@ -117,7 +117,7 @@ export default function NewUserPage() {
             <Field label="Role *" error={errors.role?.message}>
               <select
                 {...register('role')}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                className="flex min-h-[44px] w-full rounded-md border border-input bg-background px-3 py-2 text-base md:min-h-[40px] md:text-sm"
               >
                 <option value="">Select role…</option>
                 {ROLE_OPTIONS.map((opt) => (
@@ -134,7 +134,7 @@ export default function NewUserPage() {
         </Card>
 
         <div className="mt-4 flex justify-end">
-          <Button type="submit" disabled={isSubmitting}>
+          <Button type="submit" disabled={isSubmitting} className="w-full min-h-[48px] sm:w-auto">
             {isSubmitting ? 'Creating…' : 'Create User'}
           </Button>
         </div>

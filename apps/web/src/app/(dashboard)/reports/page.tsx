@@ -30,9 +30,9 @@ export default function ReportsPage() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {REPORT_TYPES.map(({ type, label, description, icon: Icon }) => (
           <Link key={type} href={`/reports/${type}`}>
-            <Card className="transition-colors hover:bg-muted/50 cursor-pointer h-full">
+            <Card className="transition-colors hover:bg-muted/50 active:bg-accent cursor-pointer h-full min-h-[100px]">
               <CardHeader className="flex flex-row items-center gap-3 pb-2">
-                <Icon className="h-5 w-5 text-muted-foreground" />
+                <Icon className="h-6 w-6 text-muted-foreground" />
                 <CardTitle className="text-base">{label}</CardTitle>
               </CardHeader>
               <CardContent>

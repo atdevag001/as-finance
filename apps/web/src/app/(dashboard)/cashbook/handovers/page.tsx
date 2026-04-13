@@ -91,7 +91,7 @@ function HandoversContent() {
             <label className="text-sm font-medium">Remarks</label>
             <Input placeholder="Optional remarks…" value={remarks} onChange={(e) => setRemarks(e.target.value)} />
           </div>
-          <Button onClick={handleInitiate} disabled={createHandover.isPending} className="w-full sm:w-auto">
+          <Button onClick={handleInitiate} disabled={createHandover.isPending} className="w-full min-h-[48px] sm:w-auto sm:min-h-[40px]">
             {createHandover.isPending ? 'Submitting…' : 'Initiate Handover'}
           </Button>
         </CardContent>
@@ -119,6 +119,7 @@ function HandoversContent() {
             <PermissionGate permission="handover.verify">
               <Button
                 size="sm"
+                className="min-h-[44px] w-full sm:w-auto sm:min-h-[36px]"
                 onClick={() => handleVerify(h.id)}
                 disabled={verifyHandover.isPending}
               >

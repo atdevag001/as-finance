@@ -96,7 +96,7 @@ function LoginForm() {
         )}
       </div>
 
-      <Button type="submit" className="w-full" disabled={isSubmitting}>
+      <Button type="submit" className="w-full min-h-[48px]" disabled={isSubmitting}>
         {isSubmitting ? (
           <span className="flex items-center gap-2">
             <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
@@ -112,7 +112,7 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-muted/40 px-4">
+    <main className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
           <CardTitle className="text-xl">AS Finance LMS</CardTitle>

@@ -133,6 +133,7 @@ function SettingsSection() {
           <Button
             onClick={handleSave}
             disabled={!isDirty || updateSettings.isPending}
+            className="w-full min-h-[48px] sm:w-auto"
           >
             {updateSettings.isPending ? 'Saving…' : 'Save Changes'}
           </Button>
@@ -256,8 +257,8 @@ function HolidaySection() {
         )}
 
         {canUpdate && (
-          <form onSubmit={handleAddHoliday} className="flex flex-wrap items-end gap-3 pt-2">
-            <div className="space-y-1.5">
+          <form onSubmit={handleAddHoliday} className="flex flex-col gap-3 pt-2 sm:flex-row sm:flex-wrap sm:items-end">
+            <div className="space-y-1.5 sm:w-auto">
               <Label htmlFor="holiday-date">Date</Label>
               <Input
                 id="holiday-date"
@@ -277,7 +278,7 @@ function HolidaySection() {
                 required
               />
             </div>
-            <Button type="submit" disabled={createHoliday.isPending}>
+            <Button type="submit" disabled={createHoliday.isPending} className="w-full min-h-[48px] sm:w-auto sm:min-h-[44px]">
               <Plus className="mr-1 h-4 w-4" />
               {createHoliday.isPending ? 'Adding…' : 'Add Holiday'}
             </Button>
