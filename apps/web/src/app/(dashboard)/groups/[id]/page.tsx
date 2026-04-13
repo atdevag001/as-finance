@@ -97,23 +97,25 @@ export default function GroupDetailPage({ params }: { params: { id: string } }) 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" asChild>
-          <Link href="/groups"><ArrowLeft className="h-4 w-4" /></Link>
-        </Button>
-        <div className="flex-1">
-          <h1 className="text-2xl font-bold">{group.name}</h1>
-          <StatusBadge status={group.status} type="group" />
+      <div className="space-y-3">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px]" asChild>
+            <Link href="/groups"><ArrowLeft className="h-5 w-5" /></Link>
+          </Button>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-xl sm:text-2xl font-bold truncate">{group.name}</h1>
+            <StatusBadge status={group.status} type="group" />
+          </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <PermissionGate permission="group.add_member">
-            <Button variant="outline" size="sm" onClick={() => setAddMemberOpen(true)}>
+            <Button variant="outline" size="sm" className="min-h-[44px] flex-1 sm:flex-none" onClick={() => setAddMemberOpen(true)}>
               <Plus className="mr-1 h-4 w-4" /> Add Member
             </Button>
           </PermissionGate>
           <PermissionGate permission="group.collect">
-            <Button size="sm" onClick={openCollectionForm}>
-              Post Group Collection
+            <Button size="sm" className="min-h-[44px] flex-1 sm:flex-none" onClick={openCollectionForm}>
+              Post Collection
             </Button>
           </PermissionGate>
         </div>
@@ -135,36 +137,67 @@ export default function GroupDetailPage({ params }: { params: { id: string } }) 
         <CardHeader><CardTitle className="text-base">Members</CardTitle></CardHeader>
         <CardContent>
           {group.members && group.members.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="border-b bg-muted/50">
-                  <tr>
-                    <th className="px-3 py-2 text-left font-medium">Customer</th>
-                    <th className="px-3 py-2 text-left font-medium">Loan #</th>
-                    <th className="px-3 py-2 text-right font-medium">Outstanding</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {group.members.map((m: GroupMember) => (
-                    <tr key={m.id} className="border-b last:border-0">
-                      <td className="px-3 py-2">{m.customer_name}</td>
-                      <td className="px-3 py-2">
-                        {m.loan_id ? (
-                          <Link href={`/loans/${m.loan_id}`} className="text-primary hover:underline">
+            <>
+              {/* Mobile Card View */}
+              <div className="space-y-3 lg:hidden">
+                {group.members.map((m: GroupMember) => (
+                  <div key={m.id} className="rounded-lg border p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium truncate">{m.customer_name}</p>
+                        {m.loan_id && (
+                          <Link href={`/loans/${m.loan_id}`} className="text-sm text-primary hover:underline">
                             {m.loan_number ?? m.loan_id.slice(0, 8)}
                           </Link>
-                        ) : '—'}
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        {m.outstanding_paise != null
-                          ? <MoneyDisplay paise={Number(m.outstanding_paise)} />
-                          : '—'}
-                      </td>
+                        )}
+                      </div>
+                      <div className="text-right shrink-0">
+                        {m.outstanding_paise != null ? (
+                          <>
+                            <MoneyDisplay paise={Number(m.outstanding_paise)} className="font-medium" />
+                            <p className="text-xs text-muted-foreground">Outstanding</p>
+                          </>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop Table */}
+              <div className="hidden lg:block overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="border-b bg-muted/50">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-medium">Customer</th>
+                      <th className="px-3 py-2 text-left font-medium">Loan #</th>
+                      <th className="px-3 py-2 text-right font-medium">Outstanding</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {group.members.map((m: GroupMember) => (
+                      <tr key={m.id} className="border-b last:border-0">
+                        <td className="px-3 py-2">{m.customer_name}</td>
+                        <td className="px-3 py-2">
+                          {m.loan_id ? (
+                            <Link href={`/loans/${m.loan_id}`} className="text-primary hover:underline">
+                              {m.loan_number ?? m.loan_id.slice(0, 8)}
+                            </Link>
+                          ) : '—'}
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          {m.outstanding_paise != null
+                            ? <MoneyDisplay paise={Number(m.outstanding_paise)} />
+                            : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           ) : (
             <p className="text-sm text-muted-foreground">No members yet.</p>
           )}

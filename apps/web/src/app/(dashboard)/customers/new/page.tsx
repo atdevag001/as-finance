@@ -196,7 +196,7 @@ export default function NewCustomerPage() {
         </Card>
 
         <div className="mt-4 flex justify-end">
-          <Button type="submit" disabled={isSubmitting}>
+          <Button type="submit" disabled={isSubmitting} className="w-full min-h-[48px] sm:w-auto">
             {isSubmitting ? 'Saving…' : 'Register Customer'}
           </Button>
         </div>

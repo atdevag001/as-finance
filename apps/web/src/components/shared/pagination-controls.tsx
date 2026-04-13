@@ -21,20 +21,22 @@ export function PaginationControls({ page, totalPages, onPageChange }: Paginatio
         <Button
           variant="outline"
           size="sm"
+          className="min-h-[44px] min-w-[44px] md:min-h-[36px] md:min-w-[36px]"
           onClick={() => onPageChange(page - 1)}
           disabled={page <= 1}
           aria-label="Previous page"
         >
-          <ChevronLeft className="h-4 w-4" />
+          <ChevronLeft className="h-5 w-5 md:h-4 md:w-4" />
         </Button>
         <Button
           variant="outline"
           size="sm"
+          className="min-h-[44px] min-w-[44px] md:min-h-[36px] md:min-w-[36px]"
           onClick={() => onPageChange(page + 1)}
           disabled={page >= totalPages}
           aria-label="Next page"
         >
-          <ChevronRight className="h-4 w-4" />
+          <ChevronRight className="h-5 w-5 md:h-4 md:w-4" />
         </Button>
       </div>
     </div>

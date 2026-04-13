@@ -13,6 +13,9 @@ import {
   PaginationControls,
   StatusBadge,
   PermissionGate,
+  MobileCardList,
+  TappablePhone,
+  type MobileCardItem,
 } from '@/components/shared';
 import { Button } from '@/components/ui/button';
 
@@ -56,14 +59,35 @@ export default function UsersPage() {
 
       {!isLoading && !error && (
         <>
-          <div className="overflow-x-auto rounded-md border">
+          {/* Mobile Card List */}
+          <div className="lg:hidden">
+            <MobileCardList
+              items={users.map((u): MobileCardItem => ({
+                id: u.id,
+                title: u.full_name,
+                subtitle: <TappablePhone phone={u.mobile} />,
+                badge: (
+                  <StatusBadge
+                    status={u.is_active ? 'active' : 'inactive'}
+                    type="customer"
+                  />
+                ),
+                secondaryInfo: u.role.replace(/_/g, ' '),
+                href: `/users/${u.id}/edit`,
+              }))}
+              emptyMessage="No users found."
+            />
+          </div>
+
+          {/* Desktop Table */}
+          <div className="hidden lg:block overflow-x-auto rounded-md border">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/50">
                   <th className="px-4 py-3 text-left font-medium">Full Name</th>
                   <th className="px-4 py-3 text-left font-medium">Username</th>
-                  <th className="hidden px-4 py-3 text-left font-medium sm:table-cell">Role</th>
-                  <th className="hidden px-4 py-3 text-left font-medium md:table-cell">Mobile</th>
+                  <th className="px-4 py-3 text-left font-medium">Role</th>
+                  <th className="px-4 py-3 text-left font-medium">Mobile</th>
                   <th className="px-4 py-3 text-left font-medium">Status</th>
                   <th className="px-4 py-3 text-left font-medium">Actions</th>
                 </tr>
@@ -80,10 +104,10 @@ export default function UsersPage() {
                     <tr key={u.id} className="border-b">
                       <td className="px-4 py-3">{u.full_name}</td>
                       <td className="px-4 py-3 text-muted-foreground">{u.username}</td>
-                      <td className="hidden px-4 py-3 capitalize sm:table-cell">
+                      <td className="px-4 py-3 capitalize">
                         {u.role.replace(/_/g, ' ')}
                       </td>
-                      <td className="hidden px-4 py-3 md:table-cell">{u.mobile}</td>
+                      <td className="px-4 py-3">{u.mobile}</td>
                       <td className="px-4 py-3">
                         <StatusBadge
                           status={u.is_active ? 'active' : 'inactive'}

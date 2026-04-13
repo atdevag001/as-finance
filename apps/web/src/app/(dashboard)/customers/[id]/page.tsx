@@ -4,7 +4,7 @@ import { useState, useRef } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Upload, ShieldBan, ShieldCheck, Plus, Pencil, Eye, ExternalLink } from 'lucide-react';
 import { useCustomer, useUpdateCustomer, useAddFamilyMember, useAddGuarantor } from '@/hooks/useCustomers';
-import { StatusBadge, MoneyDisplay, LoadingSpinner, ErrorMessage, PermissionGate, ConfirmDialog, DateDisplay } from '@/components/shared';
+import { StatusBadge, MoneyDisplay, LoadingSpinner, ErrorMessage, PermissionGate, ConfirmDialog, DateDisplay, TappablePhone } from '@/components/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -296,28 +296,30 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" asChild>
-          <Link href="/customers"><ArrowLeft className="h-4 w-4" /></Link>
-        </Button>
-        <div className="flex-1">
-          <h1 className="text-2xl font-bold">{customer.full_name}</h1>
-          <StatusBadge status={customer.status} type="customer" />
+      <div className="space-y-3">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px]" asChild>
+            <Link href="/customers"><ArrowLeft className="h-5 w-5" /></Link>
+          </Button>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-xl sm:text-2xl font-bold truncate">{customer.full_name}</h1>
+            <StatusBadge status={customer.status} type="customer" />
+          </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <PermissionGate permission="customer.update">
-            <Button variant="outline" size="sm" onClick={openEditDialog}>
+            <Button variant="outline" size="sm" className="min-h-[44px] flex-1 sm:flex-none" onClick={openEditDialog}>
               <Pencil className="mr-1 h-4 w-4" /> Edit
             </Button>
           </PermissionGate>
           <PermissionGate permission="customer.blacklist">
             {customer.status === 'active' && (
-              <Button variant="destructive" size="sm" onClick={() => setShowBlacklistDialog(true)}>
+              <Button variant="destructive" size="sm" className="min-h-[44px] flex-1 sm:flex-none" onClick={() => setShowBlacklistDialog(true)}>
                 <ShieldBan className="mr-1 h-4 w-4" /> Blacklist
               </Button>
             )}
             {customer.status === 'blacklisted' && (
-              <Button variant="outline" size="sm" onClick={() => setShowReinstateDialog(true)}>
+              <Button variant="outline" size="sm" className="min-h-[44px] flex-1 sm:flex-none" onClick={() => setShowReinstateDialog(true)}>
                 <ShieldCheck className="mr-1 h-4 w-4" /> Reinstate
               </Button>
             )}
@@ -330,7 +332,10 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
           <CardHeader><CardTitle className="text-base">Personal Info</CardTitle></CardHeader>
           <CardContent className="space-y-2 text-sm">
             <Row label="Father/Husband" value={customer.father_or_husband_name} />
-            <Row label="Mobile" value={customer.mobile} />
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Mobile</span>
+              <TappablePhone phone={customer.mobile} />
+            </div>
             <Row label="Gender" value={customer.gender} />
             <Row label="Aadhaar" value={`XXXX-XXXX-${customer.aadhaar_last_four}`} />
             {customer.pan_last_four && <Row label="PAN" value={`XXXXXX${customer.pan_last_four}`} />}
@@ -493,7 +498,35 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
         <Card>
           <CardHeader><CardTitle className="text-base">Linked Loans</CardTitle></CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
+            {/* Mobile Card View */}
+            <div className="space-y-3 lg:hidden">
+              {linkedLoans.map((loan) => (
+                <Link
+                  key={loan.id}
+                  href={`/loans/${loan.id}`}
+                  className="block rounded-lg border p-3 transition-colors hover:bg-accent/50 active:bg-accent"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-primary">{loan.loan_number}</p>
+                      <p className="text-sm text-muted-foreground">
+                        Principal: <MoneyDisplay paise={loan.principal_paise} />
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <MoneyDisplay paise={loan.cached_outstanding_paise ?? 0} className="font-medium" />
+                      <p className="text-xs text-muted-foreground">Outstanding</p>
+                    </div>
+                  </div>
+                  <div className="mt-2">
+                    <StatusBadge status={loan.status} type="loan" />
+                  </div>
+                </Link>
+              ))}
+            </div>
+
+            {/* Desktop Table */}
+            <div className="hidden lg:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-left text-muted-foreground">

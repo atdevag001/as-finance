@@ -230,12 +230,12 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" asChild>
-          <Link href="/loans"><ArrowLeft className="h-4 w-4" /></Link>
+        <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px]" asChild>
+          <Link href="/loans"><ArrowLeft className="h-5 w-5" /></Link>
         </Button>
-        <div>
-          <h1 className="text-2xl font-bold">{loan.loan_number}</h1>
-          <div className="flex items-center gap-2">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-xl sm:text-2xl font-bold truncate">{loan.loan_number}</h1>
+          <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={loan.status} type="loan" />
             {loan.dpd > 0 && (
               <span className="text-sm text-muted-foreground">DPD: {loan.dpd}</span>
@@ -257,6 +257,7 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
             <Button
               onClick={handleSubmitForReview}
               disabled={isActionInProgress}
+              className="min-h-[44px] flex-1 sm:flex-none"
             >
               Submit for Review
             </Button>
@@ -267,6 +268,7 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
             <Button
               onClick={handleStartReview}
               disabled={isActionInProgress}
+              className="min-h-[44px] flex-1 sm:flex-none"
             >
               Start Review
             </Button>
@@ -277,6 +279,7 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
             <Button
               onClick={() => setApproveOpen(true)}
               disabled={isActionInProgress}
+              className="min-h-[44px] flex-1 sm:flex-none"
             >
               Approve
             </Button>
@@ -284,6 +287,7 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
               variant="destructive"
               onClick={() => setRejectOpen(true)}
               disabled={isActionInProgress}
+              className="min-h-[44px] flex-1 sm:flex-none"
             >
               Reject
             </Button>
@@ -294,6 +298,7 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
             <Button
               onClick={() => setDisburseOpen(true)}
               disabled={isActionInProgress}
+              className="min-h-[44px] flex-1 sm:flex-none"
             >
               Disburse
             </Button>
@@ -305,6 +310,7 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
               variant="outline"
               onClick={handleGenerateForeclosureQuote}
               disabled={isActionInProgress}
+              className="min-h-[44px] flex-1 sm:flex-none"
             >
               {generateQuote.isPending ? 'Generating…' : 'Foreclosure'}
             </Button>
@@ -355,7 +361,32 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
         <Card>
           <CardHeader><CardTitle className="text-base">Repayment Schedule</CardTitle></CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
+            {/* Mobile Card View */}
+            <div className="space-y-3 lg:hidden">
+              {loan.schedules.map((inst) => (
+                <div key={inst.id} className="rounded-lg border p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-medium">Installment #{inst.installment_number}</p>
+                      <p className="text-sm text-muted-foreground">
+                        <DateDisplay date={inst.due_date} />
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <MoneyDisplay paise={Number(inst.total_paise)} className="font-semibold" />
+                      <StatusBadge status={inst.status} type="installment" className="mt-1" />
+                    </div>
+                  </div>
+                  <div className="mt-2 flex justify-between text-sm text-muted-foreground">
+                    <span>P: <MoneyDisplay paise={Number(inst.principal_paise)} /></span>
+                    <span>I: <MoneyDisplay paise={Number(inst.interest_paise)} /></span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop Table */}
+            <div className="hidden lg:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="border-b bg-muted/50">
                   <tr>
@@ -390,43 +421,81 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
         <CardHeader><CardTitle className="text-base">Collection History</CardTitle></CardHeader>
         <CardContent>
           {collectionsData && collectionsData.data.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="border-b bg-muted/50">
-                  <tr>
-                    <th className="px-3 py-2 text-left font-medium">Date</th>
-                    <th className="px-3 py-2 text-right font-medium">Amount</th>
-                    <th className="px-3 py-2 text-left font-medium">Mode</th>
-                    <th className="px-3 py-2 text-left font-medium">Status</th>
-                    <th className="px-3 py-2 text-right font-medium">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {collectionsData.data.map((col) => (
-                    <tr key={col.id} className="border-b last:border-0">
-                      <td className="px-3 py-2"><DateDisplay date={col.payment_date} /></td>
-                      <td className="px-3 py-2 text-right"><MoneyDisplay paise={Number(col.amount_paise)} /></td>
-                      <td className="px-3 py-2 capitalize">{col.payment_mode.replace(/_/g, ' ')}</td>
-                      <td className="px-3 py-2"><StatusBadge status={col.status} type="collection" /></td>
-                      <td className="px-3 py-2 text-right">
-                        {col.status === 'posted' && (
-                          <PermissionGate permission="collection.reverse">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              disabled={isActionInProgress}
-                              onClick={() => setReversalCollection(col)}
-                            >
-                              Reverse
-                            </Button>
-                          </PermissionGate>
-                        )}
-                      </td>
+            <>
+              {/* Mobile Card View */}
+              <div className="space-y-3 lg:hidden">
+                {collectionsData.data.map((col) => (
+                  <div key={col.id} className="rounded-lg border p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-sm text-muted-foreground">
+                          <DateDisplay date={col.payment_date} />
+                        </p>
+                        <p className="text-sm capitalize">{col.payment_mode.replace(/_/g, ' ')}</p>
+                      </div>
+                      <div className="text-right">
+                        <MoneyDisplay paise={Number(col.amount_paise)} className="font-semibold" />
+                      </div>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between">
+                      <StatusBadge status={col.status} type="collection" />
+                      {col.status === 'posted' && (
+                        <PermissionGate permission="collection.reverse">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="min-h-[36px]"
+                            disabled={isActionInProgress}
+                            onClick={() => setReversalCollection(col)}
+                          >
+                            Reverse
+                          </Button>
+                        </PermissionGate>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop Table */}
+              <div className="hidden lg:block overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="border-b bg-muted/50">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-medium">Date</th>
+                      <th className="px-3 py-2 text-right font-medium">Amount</th>
+                      <th className="px-3 py-2 text-left font-medium">Mode</th>
+                      <th className="px-3 py-2 text-left font-medium">Status</th>
+                      <th className="px-3 py-2 text-right font-medium">Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {collectionsData.data.map((col) => (
+                      <tr key={col.id} className="border-b last:border-0">
+                        <td className="px-3 py-2"><DateDisplay date={col.payment_date} /></td>
+                        <td className="px-3 py-2 text-right"><MoneyDisplay paise={Number(col.amount_paise)} /></td>
+                        <td className="px-3 py-2 capitalize">{col.payment_mode.replace(/_/g, ' ')}</td>
+                        <td className="px-3 py-2"><StatusBadge status={col.status} type="collection" /></td>
+                        <td className="px-3 py-2 text-right">
+                          {col.status === 'posted' && (
+                            <PermissionGate permission="collection.reverse">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={isActionInProgress}
+                                onClick={() => setReversalCollection(col)}
+                              >
+                                Reverse
+                              </Button>
+                            </PermissionGate>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           ) : (
             <p className="text-sm text-muted-foreground">No collections recorded yet.</p>
           )}
