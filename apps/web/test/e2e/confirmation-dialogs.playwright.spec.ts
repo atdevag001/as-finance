@@ -40,8 +40,8 @@ test.describe('Confirmation Dialogs', () => {
         await expect(dialog).toBeVisible({ timeout: 10_000 });
 
         // The dialog should have confirm and cancel actions
-        const confirmBtn = dialog.getByRole('button', { name: /confirm|yes|ok|proceed|disburse/i });
-        const cancelBtn = dialog.getByRole('button', { name: /cancel|no|back|close/i });
+        const confirmBtn = dialog.getByRole('button', { name: /confirm|yes|ok|proceed|disburse/i }).first();
+        const cancelBtn = dialog.getByRole('button', { name: /cancel|no|back|close/i }).first();
         await expect(confirmBtn.or(cancelBtn)).toBeVisible({ timeout: 5_000 });
 
         // Close the dialog
@@ -89,7 +89,7 @@ test.describe('Confirmation Dialogs', () => {
       await expect(reasonField).toBeVisible({ timeout: 5_000 });
 
       // Close the dialog
-      const cancelBtn = dialog.getByRole('button', { name: /cancel|no|back|close/i });
+      const cancelBtn = dialog.getByRole('button', { name: /cancel|no|back|close/i }).first();
       if (await cancelBtn.isVisible()) {
         await cancelBtn.click();
       }

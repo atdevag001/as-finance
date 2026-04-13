@@ -120,8 +120,8 @@ test.describe('Loan Application', () => {
       // Wait for dialog to close
       await expect(dialog).not.toBeVisible({ timeout: 10_000 }).catch(() => {});
 
-      // Wait for status to update
-      await expect(fieldOfficerPage.locator('span', { hasText: /^submitted$/i })).toBeVisible({ timeout: 15_000 });
+      // Wait for status to update (use .first() as status may appear in multiple places)
+      await expect(fieldOfficerPage.locator('span', { hasText: /^submitted$/i }).first()).toBeVisible({ timeout: 15_000 });
     } else {
       // Submit via API and verify the UI reflects the change after reload
       await fetch(`${API_BASE}/loans/${loanId}/submit`, {
