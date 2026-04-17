@@ -6,6 +6,7 @@ import { apiClient } from '@/lib/api-client';
 export interface LoanProduct {
   id: string;
   name: string;
+  current_version_id: string;
   version: number;
   interest_type: 'flat' | 'reducing_balance';
   annual_rate: number;
@@ -19,6 +20,12 @@ export interface LoanProduct {
   penalty_rate_percent?: number;
   allocation_order?: string;
   created_at?: string;
+  current_version?: {
+    id: string;
+    interest_type: 'flat' | 'reducing_balance';
+    annual_rate_bps: number;
+    repayment_frequency: 'daily' | 'weekly' | 'monthly';
+  };
 }
 
 interface PaginatedResult<T> {

@@ -223,7 +223,7 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
   const canDisburse = loan.status === 'approved';
   const canForeclose = loan.status === 'active' || loan.status === 'overdue';
 
-  const penalties = penaltiesData?.data ?? [];
+  const penalties = penaltiesData ?? [];
   const pendingPenalties = penalties.filter(p => p.status === 'pending');
 
   return (

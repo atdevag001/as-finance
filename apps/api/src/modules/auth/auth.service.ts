@@ -5,15 +5,10 @@ import * as crypto from 'crypto';
 import { PrismaService } from '../../database/prisma.service';
 import { LoginDto } from './dto/login.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
-import {
-  BusinessRuleError,
-  AuthorizationError,
-} from '../../common/errors';
+import { AuthorizationError } from '../../common/errors';
 
 // Use lower bcrypt cost in test/dev for faster hashing (still secure enough for tests)
 const BCRYPT_COST = process.env['BCRYPT_COST'] ? parseInt(process.env['BCRYPT_COST'], 10) : 12;
-const MAX_FAILED_ATTEMPTS = 5;
-const LOCKOUT_MINUTES = 15;
 const REFRESH_TOKEN_DAYS = 7;
 
 export interface LoginResult {
@@ -43,19 +38,11 @@ export class AuthService {
       throw new AuthorizationError('Invalid credentials', 'INVALID_CREDENTIALS');
     }
 
-    // Check account lockout
-    if (user.locked_until && user.locked_until > new Date()) {
-      throw new BusinessRuleError(
-        'Account is locked. Try again later.',
-        'ACCOUNT_LOCKED',
-      );
-    }
-
     // Compare password
     const passwordValid = await bcrypt.compare(dto.password, user.password_hash);
 
     if (!passwordValid) {
-      await this.handleFailedLogin(user.id, user.failed_login_attempts);
+      await this.handleFailedLogin(user.id);
       throw new AuthorizationError('Invalid credentials', 'INVALID_CREDENTIALS');
     }
 
@@ -247,40 +234,8 @@ export class AuthService {
     return rawToken;
   }
 
-  private async handleFailedLogin(
-    userId: string,
-    currentAttempts: number,
-  ): Promise<void> {
-    const newAttempts = currentAttempts + 1;
-
-    const updateData: {
-      failed_login_attempts: number;
-      locked_until?: Date;
-    } = {
-      failed_login_attempts: newAttempts,
-    };
-
-    if (newAttempts >= MAX_FAILED_ATTEMPTS) {
-      const lockUntil = new Date();
-      lockUntil.setMinutes(lockUntil.getMinutes() + LOCKOUT_MINUTES);
-      updateData.locked_until = lockUntil;
-
-      this.logger.warn({
-        msg: 'Account locked due to failed login attempts',
-        userId,
-        attempts: newAttempts,
-        lockedUntil: lockUntil.toISOString(),
-      });
-
-      await this.logAuditEvent(userId, undefined, 'account_locked', 'users', userId);
-    }
-
+  private async handleFailedLogin(userId: string): Promise<void> {
     await this.logAuditEvent(userId, undefined, 'login_failed', 'users', userId);
-
-    await this.prisma['users'].update({
-      where: { id: userId },
-      data: updateData,
-    });
   }
 
   private async logAuditEvent(

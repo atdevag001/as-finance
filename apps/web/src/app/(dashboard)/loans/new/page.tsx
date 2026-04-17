@@ -233,10 +233,10 @@ export default function NewLoanPage() {
                 <option value="">
                   {productsLoading ? 'Loading products…' : 'Select loan product'}
                 </option>
-                {(Array.isArray(loanProducts) ? loanProducts : []).map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} — {p.interest_type === 'flat' ? 'Flat' : 'Reducing'} @{' '}
-                    {p.annual_rate}% ({p.frequency})
+                {(Array.isArray(loanProducts) ? loanProducts : []).filter(p => p.current_version_id).map((p) => (
+                  <option key={p.current_version_id} value={p.current_version_id}>
+                    {p.name} — {p.current_version?.interest_type === 'flat' ? 'Flat' : 'Reducing'} @{' '}
+                    {(p.current_version?.annual_rate_bps ?? 0) / 100}% ({p.current_version?.repayment_frequency ?? 'monthly'})
                   </option>
                 ))}
               </select>

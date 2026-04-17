@@ -18,16 +18,11 @@ export interface Penalty {
   created_at: string;
 }
 
-interface PaginatedResult<T> {
-  data: T[];
-  total: number;
-}
-
 export function usePenalties(params: { loanId: string }) {
   const { loanId } = params;
-  return useQuery<PaginatedResult<Penalty>>({
+  return useQuery<Penalty[]>({
     queryKey: ['penalties', loanId],
-    queryFn: () => apiClient.get(`/penalties?loanId=${loanId}`),
+    queryFn: () => apiClient.get<Penalty[]>(`/penalties/loan/${loanId}`),
     enabled: !!loanId,
   });
 }

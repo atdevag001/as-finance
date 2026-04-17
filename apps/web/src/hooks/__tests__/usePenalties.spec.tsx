@@ -48,47 +48,44 @@ describe('usePenalties Hook', () => {
   });
 
   describe('usePenalties (list)', () => {
-    const mockPenaltiesList = {
-      data: [
-        {
-          id: 'pen-1',
-          loan_id: 'loan-1',
-          installment_id: 'inst-1',
-          installment_number: 1,
-          amount_paise: 5000,
-          period: '2024-01',
-          status: 'active',
-          posted_date: '2024-01-15',
-          created_at: '2024-01-15T10:00:00.000Z',
-        },
-        {
-          id: 'pen-2',
-          loan_id: 'loan-1',
-          installment_id: 'inst-2',
-          installment_number: 2,
-          amount_paise: 7500,
-          period: '2024-02',
-          status: 'active',
-          posted_date: '2024-02-15',
-          created_at: '2024-02-15T10:00:00.000Z',
-        },
-        {
-          id: 'pen-3',
-          loan_id: 'loan-1',
-          installment_id: 'inst-1',
-          installment_number: 1,
-          amount_paise: 5000,
-          period: '2024-01',
-          status: 'waived',
-          posted_date: '2024-01-15',
-          waived_at: '2024-01-20T10:00:00.000Z',
-          waived_by: 'manager-1',
-          waive_reason: 'Customer hardship',
-          created_at: '2024-01-15T10:00:00.000Z',
-        },
-      ],
-      total: 3,
-    };
+    const mockPenaltiesList = [
+      {
+        id: 'pen-1',
+        loan_id: 'loan-1',
+        installment_id: 'inst-1',
+        installment_number: 1,
+        amount_paise: 5000,
+        period: '2024-01',
+        status: 'active',
+        posted_date: '2024-01-15',
+        created_at: '2024-01-15T10:00:00.000Z',
+      },
+      {
+        id: 'pen-2',
+        loan_id: 'loan-1',
+        installment_id: 'inst-2',
+        installment_number: 2,
+        amount_paise: 7500,
+        period: '2024-02',
+        status: 'active',
+        posted_date: '2024-02-15',
+        created_at: '2024-02-15T10:00:00.000Z',
+      },
+      {
+        id: 'pen-3',
+        loan_id: 'loan-1',
+        installment_id: 'inst-1',
+        installment_number: 1,
+        amount_paise: 5000,
+        period: '2024-01',
+        status: 'waived',
+        posted_date: '2024-01-15',
+        waived_at: '2024-01-20T10:00:00.000Z',
+        waived_by: 'manager-1',
+        waive_reason: 'Customer hardship',
+        created_at: '2024-01-15T10:00:00.000Z',
+      },
+    ];
 
     it('fetches penalties by loanId', async () => {
       mockGet.mockResolvedValueOnce(mockPenaltiesList);
@@ -97,7 +94,7 @@ describe('usePenalties Hook', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(mockGet).toHaveBeenCalledWith('/penalties?loanId=loan-1');
+      expect(mockGet).toHaveBeenCalledWith('/penalties/loan/loan-1');
       expect(result.current.data).toEqual(mockPenaltiesList);
     });
 
@@ -125,14 +122,13 @@ describe('usePenalties Hook', () => {
     });
 
     it('returns empty data when no penalties', async () => {
-      mockGet.mockResolvedValueOnce({ data: [], total: 0 });
+      mockGet.mockResolvedValueOnce([]);
 
       const { result } = renderHook(() => usePenalties({ loanId: 'loan-1' }), { wrapper });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(result.current.data?.data).toEqual([]);
-      expect(result.current.data?.total).toBe(0);
+      expect(result.current.data).toEqual([]);
     });
 
     it('includes waived penalty details', async () => {
@@ -142,7 +138,7 @@ describe('usePenalties Hook', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      const waivedPenalty = result.current.data?.data.find(p => p.status === 'waived');
+      const waivedPenalty = result.current.data?.find(p => p.status === 'waived');
       expect(waivedPenalty?.waived_at).toBeDefined();
       expect(waivedPenalty?.waived_by).toBeDefined();
       expect(waivedPenalty?.waive_reason).toBeDefined();
@@ -155,7 +151,7 @@ describe('usePenalties Hook', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      result.current.data?.data.forEach(penalty => {
+      result.current.data?.forEach(penalty => {
         expect(Number.isInteger(penalty.amount_paise)).toBe(true);
       });
     });
@@ -172,7 +168,7 @@ describe('usePenalties Hook', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      const matchingPenalties = result.current.data?.data.filter(p => p.status === status);
+      const matchingPenalties = result.current.data?.filter(p => p.status === status);
       expect(matchingPenalties?.length).toBe(count);
     });
   });
