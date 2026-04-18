@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { calculatePeriodicRate } from '@/lib/utils';
 
 interface LoanProductDetail extends LoanProduct {
   current_version?: {
@@ -204,6 +205,14 @@ function EditLoanProductContent() {
                   onChange={(e) => setFormData(prev => ({ ...prev, annual_rate: e.target.value }))}
                   placeholder="e.g., 24.00"
                 />
+                {formData.annual_rate && parseFloat(formData.annual_rate) > 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    {(() => {
+                      const periodic = calculatePeriodicRate(parseFloat(formData.annual_rate), formData.frequency);
+                      return `= ${periodic.formatted}% ${periodic.labelLong}`;
+                    })()}
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">

@@ -15,6 +15,7 @@ import {
   ConfirmDialog,
 } from '@/components/shared';
 import { Button } from '@/components/ui/button';
+import { calculatePeriodicRate } from '@/lib/utils';
 
 export default function LoanProductsPage() {
   const [page, setPage] = useState(1);
@@ -72,7 +73,11 @@ export default function LoanProductsPage() {
                     </Link>
                     <span className="ml-1 text-xs text-muted-foreground">v{p.version}</span>
                     <p className="text-sm text-muted-foreground mt-1">
-                      {p.interest_type?.replace(/_/g, ' ') ?? '-'} @ {((p.annual_rate ?? 0) / 100).toFixed(2)}%
+                      {p.interest_type?.replace(/_/g, ' ') ?? '-'} @ {((p.annual_rate ?? 0) / 100).toFixed(2)}% p.a.
+                      {(() => {
+                        const periodic = calculatePeriodicRate((p.annual_rate ?? 0) / 100, p.frequency);
+                        return <span className="ml-1">({periodic.formatted}% {periodic.label})</span>;
+                      })()}
                     </p>
                   </div>
                   <StatusBadge status={p.is_active ? 'active' : 'inactive'} type="product" />
@@ -118,7 +123,8 @@ export default function LoanProductsPage() {
                 <tr>
                   <th className="px-4 py-3 text-left font-medium">Name</th>
                   <th className="px-4 py-3 text-left font-medium">Interest Type</th>
-                  <th className="px-4 py-3 text-right font-medium">Rate (%)</th>
+                  <th className="px-4 py-3 text-right font-medium">Rate (% p.a.)</th>
+                  <th className="px-4 py-3 text-right font-medium">Periodic Rate</th>
                   <th className="px-4 py-3 text-left font-medium">Frequency</th>
                   <th className="px-4 py-3 text-right font-medium">Principal Range</th>
                   <th className="px-4 py-3 text-left font-medium">Status</th>
@@ -141,6 +147,12 @@ export default function LoanProductsPage() {
                       {p.interest_type?.replace(/_/g, ' ') ?? '-'}
                     </td>
                     <td className="px-4 py-3 text-right">{((p.annual_rate ?? 0) / 100).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-right">
+                      {(() => {
+                        const periodic = calculatePeriodicRate((p.annual_rate ?? 0) / 100, p.frequency);
+                        return `${periodic.formatted}% ${periodic.label}`;
+                      })()}
+                    </td>
                     <td className="px-4 py-3 capitalize">{p.frequency ?? '-'}</td>
                     <td className="px-4 py-3 text-right">
                       <MoneyDisplay paise={p.min_principal_paise ?? 0} /> – <MoneyDisplay paise={p.max_principal_paise ?? 0} />
@@ -173,7 +185,7 @@ export default function LoanProductsPage() {
                 ))}
                 {data.data.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
+                    <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">
                       No loan products found.
                     </td>
                   </tr>
