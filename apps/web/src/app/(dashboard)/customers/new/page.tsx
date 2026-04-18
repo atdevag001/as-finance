@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { createCustomerSchema } from '@as-finance/shared/validation';
@@ -40,10 +40,30 @@ export default function NewCustomerPage() {
   const {
     register,
     handleSubmit,
+    setValue,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<FormData>({
     resolver: zodResolver(formSchema),
   });
+
+  // Watch DOB field to auto-calculate age
+  const dobValue = useWatch({ control, name: 'dob' });
+
+  useEffect(() => {
+    if (dobValue) {
+      const birthDate = new Date(dobValue);
+      const today = new Date();
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const monthDiff = today.getMonth() - birthDate.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+      }
+      if (age >= 0 && age <= 120) {
+        setValue('age', age);
+      }
+    }
+  }, [dobValue, setValue]);
 
   async function onSubmit(data: FormData) {
     setServerError(null);
@@ -122,7 +142,12 @@ export default function NewCustomerPage() {
                 inputMode="numeric"
                 min={18}
                 max={120}
+                readOnly={!!dobValue}
+                className={dobValue ? 'bg-muted' : ''}
               />
+              {dobValue && (
+                <p className="text-xs text-muted-foreground mt-1">Auto-calculated from DOB</p>
+              )}
             </Field>
             <Field label="Gender *" error={errors.gender?.message}>
               <select

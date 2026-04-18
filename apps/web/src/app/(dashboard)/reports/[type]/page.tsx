@@ -14,12 +14,32 @@ import { apiClient } from '@/lib/api-client';
 import { todayIST } from '@/lib/date-utils';
 
 const REPORT_LABELS: Record<string, string> = {
-  'collection-summary': 'Collection Summary',
-  outstanding: 'Outstanding',
+  // Collections
+  'daily-collection': 'Daily Collection',
+  'receipt-register': 'Receipt Register',
+  'cash-handover': 'Cash Handover',
+  // Loans
+  'loan-portfolio': 'Loan Portfolio',
   disbursement: 'Disbursement',
   overdue: 'Overdue',
-  demand: 'Demand',
-  portfolio: 'Portfolio',
+  'repayment-schedule': 'Repayment Schedule',
+  foreclosure: 'Foreclosure',
+  // Customers & Groups
+  customer: 'Customer',
+  'group-summary': 'Group Summary',
+  'group-collection': 'Group Collection',
+  // Income
+  penalty: 'Penalty',
+  expense: 'Expense',
+  income: 'Income',
+  'interest-accrual': 'Interest Accrual',
+  // Accounting
+  'trial-balance': 'Trial Balance',
+  'profit-loss': 'Profit & Loss',
+  'balance-sheet': 'Balance Sheet',
+  // Audit
+  'audit-trail': 'Audit Trail',
+  'user-activity': 'User Activity',
 };
 
 const MONEY_COLUMN_PATTERNS = /paise|amount|balance|total|outstanding|principal|interest|penalty|inflow|outflow/i;

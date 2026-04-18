@@ -7,17 +7,22 @@ export interface ReceiptDetail {
   id: string;
   receipt_number: string;
   collection_id: string;
+  loan_id: string;
+  customer_id: string;
   customer_name: string;
   loan_number: string;
   amount_paise: number;
-  principal_paise: number;
-  interest_paise: number;
-  penalty_paise: number;
+  penalty_component_paise: number;
+  interest_component_paise: number;
+  principal_component_paise: number;
   outstanding_after_paise: number;
   officer_name: string;
   payment_mode: string;
   payment_date: string;
-  status: string;
+  status: 'active' | 'reversed';
+  is_reversal: boolean;
+  compensating_receipt_id?: string;
+  original_receipt_id?: string;
   created_at: string;
 }
 

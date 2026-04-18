@@ -3,18 +3,31 @@
 import Link from 'next/link';
 import { ArrowLeft, Printer, Share2 } from 'lucide-react';
 import { useReceiptDetail } from '@/hooks/useReceipts';
+import { useAuth } from '@/providers/auth-provider';
+import { hasPermission } from '@/lib/permissions';
 import {
   MoneyDisplay,
   LoadingSpinner,
   ErrorMessage,
   DateDisplay,
   StatusBadge,
+  AccessDenied,
 } from '@/components/shared';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 export default function ReceiptViewPage({ params }: { params: { id: string } }) {
-  const { id } = params;
+  const { user } = useAuth();
+  const role = user?.role ?? '';
+
+  if (!hasPermission(role, 'receipt.read')) {
+    return <AccessDenied />;
+  }
+
+  return <ReceiptViewContent id={params.id} />;
+}
+
+function ReceiptViewContent({ id }: { id: string }) {
   const { data: receipt, isLoading, error } = useReceiptDetail(id);
 
   if (isLoading) {
@@ -32,7 +45,7 @@ export default function ReceiptViewPage({ params }: { params: { id: string } }) 
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <p className="text-lg font-medium text-muted-foreground">Receipt not found</p>
           <Button variant="link" asChild className="mt-2">
-            <Link href="/collections">Back to Collections</Link>
+            <Link href="/receipts">Back to Receipts</Link>
           </Button>
         </div>
       );
@@ -45,7 +58,7 @@ export default function ReceiptViewPage({ params }: { params: { id: string } }) 
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <p className="text-lg font-medium text-muted-foreground">Receipt not found</p>
         <Button variant="link" asChild className="mt-2">
-          <Link href="/collections">Back to Collections</Link>
+          <Link href="/receipts">Back to Receipts</Link>
         </Button>
       </div>
     );
@@ -116,7 +129,7 @@ export default function ReceiptViewPage({ params }: { params: { id: string } }) 
         <div className="flex items-center justify-between gap-2 no-print">
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px]" asChild>
-              <Link href="/collections"><ArrowLeft className="h-5 w-5" /></Link>
+              <Link href="/receipts"><ArrowLeft className="h-5 w-5" /></Link>
             </Button>
             <h1 className="text-xl sm:text-2xl font-bold">Receipt</h1>
           </div>
@@ -188,15 +201,15 @@ export default function ReceiptViewPage({ params }: { params: { id: string } }) 
               <div className="rounded-md border divide-y text-sm">
                 <div className="flex justify-between px-3 py-2">
                   <span>Penalty</span>
-                  <MoneyDisplay paise={Number(receipt.penalty_paise)} />
+                  <MoneyDisplay paise={Number(receipt.penalty_component_paise)} />
                 </div>
                 <div className="flex justify-between px-3 py-2">
                   <span>Interest</span>
-                  <MoneyDisplay paise={Number(receipt.interest_paise)} />
+                  <MoneyDisplay paise={Number(receipt.interest_component_paise)} />
                 </div>
                 <div className="flex justify-between px-3 py-2">
                   <span>Principal</span>
-                  <MoneyDisplay paise={Number(receipt.principal_paise)} />
+                  <MoneyDisplay paise={Number(receipt.principal_component_paise)} />
                 </div>
               </div>
             </div>

@@ -15,6 +15,7 @@ import {
   UsersRound,
   Wallet,
   Bell,
+  Package,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -32,6 +33,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { label: 'Customers', href: '/customers', icon: Users, permission: 'customer.read' },
   { label: 'Loans', href: '/loans', icon: FileText, permission: 'loan.read' },
+  { label: 'Loan Products', href: '/loan-products', icon: Package, permission: 'loan_product.read' },
   { label: 'Collections', href: '/collections', icon: Banknote, permission: 'collection.read' },
   { label: 'Receipts', href: '/receipts', icon: Receipt, permission: 'receipt.read' },
   { label: 'Groups', href: '/groups', icon: UsersRound, permission: 'group.read' },

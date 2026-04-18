@@ -40,6 +40,7 @@ export default function NewLoanPage() {
   const { showToast } = useToast();
   const { data: loanProducts, isLoading: productsLoading } = useLoanProductsList();
   const [serverError, setServerError] = useState<string | null>(null);
+  const [selectedProductVersionId, setSelectedProductVersionId] = useState<string>('');
 
   // Customer search state
   const [customerSearch, setCustomerSearch] = useState('');
@@ -71,6 +72,18 @@ export default function NewLoanPage() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Find selected product for displaying constraints
+  const selectedProduct = (Array.isArray(loanProducts) ? loanProducts : [])
+    .find(p => p.current_version_id === selectedProductVersionId);
+  const minPrincipalRupees = selectedProduct?.current_version?.min_principal_paise
+    ? selectedProduct.current_version.min_principal_paise / 100
+    : null;
+  const maxPrincipalRupees = selectedProduct?.current_version?.max_principal_paise
+    ? selectedProduct.current_version.max_principal_paise / 100
+    : null;
+  const minTenure = selectedProduct?.current_version?.min_tenure_months ?? null;
+  const maxTenure = selectedProduct?.current_version?.max_tenure_months ?? null;
 
   const {
     register,
@@ -107,6 +120,26 @@ export default function NewLoanPage() {
     setServerError(null);
 
     const principalPaise = Math.round(parseFloat(data.principalRupees) * 100);
+
+    // Client-side validation for principal range
+    if (selectedProduct?.current_version) {
+      const { min_principal_paise, max_principal_paise, min_tenure_months, max_tenure_months } =
+        selectedProduct.current_version;
+      if (principalPaise < min_principal_paise || principalPaise > max_principal_paise) {
+        const minRupees = min_principal_paise / 100;
+        const maxRupees = max_principal_paise / 100;
+        setServerError(
+          `Principal amount must be between ₹${minRupees.toLocaleString('en-IN')} and ₹${maxRupees.toLocaleString('en-IN')}`
+        );
+        return;
+      }
+      if (data.tenureMonths < min_tenure_months || data.tenureMonths > max_tenure_months) {
+        setServerError(
+          `Tenure must be between ${min_tenure_months} and ${max_tenure_months} months`
+        );
+        return;
+      }
+    }
 
     const payload: Record<string, unknown> = {
       customerId: data.customerId,
@@ -226,7 +259,9 @@ export default function NewLoanPage() {
             {/* Loan product dropdown */}
             <Field label="Loan Product *" error={errors.productVersionId?.message}>
               <select
-                {...register('productVersionId')}
+                {...register('productVersionId', {
+                  onChange: (e) => setSelectedProductVersionId(e.target.value),
+                })}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 disabled={productsLoading}
               >
@@ -247,8 +282,15 @@ export default function NewLoanPage() {
               <Input
                 {...register('principalRupees')}
                 inputMode="decimal"
-                placeholder="e.g. 50000"
+                placeholder={minPrincipalRupees && maxPrincipalRupees
+                  ? `${minPrincipalRupees.toLocaleString('en-IN')} – ${maxPrincipalRupees.toLocaleString('en-IN')}`
+                  : 'e.g. 50000'}
               />
+              {minPrincipalRupees !== null && maxPrincipalRupees !== null && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Range: ₹{minPrincipalRupees.toLocaleString('en-IN')} – ₹{maxPrincipalRupees.toLocaleString('en-IN')}
+                </p>
+              )}
             </Field>
 
             {/* Tenure */}
@@ -259,9 +301,15 @@ export default function NewLoanPage() {
                 })}
                 type="number"
                 inputMode="numeric"
-                min={1}
-                placeholder="e.g. 12"
+                min={minTenure ?? 1}
+                max={maxTenure ?? undefined}
+                placeholder={minTenure && maxTenure ? `${minTenure} – ${maxTenure}` : 'e.g. 12'}
               />
+              {minTenure !== null && maxTenure !== null && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Range: {minTenure} – {maxTenure} months
+                </p>
+              )}
             </Field>
 
             {/* Purpose */}

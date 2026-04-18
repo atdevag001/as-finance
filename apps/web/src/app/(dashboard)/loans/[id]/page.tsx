@@ -83,6 +83,9 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
   // Reversal state
   const [reversalCollection, setReversalCollection] = useState<Collection | null>(null);
 
+  // Close loan state
+  const [closeOpen, setCloseOpen] = useState(false);
+
   const isActionInProgress = loanAction.isPending || waivePenalty.isPending ||
     generateQuote.isPending || executeForeclosure.isPending;
 
@@ -213,6 +216,17 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
     }
   }
 
+  async function handleCloseLoan() {
+    setActionError(null);
+    try {
+      await loanAction.mutateAsync({ id, action: 'close' });
+      setCloseOpen(false);
+      showToast({ message: 'Loan closed successfully' });
+    } catch (err) {
+      setActionError((err as Error).message || 'Failed to close loan');
+    }
+  }
+
   if (isLoading) return <div className="flex justify-center py-8"><LoadingSpinner size="lg" /></div>;
   if (error) return <ErrorMessage message={(error as Error).message} />;
   if (!loan) return <ErrorMessage message="Loan not found" />;
@@ -225,6 +239,11 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
 
   const penalties = penaltiesData ?? [];
   const pendingPenalties = penalties.filter(p => p.status === 'pending');
+
+  // Loan can be closed only if: active/overdue, zero outstanding, and no pending penalties
+  const canClose = (loan.status === 'active' || loan.status === 'overdue') &&
+    loan.cached_outstanding_paise != null && Number(loan.cached_outstanding_paise) === 0 &&
+    pendingPenalties.length === 0;
 
   return (
     <div className="space-y-6">
@@ -313,6 +332,17 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
               className="min-h-[44px] flex-1 sm:flex-none"
             >
               {generateQuote.isPending ? 'Generating…' : 'Foreclosure'}
+            </Button>
+          </PermissionGate>
+        )}
+        {canClose && (
+          <PermissionGate permission="loan.close">
+            <Button
+              onClick={() => setCloseOpen(true)}
+              disabled={isActionInProgress}
+              className="min-h-[44px] flex-1 sm:flex-none bg-green-600 hover:bg-green-700 text-white"
+            >
+              Close Loan
             </Button>
           </PermissionGate>
         )}
@@ -829,6 +859,17 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
           )}
         </div>
       </ConfirmDialog>
+
+      {/* Close Loan Dialog */}
+      <ConfirmDialog
+        open={closeOpen}
+        onOpenChange={setCloseOpen}
+        title="Close Loan"
+        description={`This loan has zero outstanding balance. Closing it will mark it as fully settled. This action cannot be undone.`}
+        confirmLabel="Close Loan"
+        loading={isActionInProgress}
+        onConfirm={handleCloseLoan}
+      />
 
       {/* Reversal dialog */}
       <ReversalDialog

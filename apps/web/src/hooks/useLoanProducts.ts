@@ -25,6 +25,10 @@ export interface LoanProduct {
     interest_type: 'flat' | 'reducing_balance';
     annual_rate_bps: number;
     repayment_frequency: 'daily' | 'weekly' | 'monthly';
+    min_principal_paise: number;
+    max_principal_paise: number;
+    min_tenure_months: number;
+    max_tenure_months: number;
   };
 }
 
