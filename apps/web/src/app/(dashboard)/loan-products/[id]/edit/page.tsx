@@ -205,14 +205,19 @@ function EditLoanProductContent() {
                   onChange={(e) => setFormData(prev => ({ ...prev, annual_rate: e.target.value }))}
                   placeholder="e.g., 24.00"
                 />
-                {formData.annual_rate && parseFloat(formData.annual_rate) > 0 && (
-                  <p className="text-sm text-muted-foreground">
-                    {(() => {
-                      const periodic = calculatePeriodicRate(parseFloat(formData.annual_rate), formData.frequency);
-                      return `= ${periodic.formatted}% ${periodic.labelLong}`;
-                    })()}
-                  </p>
-                )}
+                <div className="rounded-md bg-muted/50 px-3 py-2 text-sm">
+                  <span className="text-muted-foreground">Periodic Rate: </span>
+                  {formData.annual_rate && parseFloat(formData.annual_rate) > 0 ? (
+                    <span className="font-medium text-foreground">
+                      {(() => {
+                        const periodic = calculatePeriodicRate(parseFloat(formData.annual_rate), formData.frequency);
+                        return `${periodic.formatted}% ${periodic.labelLong}`;
+                      })()}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground italic">Enter annual rate to calculate</span>
+                  )}
+                </div>
               </div>
 
               <div className="space-y-2">
