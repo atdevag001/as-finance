@@ -2,17 +2,17 @@
   "cookies": [
     {
       "name": "refresh_token",
-      "value": "22df6b20634b3362dee4be8928442a1da475d8e4338d5686cd5d1e19a36a3e306e1eb8f8d0de22c38a4b1342ec9af22e",
+      "value": "b51c64d7de0737f93b19017692a23a611c207f7e979e3ee6b7df8d403f0180ae9b7aa5c077c94b09ec3176fb648fdfcca075506891059ec06d99cac036253748",
       "domain": "localhost",
       "path": "/",
-      "expires": 1776493431.856076,
+      "expires": 1776688438.028595,
       "httpOnly": true,
       "secure": false,
       "sameSite": "Strict"
     },
     {
       "name": "access_token",
-      "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJiYTRkMjcyNy05MDNjLTQwZjctYWY2ZS02OTA0NWYyZjk2NjAiLCJyb2xlIjoiZmllbGRfb2ZmaWNlciIsImlhdCI6MTc3NTg4ODYwNCwiZXhwIjoxNzc1ODg5NTA0fQ.Ec37Et8IXAZmsIUMFjbPiynEmOFqI8Av0p9Q_b557vo",
+      "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJiYTRkMjcyNy05MDNjLTQwZjctYWY2ZS02OTA0NWYyZjk2NjAiLCJyb2xlIjoiZmllbGRfb2ZmaWNlciIsImlhdCI6MTc3NjA4MzYzOCwiZXhwIjoxNzc2MDg0NTM4fQ.J4KlxSYL8gqFziXGPH_PZAWJwc1L21rKbe53L0Ru2tY",
       "domain": "localhost",
       "path": "/",
       "expires": -1,
