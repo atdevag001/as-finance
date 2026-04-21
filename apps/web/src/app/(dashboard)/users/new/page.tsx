@@ -24,6 +24,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 const createUserFormSchema = z.object({
   username: z.string().min(3, 'Username must be at least 3 characters').max(50),
   fullName: z.string().min(1, 'Full name is required').max(200),
+  email: z.string().email('Invalid email address').max(200).optional().or(z.literal('')),
   mobile: mobileSchema,
   password: passwordSchema,
   role: z.nativeEnum(UserRole, { errorMap: () => ({ message: 'Please select a role' }) }),
@@ -62,6 +63,7 @@ export default function NewUserPage() {
       await createUser.mutateAsync({
         username: data.username,
         fullName: data.fullName,
+        email: data.email || undefined,
         mobile: data.mobile,
         password: data.password,
         role: data.role,
@@ -105,6 +107,9 @@ export default function NewUserPage() {
             </Field>
             <Field label="Full Name *" error={errors.fullName?.message}>
               <Input {...register('fullName')} />
+            </Field>
+            <Field label="Email" error={errors.email?.message}>
+              <Input {...register('email')} type="email" placeholder="optional" />
             </Field>
             <Field label="Mobile *" error={errors.mobile?.message}>
               <Input {...register('mobile')} inputMode="numeric" maxLength={10} />

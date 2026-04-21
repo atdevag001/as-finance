@@ -81,6 +81,7 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
     relationship: '',
     contactNumber: '',
     occupation: '',
+    incomeContribution: '',
   });
   const [familyError, setFamilyError] = useState<string | null>(null);
 
@@ -257,7 +258,7 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
       });
       showToast({ message: 'Family member added.' });
       setShowAddFamilyDialog(false);
-      setFamilyFormData({ name: '', relationship: '', contactNumber: '', occupation: '' });
+      setFamilyFormData({ name: '', relationship: '', contactNumber: '', occupation: '', incomeContribution: '' });
     } catch (err) {
       setFamilyError((err as Error).message || 'Failed to add family member.');
     }
@@ -735,7 +736,7 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
         onOpenChange={(open) => {
           setShowAddFamilyDialog(open);
           if (!open) {
-            setFamilyFormData({ name: '', relationship: '', contactNumber: '', occupation: '' });
+            setFamilyFormData({ name: '', relationship: '', contactNumber: '', occupation: '', incomeContribution: '' });
             setFamilyError(null);
           }
         }}
@@ -788,6 +789,15 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
               value={familyFormData.occupation}
               onChange={(e) => setFamilyFormData(prev => ({ ...prev, occupation: e.target.value }))}
               placeholder="Enter occupation…"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="family-income">Income Contribution</Label>
+            <Input
+              id="family-income"
+              value={familyFormData.incomeContribution}
+              onChange={(e) => setFamilyFormData(prev => ({ ...prev, incomeContribution: e.target.value }))}
+              placeholder="e.g., Primary earner, None, Partial…"
             />
           </div>
         </div>

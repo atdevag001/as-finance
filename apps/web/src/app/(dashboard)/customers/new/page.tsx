@@ -163,6 +163,9 @@ export default function NewCustomerPage() {
             <Field label="Occupation" error={errors.occupation?.message}>
               <Input {...register('occupation')} />
             </Field>
+            <Field label="Work/Business Details" error={errors.workOrBusinessDetails?.message}>
+              <Input {...register('workOrBusinessDetails')} placeholder="e.g., Shop owner at Main Market" />
+            </Field>
             <Field label="Monthly Income (₹)" error={errors.monthlyIncomeRupees?.message}>
               <Input
                 {...register('monthlyIncomeRupees')}

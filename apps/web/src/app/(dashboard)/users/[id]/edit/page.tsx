@@ -23,6 +23,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 const editUserFormSchema = z.object({
   fullName: z.string().min(1, 'Full name is required').max(200),
+  email: z.string().email('Invalid email address').max(200).optional().or(z.literal('')),
   mobile: mobileSchema,
   role: z.nativeEnum(UserRole, { errorMap: () => ({ message: 'Please select a role' }) }),
   isActive: z.boolean(),
@@ -61,6 +62,7 @@ export default function EditUserPage() {
     if (userData) {
       reset({
         fullName: userData.full_name,
+        email: userData.email || '',
         mobile: userData.mobile,
         role: userData.role as UserRole,
         isActive: userData.is_active,
@@ -94,6 +96,7 @@ export default function EditUserPage() {
       const payload: Record<string, unknown> = {
         id: userId,
         fullName: data.fullName,
+        email: data.email || undefined,
         mobile: data.mobile,
         isActive: data.isActive,
       };
@@ -137,6 +140,9 @@ export default function EditUserPage() {
             </div>
             <Field label="Full Name *" error={errors.fullName?.message}>
               <Input {...register('fullName')} />
+            </Field>
+            <Field label="Email" error={errors.email?.message}>
+              <Input {...register('email')} type="email" placeholder="optional" />
             </Field>
             <Field label="Mobile *" error={errors.mobile?.message}>
               <Input {...register('mobile')} inputMode="numeric" maxLength={10} />
