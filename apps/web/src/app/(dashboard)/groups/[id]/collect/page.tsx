@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
-interface GroupMember { id: string; customerName: string; loanId?: string; loanNumber?: string; duePaise?: number; }
+interface GroupMember { id: string; customer_name: string; loan_id?: string; loan_number?: string; outstanding_paise?: number; }
 interface GroupDetail { id: string; name: string; members: GroupMember[]; }
 
 export default function GroupCollectPage({ params }: { params: Promise<{ id: string }> }) {
@@ -31,6 +31,7 @@ export default function GroupCollectPage({ params }: { params: Promise<{ id: str
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['groups'] });
       qc.invalidateQueries({ queryKey: ['collections'] });
+      qc.invalidateQueries({ queryKey: ['loans'] });
       router.push(`/groups/${id}`);
     },
   });
@@ -38,9 +39,9 @@ export default function GroupCollectPage({ params }: { params: Promise<{ id: str
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const memberBreakdown = (group?.members ?? [])
-      .filter((m) => m.loanId && amounts[m.id] && Number(amounts[m.id]) > 0)
+      .filter((m) => m.loan_id && amounts[m.id] && Number(amounts[m.id]) > 0)
       .map((m) => ({
-        loanId: m.loanId!,
+        loanId: m.loan_id!,
         amountPaise: Math.round(Number(amounts[m.id]) * 100),
       }));
     if (memberBreakdown.length === 0) return;
@@ -75,15 +76,15 @@ export default function GroupCollectPage({ params }: { params: Promise<{ id: str
               <div key={m.id} className="rounded-lg border bg-card p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    <p className="font-semibold text-foreground">{m.customerName}</p>
-                    <p className="text-sm text-muted-foreground">{m.loanNumber ?? 'No active loan'}</p>
-                    {m.duePaise != null && (
+                    <p className="font-semibold text-foreground">{m.customer_name}</p>
+                    <p className="text-sm text-muted-foreground">{m.loan_number ?? 'No active loan'}</p>
+                    {m.outstanding_paise != null && (
                       <p className="mt-1 text-sm font-medium text-primary">
-                        Due: <MoneyDisplay paise={m.duePaise} />
+                        Due: <MoneyDisplay paise={m.outstanding_paise} />
                       </p>
                     )}
                   </div>
-                  {m.loanId && (
+                  {m.loan_id && (
                     <div className="shrink-0">
                       <Input
                         type="number"
@@ -93,11 +94,11 @@ export default function GroupCollectPage({ params }: { params: Promise<{ id: str
                         value={amounts[m.id] ?? ''}
                         onChange={(e) => setAmounts((prev) => ({ ...prev, [m.id]: e.target.value }))}
                       />
-                      {m.duePaise != null && (
+                      {m.outstanding_paise != null && (
                         <button
                           type="button"
                           className="mt-1 text-xs text-primary hover:underline"
-                          onClick={() => setAmounts((prev) => ({ ...prev, [m.id]: String((m.duePaise ?? 0) / 100) }))}
+                          onClick={() => setAmounts((prev) => ({ ...prev, [m.id]: String((m.outstanding_paise ?? 0) / 100) }))}
                         >
                           Fill due amount
                         </button>

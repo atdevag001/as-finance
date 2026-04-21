@@ -23,7 +23,7 @@ export default function NewExpensePage() {
   const { user } = useAuth();
   const role = user?.role ?? '';
 
-  if (!hasPermission(role, 'accounting.manage_cashbook')) {
+  if (!hasPermission(role, 'accounting.create_expense')) {
     return <AccessDenied />;
   }
 
@@ -62,7 +62,6 @@ function ExpenseForm() {
         amountPaise,
         date,
         description: description.trim(),
-        paymentMode,
       });
       showToast({ message: 'Expense recorded successfully.' });
       router.push('/cashbook');

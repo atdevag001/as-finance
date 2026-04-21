@@ -143,9 +143,6 @@ export default function NewCollectionPage() {
           paymentMode,
           idempotencyKey,
         },
-        {
-          headers: { 'X-Idempotency-Key': idempotencyKey },
-        },
       );
 
       // Invalidate relevant queries

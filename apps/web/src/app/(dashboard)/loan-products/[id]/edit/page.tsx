@@ -86,8 +86,8 @@ function EditLoanProductContent() {
         max_principal: ((v.max_principal_paise || 0) / 100).toString(),
         min_tenure_months: (v.min_tenure_months || '').toString(),
         max_tenure_months: (v.max_tenure_months || '').toString(),
-        processing_fee_percent: v.processing_fee_value ? v.processing_fee_value.toString() : '',
-        penalty_rate_percent: v.penalty_value ? v.penalty_value.toString() : '',
+        processing_fee_percent: v.processing_fee_value ? (v.processing_fee_value / 100).toString() : '',
+        penalty_rate_percent: v.penalty_value ? (v.penalty_value / 100).toString() : '',
         allocation_order: Array.isArray(v.allocation_order) ? v.allocation_order.join(',') : 'penalty,interest,principal',
       });
     }
@@ -123,20 +123,32 @@ function EditLoanProductContent() {
     }
 
     try {
+      const updateData: Record<string, unknown> = {
+        interestType: formData.interest_type,
+        annualRateBps: Math.round(parseFloat(formData.annual_rate) * 100),
+        repaymentFrequency: formData.frequency,
+        minPrincipalPaise: Math.round(minP * 100),
+        maxPrincipalPaise: Math.round(maxP * 100),
+        minTenureMonths: minT,
+        maxTenureMonths: maxT,
+        allocationOrder: formData.allocation_order.split(',').map(s => s.trim()),
+      };
+
+      if (formData.processing_fee_percent && parseFloat(formData.processing_fee_percent) > 0) {
+        updateData['processingFeeType'] = 'percentage';
+        updateData['processingFeeValue'] = Math.round(parseFloat(formData.processing_fee_percent) * 100);
+      }
+
+      if (formData.penalty_rate_percent && parseFloat(formData.penalty_rate_percent) > 0) {
+        updateData['penaltyType'] = 'percentage_of_overdue';
+        updateData['penaltyValue'] = Math.round(parseFloat(formData.penalty_rate_percent) * 100);
+        updateData['penaltyFrequency'] = formData.frequency;
+        updateData['penaltyGraceDays'] = 0;
+      }
+
       await update.mutateAsync({
         id: productId,
-        data: {
-          interestType: formData.interest_type,
-          annualRateBps: Math.round(parseFloat(formData.annual_rate) * 100),
-          repaymentFrequency: formData.frequency,
-          minPrincipalPaise: Math.round(minP * 100),
-          maxPrincipalPaise: Math.round(maxP * 100),
-          minTenureMonths: minT,
-          maxTenureMonths: maxT,
-          processingFeeValue: formData.processing_fee_percent ? parseFloat(formData.processing_fee_percent) : undefined,
-          penaltyValue: formData.penalty_rate_percent ? parseFloat(formData.penalty_rate_percent) : undefined,
-          allocationOrder: formData.allocation_order.split(',').map(s => s.trim()),
-        },
+        data: updateData,
       });
       showToast({ message: 'Loan product updated. A new version was created.' });
       router.push('/loan-products');
