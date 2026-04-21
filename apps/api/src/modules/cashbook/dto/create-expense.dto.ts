@@ -1,5 +1,6 @@
-import { IsString, IsInt, Min, IsDateString, IsOptional, IsUUID, MaxLength } from 'class-validator';
+import { IsString, IsInt, Min, IsDateString, IsOptional, IsUUID, MaxLength, IsEnum } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { PaymentMode } from '@as-finance/shared';
 
 /**
  * DTO for recording an expense.
@@ -24,6 +25,11 @@ export class CreateExpenseDto {
   @IsString()
   @MaxLength(1000)
   description!: string;
+
+  @ApiPropertyOptional({ description: 'Payment mode (cash, bank_transfer, online). Defaults to cash.' })
+  @IsOptional()
+  @IsEnum(PaymentMode)
+  paymentMode?: PaymentMode;
 
   @ApiPropertyOptional({ description: 'Optional document file reference (UUID)' })
   @IsOptional()

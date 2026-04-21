@@ -62,6 +62,7 @@ function ExpenseForm() {
         amountPaise,
         date,
         description: description.trim(),
+        paymentMode,
       });
       showToast({ message: 'Expense recorded successfully.' });
       router.push('/cashbook');

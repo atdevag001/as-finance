@@ -107,12 +107,15 @@ export class CashbookService {
   async createExpense(dto: CreateExpenseDto, actorId: string, actorRole: string) {
     // Resolve expense account by category mapping
     const expenseAccountCode = this.mapCategoryToAccountCode(dto.category);
-    const cashAccountCode = '1001'; // Cash account
+
+    // Determine credit account based on payment mode (default: cash)
+    const paymentMode = dto.paymentMode ?? 'cash';
+    const creditAccountCode = paymentMode === 'cash' ? '1001' : '1002'; // 1001=Cash, 1002=Bank
 
     // Look up account IDs
-    const [expenseAccount, cashAccount] = await Promise.all([
+    const [expenseAccount, creditAccount] = await Promise.all([
       this.accountingRepository.findAccountByCode(expenseAccountCode),
-      this.accountingRepository.findAccountByCode(cashAccountCode),
+      this.accountingRepository.findAccountByCode(creditAccountCode),
     ]);
 
     if (!expenseAccount) {
@@ -121,12 +124,13 @@ export class CashbookService {
         'INVALID_EXPENSE_CATEGORY',
       );
     }
-    if (!cashAccount) {
-      throw new BusinessRuleError('Cash account (1001) not found', 'MISSING_CASH_ACCOUNT');
+    if (!creditAccount) {
+      const accountName = paymentMode === 'cash' ? 'Cash' : 'Bank';
+      throw new BusinessRuleError(`${accountName} account (${creditAccountCode}) not found`, 'MISSING_ACCOUNT');
     }
 
     const result = await this.prisma.$transaction(async (tx: TxClient) => {
-      // 1. Create journal entry: DR Expense, CR Cash
+      // 1. Create journal entry: DR Expense, CR Cash/Bank
       const journalEntry = await this.accountingService.createJournalEntry(
         {
           date: dto.date,
@@ -135,7 +139,7 @@ export class CashbookService {
           sourceId: 'pending', // Will be updated after expense creation
           lines: [
             { accountId: expenseAccount.id, debitPaise: dto.amountPaise, creditPaise: 0 },
-            { accountId: cashAccount.id, debitPaise: 0, creditPaise: dto.amountPaise },
+            { accountId: creditAccount.id, debitPaise: 0, creditPaise: dto.amountPaise },
           ],
           createdBy: actorId,
         },
