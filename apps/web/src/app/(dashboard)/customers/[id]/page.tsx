@@ -181,14 +181,14 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
   function openEditDialog() {
     if (!customer) return;
     setEditFormData({
-      full_name: customer.full_name || '',
-      father_or_husband_name: customer.father_or_husband_name || '',
+      fullName: customer.full_name || '',
+      fatherOrHusbandName: customer.father_or_husband_name || '',
       mobile: customer.mobile || '',
-      alternate_mobile: customer.alternate_mobile || '',
+      alternateMobile: customer.alternate_mobile || '',
       occupation: customer.occupation || '',
-      monthly_income: customer.monthly_income_paise ? String(customer.monthly_income_paise / 100) : '',
-      address_line1: customer.address_line1 || '',
-      address_line2: customer.address_line2 || '',
+      monthlyIncomeRupees: customer.monthly_income_paise ? String(customer.monthly_income_paise / 100) : '',
+      addressLine1: customer.address_line1 || '',
+      addressLine2: customer.address_line2 || '',
       city: customer.city || '',
       district: customer.district || '',
       state: customer.state || '',
@@ -206,14 +206,14 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
       // Only send changed fields
       const changedFields: Record<string, unknown> = {};
       const originalData: Record<string, string> = {
-        full_name: customer.full_name || '',
-        father_or_husband_name: customer.father_or_husband_name || '',
+        fullName: customer.full_name || '',
+        fatherOrHusbandName: customer.father_or_husband_name || '',
         mobile: customer.mobile || '',
-        alternate_mobile: customer.alternate_mobile || '',
+        alternateMobile: customer.alternate_mobile || '',
         occupation: customer.occupation || '',
-        monthly_income: customer.monthly_income_paise ? String(customer.monthly_income_paise / 100) : '',
-        address_line1: customer.address_line1 || '',
-        address_line2: customer.address_line2 || '',
+        monthlyIncomeRupees: customer.monthly_income_paise ? String(customer.monthly_income_paise / 100) : '',
+        addressLine1: customer.address_line1 || '',
+        addressLine2: customer.address_line2 || '',
         city: customer.city || '',
         district: customer.district || '',
         state: customer.state || '',
@@ -223,8 +223,8 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
 
       for (const [key, value] of Object.entries(editFormData)) {
         if (value !== originalData[key]) {
-          if (key === 'monthly_income') {
-            changedFields['monthly_income_paise'] = Math.round(parseFloat(value || '0') * 100);
+          if (key === 'monthlyIncomeRupees') {
+            changedFields['monthlyIncomePaise'] = Math.round(parseFloat(value || '0') * 100);
           } else {
             changedFields[key] = value;
           }
@@ -620,19 +620,19 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
           {editError && <p className="text-sm text-destructive">{editError}</p>}
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="edit-full_name">Full Name</Label>
+              <Label htmlFor="edit-fullName">Full Name</Label>
               <Input
-                id="edit-full_name"
-                value={editFormData['full_name'] ?? ''}
-                onChange={(e) => setEditFormData(prev => ({ ...prev, full_name: e.target.value }))}
+                id="edit-fullName"
+                value={editFormData['fullName'] ?? ''}
+                onChange={(e) => setEditFormData(prev => ({ ...prev, fullName: e.target.value }))}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-father_or_husband_name">Father/Husband Name</Label>
+              <Label htmlFor="edit-fatherOrHusbandName">Father/Husband Name</Label>
               <Input
-                id="edit-father_or_husband_name"
-                value={editFormData['father_or_husband_name'] ?? ''}
-                onChange={(e) => setEditFormData(prev => ({ ...prev, father_or_husband_name: e.target.value }))}
+                id="edit-fatherOrHusbandName"
+                value={editFormData['fatherOrHusbandName'] ?? ''}
+                onChange={(e) => setEditFormData(prev => ({ ...prev, fatherOrHusbandName: e.target.value }))}
               />
             </div>
             <div className="space-y-2">
@@ -644,11 +644,11 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-alternate_mobile">Alternate Mobile</Label>
+              <Label htmlFor="edit-alternateMobile">Alternate Mobile</Label>
               <Input
-                id="edit-alternate_mobile"
-                value={editFormData['alternate_mobile'] ?? ''}
-                onChange={(e) => setEditFormData(prev => ({ ...prev, alternate_mobile: e.target.value }))}
+                id="edit-alternateMobile"
+                value={editFormData['alternateMobile'] ?? ''}
+                onChange={(e) => setEditFormData(prev => ({ ...prev, alternateMobile: e.target.value }))}
               />
             </div>
             <div className="space-y-2">
@@ -660,29 +660,29 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-monthly_income">Monthly Income (₹)</Label>
+              <Label htmlFor="edit-monthlyIncomeRupees">Monthly Income (₹)</Label>
               <Input
-                id="edit-monthly_income"
+                id="edit-monthlyIncomeRupees"
                 type="number"
                 inputMode="numeric"
-                value={editFormData['monthly_income'] ?? ''}
-                onChange={(e) => setEditFormData(prev => ({ ...prev, monthly_income: e.target.value }))}
+                value={editFormData['monthlyIncomeRupees'] ?? ''}
+                onChange={(e) => setEditFormData(prev => ({ ...prev, monthlyIncomeRupees: e.target.value }))}
               />
             </div>
             <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="edit-address_line1">Address Line 1</Label>
+              <Label htmlFor="edit-addressLine1">Address Line 1</Label>
               <Input
-                id="edit-address_line1"
-                value={editFormData['address_line1'] ?? ''}
-                onChange={(e) => setEditFormData(prev => ({ ...prev, address_line1: e.target.value }))}
+                id="edit-addressLine1"
+                value={editFormData['addressLine1'] ?? ''}
+                onChange={(e) => setEditFormData(prev => ({ ...prev, addressLine1: e.target.value }))}
               />
             </div>
             <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="edit-address_line2">Address Line 2</Label>
+              <Label htmlFor="edit-addressLine2">Address Line 2</Label>
               <Input
-                id="edit-address_line2"
-                value={editFormData['address_line2'] ?? ''}
-                onChange={(e) => setEditFormData(prev => ({ ...prev, address_line2: e.target.value }))}
+                id="edit-addressLine2"
+                value={editFormData['addressLine2'] ?? ''}
+                onChange={(e) => setEditFormData(prev => ({ ...prev, addressLine2: e.target.value }))}
               />
             </div>
             <div className="space-y-2">

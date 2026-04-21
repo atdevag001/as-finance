@@ -37,15 +37,21 @@ export default function GroupCollectPage({ params }: { params: Promise<{ id: str
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const payments = (group?.members ?? [])
+    const memberBreakdown = (group?.members ?? [])
       .filter((m) => m.loanId && amounts[m.id] && Number(amounts[m.id]) > 0)
       .map((m) => ({
-        loanId: m.loanId,
-        amountPaise: Number(amounts[m.id]),
-        paymentMode: 'cash' as const,
+        loanId: m.loanId!,
+        amountPaise: Math.round(Number(amounts[m.id]) * 100),
       }));
-    if (payments.length === 0) return;
-    mutation.mutate({ payments, paymentDate: new Date().toISOString().slice(0, 10), idempotencyKey: crypto.randomUUID() });
+    if (memberBreakdown.length === 0) return;
+    const totalAmountPaise = memberBreakdown.reduce((sum, item) => sum + item.amountPaise, 0);
+    mutation.mutate({
+      totalAmountPaise,
+      collectionDate: new Date().toISOString().slice(0, 10),
+      paymentMode: 'cash',
+      memberBreakdown,
+      idempotencyKey: crypto.randomUUID(),
+    });
   }
 
   if (isLoading) return <div className="flex justify-center py-8"><LoadingSpinner size="lg" /></div>;
@@ -81,8 +87,8 @@ export default function GroupCollectPage({ params }: { params: Promise<{ id: str
                     <div className="shrink-0">
                       <Input
                         type="number"
-                        inputMode="numeric"
-                        placeholder="Amount (paise)"
+                        inputMode="decimal"
+                        placeholder="₹ Amount"
                         className="w-32 text-right font-medium"
                         value={amounts[m.id] ?? ''}
                         onChange={(e) => setAmounts((prev) => ({ ...prev, [m.id]: e.target.value }))}
@@ -91,7 +97,7 @@ export default function GroupCollectPage({ params }: { params: Promise<{ id: str
                         <button
                           type="button"
                           className="mt-1 text-xs text-primary hover:underline"
-                          onClick={() => setAmounts((prev) => ({ ...prev, [m.id]: String(m.duePaise) }))}
+                          onClick={() => setAmounts((prev) => ({ ...prev, [m.id]: String((m.duePaise ?? 0) / 100) }))}
                         >
                           Fill due amount
                         </button>
@@ -111,7 +117,7 @@ export default function GroupCollectPage({ params }: { params: Promise<{ id: str
               <p className="text-sm text-muted-foreground">Total Collection</p>
               <p className="text-2xl font-bold">
                 <MoneyDisplay
-                  paise={Object.values(amounts).reduce((sum, val) => sum + (Number(val) || 0), 0)}
+                  paise={Math.round(Object.values(amounts).reduce((sum, val) => sum + (Number(val) || 0), 0) * 100)}
                 />
               </p>
             </div>

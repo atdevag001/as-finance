@@ -81,8 +81,8 @@ export function useAddGroupMember() {
 export function usePostGroupCollection() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: Record<string, unknown>) =>
-      apiClient.post('/group-collections', data),
+    mutationFn: ({ groupId, ...data }: { groupId: string } & Record<string, unknown>) =>
+      apiClient.post(`/groups/${groupId}/collections`, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['groups'] });
       qc.invalidateQueries({ queryKey: ['collections'] });

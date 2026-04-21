@@ -180,19 +180,33 @@ export class GroupRepository {
   }
 
   /**
-   * Get all active loans for group members, keyed by loan ID.
+   * Get all active loans for group members by customer_id.
+   * Finds loans for customers who are active members of the group.
    */
   async getGroupMemberLoans(groupId: string, tx?: TxClient) {
     const client = tx ?? this.prisma;
+
+    // First get all active member customer IDs
+    const members = await client.group_members.findMany({
+      where: { group_id: groupId, is_active: true },
+      select: { customer_id: true },
+    });
+    const customerIds = members.map((m) => m.customer_id);
+
+    if (customerIds.length === 0) return [];
+
+    // Find active/overdue loans for these customers
+    // Prefer loans linked to this group, but also include unlinked loans
     return client.loans.findMany({
       where: {
-        group_id: groupId,
+        customer_id: { in: customerIds },
         status: { in: ['active', 'overdue'] },
       },
       select: {
         id: true,
         loan_number: true,
         customer_id: true,
+        group_id: true,
         status: true,
         cached_outstanding_paise: true,
         dpd: true,

@@ -92,7 +92,7 @@ export class GroupService {
   }
 
   /**
-   * Get a group by ID.
+   * Get a group by ID with flattened member and loan data.
    * @throws NotFoundError if group does not exist
    */
   async findById(id: string) {
@@ -100,14 +100,75 @@ export class GroupService {
     if (!group) {
       throw new NotFoundError(`Group not found: ${id}`);
     }
-    return group;
+
+    // Get active loans linked to this group
+    const groupLoans = await this.groupRepository.getGroupMemberLoans(id);
+    const loansByCustomer = new Map<string, typeof groupLoans[0]>();
+    for (const loan of groupLoans) {
+      loansByCustomer.set(loan.customer_id, loan);
+    }
+
+    // Get group collections
+    const collections = await this.prisma.group_collections.findMany({
+      where: { group_id: id },
+      select: {
+        id: true,
+        total_amount_paise: true,
+        collection_date: true,
+      },
+      orderBy: { collection_date: 'desc' },
+      take: 20,
+    });
+
+    // Transform to frontend-expected structure
+    return {
+      id: group.id,
+      name: group.name,
+      meeting_day: group.meeting_day,
+      branch_area: group.branch_area,
+      status: group.status,
+      leader_name: group.leader?.full_name ?? null,
+      member_count: group.members.length,
+      members: group.members.map((m) => {
+        const loan = loansByCustomer.get(m.customer_id);
+        return {
+          id: m.id,
+          customer_id: m.customer_id,
+          customer_name: m.customer.full_name,
+          loan_id: loan?.id ?? null,
+          loan_number: loan?.loan_number ?? null,
+          outstanding_paise: loan?.cached_outstanding_paise ? Number(loan.cached_outstanding_paise) : null,
+        };
+      }),
+      collections: collections.map((c) => ({
+        id: c.id,
+        group_id: id,
+        total_amount_paise: Number(c.total_amount_paise),
+        payment_date: c.collection_date,
+        status: 'completed',
+      })),
+    };
   }
 
   /**
    * List groups with pagination.
    */
   async findAll(params: { skip?: number; take?: number; status?: string; branchArea?: string }) {
-    return this.groupRepository.findAll(params);
+    const result = await this.groupRepository.findAll(params);
+
+    // Transform to frontend-expected structure
+    return {
+      data: result.data.map((g) => ({
+        id: g.id,
+        name: g.name,
+        leader_name: g.leader?.full_name ?? null,
+        member_count: g._count?.members ?? 0,
+        meeting_day: g.meeting_day,
+        status: g.status,
+        created_at: g.created_at,
+      })),
+      total: result.total,
+    };
   }
 
   /**

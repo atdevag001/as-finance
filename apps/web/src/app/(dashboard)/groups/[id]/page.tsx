@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Plus } from 'lucide-react';
+import { ArrowLeft, Plus, Search, X } from 'lucide-react';
 import { useGroup, useAddGroupMember, usePostGroupCollection, type GroupMember } from '@/hooks/useGroups';
+import { useCustomers, type Customer } from '@/hooks/useCustomers';
 import { useToast } from '@/providers/toast-provider';
 import {
   StatusBadge,
@@ -28,8 +29,38 @@ export default function GroupDetailPage({ params }: { params: { id: string } }) 
 
   // Add member dialog
   const [addMemberOpen, setAddMemberOpen] = useState(false);
-  const [newMemberCustomerId, setNewMemberCustomerId] = useState('');
   const [addMemberError, setAddMemberError] = useState<string | null>(null);
+
+  // Customer search for add member
+  const [memberSearch, setMemberSearch] = useState('');
+  const [debouncedMemberSearch, setDebouncedMemberSearch] = useState('');
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [showMemberDropdown, setShowMemberDropdown] = useState(false);
+  const memberDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Debounce member search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedMemberSearch(memberSearch);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [memberSearch]);
+
+  const { data: customerResults } = useCustomers({
+    search: debouncedMemberSearch || undefined,
+    page: 1,
+  });
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (memberDropdownRef.current && !memberDropdownRef.current.contains(e.target as Node)) {
+        setShowMemberDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Group collection state
   const [collectOpen, setCollectOpen] = useState(false);
@@ -41,15 +72,31 @@ export default function GroupDetailPage({ params }: { params: { id: string } }) 
   if (!group) return <ErrorMessage message="Group not found" />;
 
   async function handleAddMember() {
+    if (!selectedCustomer) {
+      setAddMemberError('Please select a customer');
+      return;
+    }
     setAddMemberError(null);
     try {
-      await addMember.mutateAsync({ groupId: id, customerId: newMemberCustomerId });
+      await addMember.mutateAsync({ groupId: id, customerId: selectedCustomer.id });
       setAddMemberOpen(false);
-      setNewMemberCustomerId('');
+      setSelectedCustomer(null);
+      setMemberSearch('');
       showToast({ message: 'Member added successfully' });
     } catch (err) {
       setAddMemberError((err as Error).message || 'Failed to add member');
     }
+  }
+
+  function selectCustomerForMember(customer: Customer) {
+    setSelectedCustomer(customer);
+    setMemberSearch(customer.full_name);
+    setShowMemberDropdown(false);
+  }
+
+  function clearSelectedCustomer() {
+    setSelectedCustomer(null);
+    setMemberSearch('');
   }
 
   function openCollectionForm() {
@@ -64,28 +111,32 @@ export default function GroupDetailPage({ params }: { params: { id: string } }) 
 
   async function handlePostGroupCollection() {
     setCollectError(null);
-    const items = Object.entries(payments)
+    const memberBreakdown = Object.entries(payments)
       .filter(([, amt]) => amt && Number(amt) > 0)
       .map(([customerId, amt]) => {
         const member = group!.members.find((m: GroupMember) => m.customer_id === customerId);
         return {
-          customerId,
-          loanId: member?.loan_id,
+          loanId: member?.loan_id!,
           amountPaise: Math.round(Number(amt) * 100),
         };
-      });
+      })
+      .filter((item) => item.loanId);
 
-    if (items.length === 0) {
-      setCollectError('Enter at least one payment amount');
+    if (memberBreakdown.length === 0) {
+      setCollectError('Enter at least one payment amount for members with active loans');
       return;
     }
 
+    const totalAmountPaise = memberBreakdown.reduce((sum, item) => sum + item.amountPaise, 0);
+
     try {
-      const idempotencyKey = crypto.randomUUID();
       await postGroupCollection.mutateAsync({
         groupId: id,
-        items,
-        idempotencyKey,
+        totalAmountPaise,
+        collectionDate: new Date().toISOString().slice(0, 10),
+        paymentMode: 'cash',
+        idempotencyKey: crypto.randomUUID(),
+        memberBreakdown,
       });
       setCollectOpen(false);
       showToast({ message: 'Group collection posted successfully' });
@@ -108,7 +159,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } }) 
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <PermissionGate permission="group.add_member">
+          <PermissionGate permission="group.manage_members">
             <Button variant="outline" size="sm" className="min-h-[44px] flex-1 sm:flex-none" onClick={() => setAddMemberOpen(true)}>
               <Plus className="mr-1 h-4 w-4" /> Add Member
             </Button>
@@ -238,23 +289,64 @@ export default function GroupDetailPage({ params }: { params: { id: string } }) 
       {/* Add Member Dialog */}
       <ConfirmDialog
         open={addMemberOpen}
-        onOpenChange={setAddMemberOpen}
+        onOpenChange={(open) => {
+          setAddMemberOpen(open);
+          if (!open) {
+            setSelectedCustomer(null);
+            setMemberSearch('');
+            setAddMemberError(null);
+          }
+        }}
         title="Add Member"
-        description="Enter the customer ID to add to this group."
-        confirmLabel="Add"
+        description="Search and select a customer to add to this group."
+        confirmLabel="Add Member"
         loading={addMember.isPending}
         onConfirm={handleAddMember}
       >
         <div className="space-y-2 py-2">
           {addMemberError && <p className="text-sm text-destructive">{addMemberError}</p>}
-          <Label htmlFor="member-customer-id">Customer ID</Label>
-          <Input
-            id="member-customer-id"
-            placeholder="Enter customer ID…"
-            value={newMemberCustomerId}
-            onChange={(e) => setNewMemberCustomerId(e.target.value)}
-            disabled={addMember.isPending}
-          />
+          <Label>Customer</Label>
+          <div className="relative" ref={memberDropdownRef}>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={memberSearch}
+                onChange={(e) => {
+                  setMemberSearch(e.target.value);
+                  setShowMemberDropdown(true);
+                  if (!e.target.value) clearSelectedCustomer();
+                }}
+                onFocus={() => setShowMemberDropdown(true)}
+                placeholder="Search customer by name or mobile..."
+                className="pl-9 pr-9"
+                autoComplete="off"
+                disabled={addMember.isPending}
+              />
+              {selectedCustomer && (
+                <button
+                  type="button"
+                  onClick={clearSelectedCustomer}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+            {showMemberDropdown && customerResults?.data && customerResults.data.length > 0 && (
+              <ul className="absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-md border bg-popover shadow-lg">
+                {customerResults.data.map((c) => (
+                  <li
+                    key={c.id}
+                    onClick={() => selectCustomerForMember(c)}
+                    className="cursor-pointer px-3 py-2 hover:bg-accent"
+                  >
+                    <span className="font-medium">{c.full_name}</span>
+                    <span className="ml-2 text-sm text-muted-foreground">{c.mobile}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
       </ConfirmDialog>
 

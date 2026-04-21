@@ -233,7 +233,7 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
 
   const canSubmit = loan.status === 'draft';
   const canReview = loan.status === 'submitted';
-  const canApproveReject = loan.status === 'submitted' || loan.status === 'under_review';
+  const canApproveReject = loan.status === 'under_review';
   const canDisburse = loan.status === 'approved';
   const canForeclose = loan.status === 'active' || loan.status === 'overdue';
 

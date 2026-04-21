@@ -27,7 +27,6 @@ const createUserFormSchema = z.object({
   mobile: mobileSchema,
   password: passwordSchema,
   role: z.nativeEnum(UserRole, { errorMap: () => ({ message: 'Please select a role' }) }),
-  area: z.string().max(200).optional(),
 });
 
 type FormData = z.infer<typeof createUserFormSchema>;
@@ -62,11 +61,10 @@ export default function NewUserPage() {
     try {
       await createUser.mutateAsync({
         username: data.username,
-        full_name: data.fullName,
+        fullName: data.fullName,
         mobile: data.mobile,
         password: data.password,
         role: data.role,
-        ...(data.area ? { area: data.area } : {}),
       });
       showToast({ message: 'User created successfully', variant: 'success' });
       router.push('/users');
@@ -126,9 +124,6 @@ export default function NewUserPage() {
                   </option>
                 ))}
               </select>
-            </Field>
-            <Field label="Area" error={errors.area?.message}>
-              <Input {...register('area')} placeholder="Optional area assignment" />
             </Field>
           </CardContent>
         </Card>

@@ -26,7 +26,6 @@ const editUserFormSchema = z.object({
   mobile: mobileSchema,
   role: z.nativeEnum(UserRole, { errorMap: () => ({ message: 'Please select a role' }) }),
   isActive: z.boolean(),
-  area: z.string().max(200).optional(),
 });
 
 type FormData = z.infer<typeof editUserFormSchema>;
@@ -65,7 +64,6 @@ export default function EditUserPage() {
         mobile: userData.mobile,
         role: userData.role as UserRole,
         isActive: userData.is_active,
-        area: userData.area ?? '',
       });
     }
   }, [userData, reset]);
@@ -95,10 +93,9 @@ export default function EditUserPage() {
     try {
       const payload: Record<string, unknown> = {
         id: userId,
-        full_name: data.fullName,
+        fullName: data.fullName,
         mobile: data.mobile,
-        is_active: data.isActive,
-        ...(data.area ? { area: data.area } : { area: null }),
+        isActive: data.isActive,
       };
       if (canChangeRole) {
         payload['role'] = data.role;
@@ -167,9 +164,6 @@ export default function EditUserPage() {
                 />
               </div>
             )}
-            <Field label="Area" error={errors.area?.message}>
-              <Input {...register('area')} placeholder="Optional area assignment" />
-            </Field>
             <div className="flex items-center gap-3 pt-6">
               <input
                 type="checkbox"

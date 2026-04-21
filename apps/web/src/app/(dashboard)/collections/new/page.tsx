@@ -255,8 +255,8 @@ export default function NewCollectionPage() {
                         <li className="flex items-center justify-center px-3 py-3">
                           <LoadingSpinner />
                         </li>
-                      ) : loanResults?.data && loanResults.data.length > 0 ? (
-                        loanResults.data.map((loan) => (
+                      ) : loanResults?.data && loanResults.data.filter(l => l.status === 'active' || l.status === 'overdue').length > 0 ? (
+                        loanResults.data.filter(l => l.status === 'active' || l.status === 'overdue').map((loan) => (
                           <li
                             key={loan.id}
                             role="option"
@@ -285,7 +285,7 @@ export default function NewCollectionPage() {
                         ))
                       ) : (
                         <li className="px-3 py-3 text-sm text-muted-foreground">
-                          No loans found
+                          No active/overdue loans found
                         </li>
                       )}
                     </ul>
