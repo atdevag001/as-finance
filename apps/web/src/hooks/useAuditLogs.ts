@@ -29,8 +29,8 @@ export function useAuditLogs(params: {
   const pageSize = 20;
   const skip = (page - 1) * pageSize;
   const query = new URLSearchParams({ skip: String(skip), take: String(pageSize) });
-  if (entity) query.set('entity', entity);
-  if (action) query.set('action', action);
+  if (entity) query.set('targetEntity', entity);
+  if (action) query.set('actionType', action);
   if (startDate) query.set('startDate', startDate);
 
   return useQuery<PaginatedResult<AuditLog>>({

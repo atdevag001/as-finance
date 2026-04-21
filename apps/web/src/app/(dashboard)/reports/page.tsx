@@ -18,7 +18,6 @@ import {
   Ban,
   Activity,
   User,
-  Percent,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AccessDenied } from '@/components/shared';
@@ -47,7 +46,6 @@ const REPORT_TYPES = [
   { type: 'penalty', label: 'Penalty', description: 'Penalty charges and waivers', icon: AlertCircle, category: 'Income' },
   { type: 'expense', label: 'Expense', description: 'Expense breakdown and categories', icon: TrendingUp, category: 'Income' },
   { type: 'income', label: 'Income', description: 'Income sources and revenue', icon: DollarSign, category: 'Income' },
-  { type: 'interest-accrual', label: 'Interest Accrual', description: 'Interest accrued on active loans', icon: Percent, category: 'Income' },
 
   // Accounting
   { type: 'trial-balance', label: 'Trial Balance', description: 'Debits and credits balance', icon: Scale, category: 'Accounting' },
@@ -56,7 +54,8 @@ const REPORT_TYPES = [
 
   // Audit & Activity
   { type: 'audit-trail', label: 'Audit Trail', description: 'System activity and change log', icon: Activity, category: 'Audit' },
-  { type: 'user-activity', label: 'User Activity', description: 'User login and action history', icon: User, category: 'Audit' },
+  { type: 'dpd-aging', label: 'DPD Aging', description: 'Days past due aging analysis', icon: AlertCircle, category: 'Loans' },
+  { type: 'officer-performance', label: 'Officer Performance', description: 'Field officer collection performance', icon: User, category: 'Audit' },
 ] as const;
 
 const CATEGORIES = ['Collections', 'Loans', 'Customers', 'Groups', 'Income', 'Accounting', 'Audit'] as const;

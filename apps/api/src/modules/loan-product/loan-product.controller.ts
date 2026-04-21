@@ -24,7 +24,7 @@ export class LoanProductController {
   constructor(private readonly loanProductService: LoanProductService) {}
 
   @Post()
-  @RequirePermission('loan.create')
+  @RequirePermission('loan_product.create')
   @ApiOperation({ summary: 'Create a new loan product' })
   @ApiResponse({ status: 201, description: 'Loan product created' })
   @ApiResponse({ status: 409, description: 'Product name already exists' })
@@ -60,7 +60,7 @@ export class LoanProductController {
   }
 
   @Patch(':id')
-  @RequirePermission('loan.create')
+  @RequirePermission('loan_product.update')
   @ApiOperation({ summary: 'Update loan product (creates new version)' })
   @ApiResponse({ status: 200, description: 'New version created' })
   @ApiResponse({ status: 404, description: 'Loan product not found' })
@@ -73,7 +73,7 @@ export class LoanProductController {
   }
 
   @Post(':id/deactivate')
-  @RequirePermission('loan.create')
+  @RequirePermission('loan_product.deactivate')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Deactivate a loan product' })
   @ApiResponse({ status: 200, description: 'Loan product deactivated' })

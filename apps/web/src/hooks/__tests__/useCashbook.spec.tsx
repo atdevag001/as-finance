@@ -166,20 +166,22 @@ describe('useCashbook Hook', () => {
     const mockHandovers = [
       {
         id: 'ho-1',
-        officer_id: 'user-1',
+        collection_officer_id: 'user-1',
         officer_name: 'John Doe',
-        amount_paise: 250000,
-        remarks: 'End of day handover',
-        status: 'pending',
+        total_amount_paise: 250000,
+        receiving_officer_id: 'manager-1',
+        handover_date: '2024-01-15',
+        verification_status: 'pending',
         created_at: '2024-01-15T18:00:00.000Z',
       },
       {
         id: 'ho-2',
-        officer_id: 'user-2',
+        collection_officer_id: 'user-2',
         officer_name: 'Jane Smith',
-        amount_paise: 180000,
-        remarks: 'Collection handover',
-        status: 'verified',
+        total_amount_paise: 180000,
+        receiving_officer_id: 'manager-2',
+        handover_date: '2024-01-15',
+        verification_status: 'verified',
         verified_by: 'manager-1',
         created_at: '2024-01-15T17:00:00.000Z',
       },
@@ -203,7 +205,7 @@ describe('useCashbook Hook', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      const pendingHandovers = result.current.data?.filter(h => h.status === 'pending');
+      const pendingHandovers = result.current.data?.filter(h => h.verification_status === 'pending');
       expect(pendingHandovers?.length).toBeGreaterThan(0);
     });
 
@@ -214,7 +216,7 @@ describe('useCashbook Hook', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      const verifiedHandovers = result.current.data?.filter(h => h.status === 'verified');
+      const verifiedHandovers = result.current.data?.filter(h => h.verification_status === 'verified');
       verifiedHandovers?.forEach(h => {
         expect(h.verified_by).toBeDefined();
       });
@@ -228,7 +230,7 @@ describe('useCashbook Hook', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       result.current.data?.forEach(h => {
-        expect(Number.isInteger(h.amount_paise)).toBe(true);
+        expect(Number.isInteger(h.total_amount_paise)).toBe(true);
       });
     });
 
@@ -390,25 +392,37 @@ describe('useCashbook Hook', () => {
 
   describe('useVerifyHandover', () => {
     it('verifies a handover', async () => {
-      mockPatch.mockResolvedValueOnce({ id: 'ho-1', status: 'verified' });
+      mockPatch.mockResolvedValueOnce({ id: 'ho-1', verification_status: 'verified' });
 
       const { result } = renderHook(() => useVerifyHandover(), { wrapper });
 
-      result.current.mutate('ho-1');
+      result.current.mutate({ id: 'ho-1', verificationStatus: 'verified' });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(mockPatch).toHaveBeenCalledWith('/cashbook/handovers/ho-1/verify');
+      expect(mockPatch).toHaveBeenCalledWith('/cashbook/handovers/ho-1/verify', { verificationStatus: 'verified' });
+    });
+
+    it('marks a handover as discrepancy', async () => {
+      mockPatch.mockResolvedValueOnce({ id: 'ho-1', verification_status: 'discrepancy' });
+
+      const { result } = renderHook(() => useVerifyHandover(), { wrapper });
+
+      result.current.mutate({ id: 'ho-1', verificationStatus: 'discrepancy' });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(mockPatch).toHaveBeenCalledWith('/cashbook/handovers/ho-1/verify', { verificationStatus: 'discrepancy' });
     });
 
     it('invalidates cashbook queries on success', async () => {
-      mockPatch.mockResolvedValueOnce({ id: 'ho-1', status: 'verified' });
+      mockPatch.mockResolvedValueOnce({ id: 'ho-1', verification_status: 'verified' });
 
       const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
 
       const { result } = renderHook(() => useVerifyHandover(), { wrapper });
 
-      result.current.mutate('ho-1');
+      result.current.mutate({ id: 'ho-1', verificationStatus: 'verified' });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
@@ -422,7 +436,7 @@ describe('useCashbook Hook', () => {
 
       const { result } = renderHook(() => useVerifyHandover(), { wrapper });
 
-      result.current.mutate('invalid-ho');
+      result.current.mutate({ id: 'invalid-ho', verificationStatus: 'verified' });
 
       await waitFor(() => expect(result.current.isError).toBe(true));
     });
@@ -434,19 +448,19 @@ describe('useCashbook Hook', () => {
 
       const { result } = renderHook(() => useVerifyHandover(), { wrapper });
 
-      result.current.mutate('ho-already-verified');
+      result.current.mutate({ id: 'ho-already-verified', verificationStatus: 'verified' });
 
       await waitFor(() => expect(result.current.isError).toBe(true));
     });
 
     it('handles slow mutation', async () => {
       mockPatch.mockImplementation(() => new Promise((resolve) => {
-        setTimeout(() => resolve({ id: 'ho-1', status: 'verified' }), 100);
+        setTimeout(() => resolve({ id: 'ho-1', verification_status: 'verified' }), 100);
       }));
 
       const { result } = renderHook(() => useVerifyHandover(), { wrapper });
 
-      result.current.mutate('ho-1');
+      result.current.mutate({ id: 'ho-1', verificationStatus: 'verified' });
 
       // Eventually succeeds even with slow response
       await waitFor(() => expect(result.current.isSuccess).toBe(true), { timeout: 2000 });
@@ -459,7 +473,7 @@ describe('useCashbook Hook', () => {
 
       const { result } = renderHook(() => useVerifyHandover(), { wrapper });
 
-      result.current.mutate('ho-1');
+      result.current.mutate({ id: 'ho-1', verificationStatus: 'verified' });
 
       await waitFor(() => expect(result.current.isError).toBe(true));
 

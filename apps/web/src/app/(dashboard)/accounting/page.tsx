@@ -121,7 +121,7 @@ function AccountingContent() {
                   <CardHeader className="py-3">
                     <div className="flex justify-between text-sm">
                       <CardTitle className="text-sm font-medium">{je.description}</CardTitle>
-                      <span className="text-muted-foreground">{je.date}</span>
+                      <span className="text-muted-foreground">{je.entry_date}</span>
                     </div>
                   </CardHeader>
                   <CardContent className="pt-0">
@@ -129,7 +129,7 @@ function AccountingContent() {
                       <tbody>
                         {je.lines.map((l, i) => (
                           <tr key={i} className="border-b last:border-0">
-                            <td className="py-1">{l.accountName}</td>
+                            <td className="py-1">{l.account.name}</td>
                             <td className="py-1 text-right">{l.debitPaise > 0 ? <MoneyDisplay paise={l.debitPaise} /> : ''}</td>
                             <td className="py-1 text-right">{l.creditPaise > 0 ? <MoneyDisplay paise={l.creditPaise} /> : ''}</td>
                           </tr>

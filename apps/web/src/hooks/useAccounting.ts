@@ -12,10 +12,10 @@ export interface ChartAccount {
 
 export interface JournalEntry {
   id: string;
-  date: string;
+  entry_date: string;
   description: string;
-  sourceType: string;
-  lines: { accountName: string; debitPaise: number; creditPaise: number }[];
+  source_type: string;
+  lines: { account: { name: string }; debitPaise: number; creditPaise: number }[];
 }
 
 export interface TrialBalanceRow {
@@ -60,27 +60,117 @@ export function useChartOfAccounts() {
 export function useDaybook(params: DateRangeParams = {}) {
   return useQuery<JournalEntry[]>({
     queryKey: ['accounting', 'daybook', params.startDate, params.endDate],
-    queryFn: () => apiClient.get(`/accounting/daybook${buildDateQuery(params)}`),
+    queryFn: async () => {
+      const response = await apiClient.get<JournalEntry[]>(`/accounting/daybook${buildDateQuery(params)}`);
+      return response;
+    },
   });
 }
 
 export function useTrialBalance(params: DateRangeParams = {}) {
   return useQuery<TrialBalanceRow[]>({
-    queryKey: ['accounting', 'trial-balance', params.startDate, params.endDate],
-    queryFn: () => apiClient.get(`/accounting/trial-balance${buildDateQuery(params)}`),
+    queryKey: ['accounting', 'trial-balance', params.endDate],
+    queryFn: async () => {
+      const query = new URLSearchParams();
+      if (params.endDate) query.set('asOfDate', params.endDate);
+      const qs = query.toString();
+      const url = `/accounting/trial-balance${qs ? `?${qs}` : ''}`;
+
+      interface BackendTrialBalanceRow {
+        code: string;
+        name: string;
+        debitBalancePaise: string;
+        creditBalancePaise: string;
+      }
+      interface BackendTrialBalanceResponse {
+        asOfDate: string;
+        rows: BackendTrialBalanceRow[];
+        totalDebitBalancePaise: string;
+        totalCreditBalancePaise: string;
+        isBalanced: boolean;
+      }
+
+      const response = await apiClient.get<BackendTrialBalanceResponse>(url);
+      return response.rows.map((row) => ({
+        accountCode: row.code,
+        accountName: row.name,
+        debitPaise: Number(row.debitBalancePaise),
+        creditPaise: Number(row.creditBalancePaise),
+      }));
+    },
   });
 }
 
 export function useProfitLoss(params: DateRangeParams = {}) {
   return useQuery<ProfitLossReport>({
     queryKey: ['accounting', 'profit-loss', params.startDate, params.endDate],
-    queryFn: () => apiClient.get(`/accounting/profit-loss${buildDateQuery(params)}`),
+    queryFn: async () => {
+      interface BackendProfitLossItem {
+        name: string;
+        amountPaise: string;
+      }
+      interface BackendProfitLossResponse {
+        startDate: string;
+        endDate: string;
+        income: BackendProfitLossItem[];
+        expenses: BackendProfitLossItem[];
+        netProfitPaise: string;
+      }
+
+      const response = await apiClient.get<BackendProfitLossResponse>(`/accounting/profit-loss${buildDateQuery(params)}`);
+      return {
+        income: response.income.map((item) => ({
+          category: item.name,
+          totalPaise: Number(item.amountPaise),
+        })),
+        expenses: response.expenses.map((item) => ({
+          category: item.name,
+          totalPaise: Number(item.amountPaise),
+        })),
+        netProfitPaise: Number(response.netProfitPaise),
+      };
+    },
   });
 }
 
 export function useBalanceSheet(params: DateRangeParams = {}) {
   return useQuery<BalanceSheet>({
-    queryKey: ['accounting', 'balance-sheet', params.startDate, params.endDate],
-    queryFn: () => apiClient.get(`/accounting/balance-sheet${buildDateQuery(params)}`),
+    queryKey: ['accounting', 'balance-sheet', params.endDate],
+    queryFn: async () => {
+      const query = new URLSearchParams();
+      if (params.endDate) query.set('asOfDate', params.endDate);
+      const qs = query.toString();
+      const url = `/accounting/balance-sheet${qs ? `?${qs}` : ''}`;
+
+      interface BackendBalanceSheetItem {
+        name: string;
+        balancePaise: string;
+      }
+      interface BackendBalanceSheetResponse {
+        asOfDate: string;
+        assets: BackendBalanceSheetItem[];
+        liabilities: BackendBalanceSheetItem[];
+        equity: BackendBalanceSheetItem[];
+        totalAssetsPaise: string;
+        totalLiabilitiesPaise: string;
+        totalEquityPaise: string;
+      }
+
+      const response = await apiClient.get<BackendBalanceSheetResponse>(url);
+      return {
+        assets: response.assets.map((item) => ({
+          name: item.name,
+          totalPaise: Number(item.balancePaise),
+        })),
+        liabilities: response.liabilities.map((item) => ({
+          name: item.name,
+          totalPaise: Number(item.balancePaise),
+        })),
+        equity: response.equity.map((item) => ({
+          name: item.name,
+          totalPaise: Number(item.balancePaise),
+        })),
+      };
+    },
   });
 }

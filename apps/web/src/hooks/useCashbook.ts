@@ -15,11 +15,12 @@ export interface CashbookSummary {
 
 export interface CashHandover {
   id: string;
-  officer_id: string;
+  collection_officer_id: string;
   officer_name: string;
-  amount_paise: number;
-  remarks: string;
-  status: 'pending' | 'verified';
+  total_amount_paise: number;
+  receiving_officer_id: string;
+  handover_date: string;
+  verification_status: 'pending' | 'verified' | 'discrepancy';
   verified_by?: string;
   created_at: string;
 }
@@ -68,8 +69,8 @@ export function useCreateHandover() {
 export function useVerifyHandover() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) =>
-      apiClient.patch(`/cashbook/handovers/${id}/verify`),
+    mutationFn: ({ id, verificationStatus }: { id: string; verificationStatus: 'verified' | 'discrepancy' }) =>
+      apiClient.patch(`/cashbook/handovers/${id}/verify`, { verificationStatus }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['cashbook'] });
     },

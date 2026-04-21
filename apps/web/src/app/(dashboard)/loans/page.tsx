@@ -13,8 +13,12 @@ const STATUS_FILTERS = [
   { label: 'Submitted', value: 'submitted' },
   { label: 'Under Review', value: 'under_review' },
   { label: 'Approved', value: 'approved' },
+  { label: 'Disbursed', value: 'disbursed' },
   { label: 'Active', value: 'active' },
   { label: 'Overdue', value: 'overdue' },
+  { label: 'Rejected', value: 'rejected' },
+  { label: 'Defaulted', value: 'defaulted' },
+  { label: 'Foreclosed', value: 'foreclosed' },
   { label: 'Closed', value: 'closed' },
 ] as const;
 

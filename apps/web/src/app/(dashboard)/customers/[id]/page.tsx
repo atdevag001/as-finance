@@ -265,8 +265,8 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
 
   async function handleAddGuarantor() {
     setGuarantorError(null);
-    if (!guarantorFormData.name.trim() || !guarantorFormData.relationship.trim() || !guarantorFormData.mobile.trim()) {
-      setGuarantorError('Name, relationship, and mobile are required.');
+    if (!guarantorFormData.name.trim() || !guarantorFormData.relationship.trim() || !guarantorFormData.mobile.trim() || !guarantorFormData.aadhaarNumber.trim() || !guarantorFormData.address.trim()) {
+      setGuarantorError('Name, relationship, mobile, Aadhaar number, and address are required.');
       return;
     }
     try {
@@ -763,10 +763,11 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
                 <SelectValue placeholder="Select relationship" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="father">Father</SelectItem>
+                <SelectItem value="mother">Mother</SelectItem>
                 <SelectItem value="spouse">Spouse</SelectItem>
-                <SelectItem value="parent">Parent</SelectItem>
-                <SelectItem value="child">Child</SelectItem>
                 <SelectItem value="sibling">Sibling</SelectItem>
+                <SelectItem value="child">Child</SelectItem>
                 <SelectItem value="other">Other</SelectItem>
               </SelectContent>
             </Select>
@@ -844,7 +845,7 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="guarantor-aadhaar">Aadhaar</Label>
+            <Label htmlFor="guarantor-aadhaar">Aadhaar Number *</Label>
             <Input
               id="guarantor-aadhaar"
               value={guarantorFormData.aadhaarNumber}
@@ -853,7 +854,7 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="guarantor-address">Address</Label>
+            <Label htmlFor="guarantor-address">Address *</Label>
             <Input
               id="guarantor-address"
               value={guarantorFormData.address}

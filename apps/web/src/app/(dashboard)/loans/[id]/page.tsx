@@ -283,7 +283,7 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
           </PermissionGate>
         )}
         {canReview && (
-          <PermissionGate permission="loan.review">
+          <PermissionGate permission="loan.approve">
             <Button
               onClick={handleStartReview}
               disabled={isActionInProgress}

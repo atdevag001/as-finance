@@ -21,16 +21,16 @@ export default function NewLoanProductPage() {
 
   const [formData, setFormData] = useState({
     name: '',
-    interest_type: 'flat',
-    annual_rate: '', // in percent, will convert to bps
-    frequency: 'monthly',
-    min_principal: '', // in rupees
-    max_principal: '', // in rupees
-    min_tenure_months: '',
-    max_tenure_months: '',
-    processing_fee_percent: '',
-    penalty_rate_percent: '',
-    allocation_order: 'penalty,interest,principal',
+    interestType: 'flat',
+    annualRate: '', // in percent, will convert to bps
+    repaymentFrequency: 'monthly',
+    minPrincipal: '', // in rupees
+    maxPrincipal: '', // in rupees
+    minTenureMonths: '',
+    maxTenureMonths: '',
+    processingFeePercent: '',
+    penaltyRatePercent: '',
+    allocationOrder: 'penalty,interest,principal',
   });
 
   const [error, setError] = useState<string | null>(null);
@@ -44,33 +44,48 @@ export default function NewLoanProductPage() {
       setError('Product name is required.');
       return;
     }
-    if (!formData.annual_rate || parseFloat(formData.annual_rate) <= 0) {
+    if (!formData.annualRate || parseFloat(formData.annualRate) <= 0) {
       setError('Annual rate must be positive.');
       return;
     }
-    if (!formData.min_principal || !formData.max_principal) {
+    if (!formData.minPrincipal || !formData.maxPrincipal) {
       setError('Principal range is required.');
       return;
     }
-    if (!formData.min_tenure_months || !formData.max_tenure_months) {
+    if (!formData.minTenureMonths || !formData.maxTenureMonths) {
       setError('Tenure range is required.');
       return;
     }
 
+    // Build payload matching backend DTO (camelCase)
+    const payload: Record<string, unknown> = {
+      name: formData.name.trim(),
+      interestType: formData.interestType,
+      annualRateBps: Math.round(parseFloat(formData.annualRate) * 100), // percent to bps
+      repaymentFrequency: formData.repaymentFrequency,
+      minPrincipalPaise: Math.round(parseFloat(formData.minPrincipal) * 100),
+      maxPrincipalPaise: Math.round(parseFloat(formData.maxPrincipal) * 100),
+      minTenureMonths: parseInt(formData.minTenureMonths),
+      maxTenureMonths: parseInt(formData.maxTenureMonths),
+      allocationOrder: formData.allocationOrder.split(',').map(s => s.trim()),
+    };
+
+    // Add processing fee if specified (as percentage type with bps value)
+    if (formData.processingFeePercent && parseFloat(formData.processingFeePercent) > 0) {
+      payload['processingFeeType'] = 'percentage';
+      payload['processingFeeValue'] = Math.round(parseFloat(formData.processingFeePercent) * 100); // percent to bps
+    }
+
+    // Add penalty if specified (as percentage of overdue with bps value)
+    if (formData.penaltyRatePercent && parseFloat(formData.penaltyRatePercent) > 0) {
+      payload['penaltyType'] = 'percentage_of_overdue';
+      payload['penaltyValue'] = Math.round(parseFloat(formData.penaltyRatePercent) * 100); // percent to bps
+      payload['penaltyFrequency'] = formData.repaymentFrequency; // Match repayment frequency
+      payload['penaltyGraceDays'] = 0;
+    }
+
     try {
-      await create.mutateAsync({
-        name: formData.name.trim(),
-        interest_type: formData.interest_type,
-        annual_rate: Math.round(parseFloat(formData.annual_rate) * 100), // percent to bps
-        frequency: formData.frequency,
-        min_principal_paise: Math.round(parseFloat(formData.min_principal) * 100),
-        max_principal_paise: Math.round(parseFloat(formData.max_principal) * 100),
-        min_tenure_months: parseInt(formData.min_tenure_months),
-        max_tenure_months: parseInt(formData.max_tenure_months),
-        processing_fee_percent: formData.processing_fee_percent ? parseFloat(formData.processing_fee_percent) : undefined,
-        penalty_rate_percent: formData.penalty_rate_percent ? parseFloat(formData.penalty_rate_percent) : undefined,
-        allocation_order: formData.allocation_order,
-      });
+      await create.mutateAsync(payload);
       showToast({ message: 'Loan product created.' });
       router.push('/loan-products');
     } catch (err) {
@@ -107,9 +122,9 @@ export default function NewLoanProductPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="interest_type">Interest Type *</Label>
-                <Select value={formData.interest_type} onValueChange={(v) => setFormData(prev => ({ ...prev, interest_type: v }))}>
-                  <SelectTrigger id="interest_type">
+                <Label htmlFor="interestType">Interest Type *</Label>
+                <Select value={formData.interestType} onValueChange={(v) => setFormData(prev => ({ ...prev, interestType: v }))}>
+                  <SelectTrigger id="interestType">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -120,22 +135,22 @@ export default function NewLoanProductPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="annual_rate">Annual Rate (%) *</Label>
+                <Label htmlFor="annualRate">Annual Rate (%) *</Label>
                 <Input
-                  id="annual_rate"
+                  id="annualRate"
                   type="number"
                   step="0.01"
                   inputMode="decimal"
-                  value={formData.annual_rate}
-                  onChange={(e) => setFormData(prev => ({ ...prev, annual_rate: e.target.value }))}
+                  value={formData.annualRate}
+                  onChange={(e) => setFormData(prev => ({ ...prev, annualRate: e.target.value }))}
                   placeholder="e.g., 24.00"
                 />
                 <div className="rounded-md bg-muted/50 px-3 py-2 text-sm">
                   <span className="text-muted-foreground">Periodic Rate: </span>
-                  {formData.annual_rate && parseFloat(formData.annual_rate) > 0 ? (
+                  {formData.annualRate && parseFloat(formData.annualRate) > 0 ? (
                     <span className="font-medium text-foreground">
                       {(() => {
-                        const periodic = calculatePeriodicRate(parseFloat(formData.annual_rate), formData.frequency);
+                        const periodic = calculatePeriodicRate(parseFloat(formData.annualRate), formData.repaymentFrequency);
                         return `${periodic.formatted}% ${periodic.labelLong}`;
                       })()}
                     </span>
@@ -146,9 +161,9 @@ export default function NewLoanProductPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="frequency">Repayment Frequency *</Label>
-                <Select value={formData.frequency} onValueChange={(v) => setFormData(prev => ({ ...prev, frequency: v }))}>
-                  <SelectTrigger id="frequency">
+                <Label htmlFor="repaymentFrequency">Repayment Frequency *</Label>
+                <Select value={formData.repaymentFrequency} onValueChange={(v) => setFormData(prev => ({ ...prev, repaymentFrequency: v }))}>
+                  <SelectTrigger id="repaymentFrequency">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -160,85 +175,85 @@ export default function NewLoanProductPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="min_principal">Min Principal (Rs) *</Label>
+                <Label htmlFor="minPrincipal">Min Principal (Rs) *</Label>
                 <Input
-                  id="min_principal"
+                  id="minPrincipal"
                   type="number"
                   inputMode="numeric"
-                  value={formData.min_principal}
-                  onChange={(e) => setFormData(prev => ({ ...prev, min_principal: e.target.value }))}
+                  value={formData.minPrincipal}
+                  onChange={(e) => setFormData(prev => ({ ...prev, minPrincipal: e.target.value }))}
                   placeholder="e.g., 5000"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="max_principal">Max Principal (Rs) *</Label>
+                <Label htmlFor="maxPrincipal">Max Principal (Rs) *</Label>
                 <Input
-                  id="max_principal"
+                  id="maxPrincipal"
                   type="number"
                   inputMode="numeric"
-                  value={formData.max_principal}
-                  onChange={(e) => setFormData(prev => ({ ...prev, max_principal: e.target.value }))}
+                  value={formData.maxPrincipal}
+                  onChange={(e) => setFormData(prev => ({ ...prev, maxPrincipal: e.target.value }))}
                   placeholder="e.g., 100000"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="min_tenure_months">Min Tenure (months) *</Label>
+                <Label htmlFor="minTenureMonths">Min Tenure (months) *</Label>
                 <Input
-                  id="min_tenure_months"
+                  id="minTenureMonths"
                   type="number"
                   inputMode="numeric"
-                  value={formData.min_tenure_months}
-                  onChange={(e) => setFormData(prev => ({ ...prev, min_tenure_months: e.target.value }))}
+                  value={formData.minTenureMonths}
+                  onChange={(e) => setFormData(prev => ({ ...prev, minTenureMonths: e.target.value }))}
                   placeholder="e.g., 3"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="max_tenure_months">Max Tenure (months) *</Label>
+                <Label htmlFor="maxTenureMonths">Max Tenure (months) *</Label>
                 <Input
-                  id="max_tenure_months"
+                  id="maxTenureMonths"
                   type="number"
                   inputMode="numeric"
-                  value={formData.max_tenure_months}
-                  onChange={(e) => setFormData(prev => ({ ...prev, max_tenure_months: e.target.value }))}
+                  value={formData.maxTenureMonths}
+                  onChange={(e) => setFormData(prev => ({ ...prev, maxTenureMonths: e.target.value }))}
                   placeholder="e.g., 24"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="processing_fee_percent">Processing Fee (%)</Label>
+                <Label htmlFor="processingFeePercent">Processing Fee (%)</Label>
                 <Input
-                  id="processing_fee_percent"
+                  id="processingFeePercent"
                   type="number"
                   step="0.01"
                   inputMode="decimal"
-                  value={formData.processing_fee_percent}
-                  onChange={(e) => setFormData(prev => ({ ...prev, processing_fee_percent: e.target.value }))}
+                  value={formData.processingFeePercent}
+                  onChange={(e) => setFormData(prev => ({ ...prev, processingFeePercent: e.target.value }))}
                   placeholder="e.g., 2.00"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="penalty_rate_percent">Penalty Rate (%)</Label>
+                <Label htmlFor="penaltyRatePercent">Penalty Rate (%)</Label>
                 <Input
-                  id="penalty_rate_percent"
+                  id="penaltyRatePercent"
                   type="number"
                   step="0.01"
                   inputMode="decimal"
-                  value={formData.penalty_rate_percent}
-                  onChange={(e) => setFormData(prev => ({ ...prev, penalty_rate_percent: e.target.value }))}
+                  value={formData.penaltyRatePercent}
+                  onChange={(e) => setFormData(prev => ({ ...prev, penaltyRatePercent: e.target.value }))}
                   placeholder="e.g., 2.00"
                 />
               </div>
 
               <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="allocation_order">Allocation Order</Label>
+                <Label htmlFor="allocationOrder">Allocation Order</Label>
                 <Input
-                  id="allocation_order"
-                  value={formData.allocation_order}
-                  onChange={(e) => setFormData(prev => ({ ...prev, allocation_order: e.target.value }))}
+                  id="allocationOrder"
+                  value={formData.allocationOrder}
+                  onChange={(e) => setFormData(prev => ({ ...prev, allocationOrder: e.target.value }))}
                   placeholder="penalty,interest,principal"
                 />
                 <p className="text-xs text-muted-foreground">

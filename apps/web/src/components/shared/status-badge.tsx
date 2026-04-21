@@ -81,7 +81,7 @@ const PRODUCT_STATUS_MAP: Record<string, StatusVariant> = {
 const GROUP_STATUS_MAP: Record<string, StatusVariant> = {
   active: 'success',
   inactive: 'neutral',
-  disbanded: 'danger',
+  dissolved: 'danger',
 };
 
 /** Maps notification statuses to visual variants */
