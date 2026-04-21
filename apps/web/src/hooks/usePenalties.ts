@@ -30,8 +30,8 @@ export function usePenalties(params: { loanId: string }) {
 export function useWaivePenalty() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, reason, approver }: { id: string; reason: string; approver?: string }) =>
-      apiClient.post(`/penalties/${id}/waive`, { reason, approver }),
+    mutationFn: ({ id, reason, approverId }: { id: string; reason: string; approverId: string }) =>
+      apiClient.post(`/penalties/${id}/waive`, { reason, approverId }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['penalties'] });
       qc.invalidateQueries({ queryKey: ['loans'] });

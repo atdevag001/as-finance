@@ -7,6 +7,7 @@ import { useLoan, useLoanAction } from '@/hooks/useLoans';
 import { useCollections, type Collection } from '@/hooks/useCollections';
 import { useReceipts } from '@/hooks/useReceipts';
 import { usePenalties, useWaivePenalty, type Penalty } from '@/hooks/usePenalties';
+import { useUsers } from '@/hooks/useUsers';
 import { useGenerateForeclosureQuote, useExecuteForeclosure, usePendingForeclosure, type ForeclosureQuote } from '@/hooks/useForeclosures';
 import { useToast } from '@/providers/toast-provider';
 import {
@@ -49,6 +50,7 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
   const generateQuote = useGenerateForeclosureQuote();
   const executeForeclosure = useExecuteForeclosure();
   const { data: pendingForeclosure } = usePendingForeclosure(id, !!loan && ['active', 'overdue'].includes(loan.status));
+  const { data: usersData } = useUsers();
   const { showToast } = useToast();
 
   // Status history query
@@ -79,6 +81,7 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
   const [waivePenaltyOpen, setWaivePenaltyOpen] = useState(false);
   const [selectedPenalty, setSelectedPenalty] = useState<Penalty | null>(null);
   const [waiveReason, setWaiveReason] = useState('');
+  const [waiveApproverId, setWaiveApproverId] = useState('');
 
   // Reversal state
   const [reversalCollection, setReversalCollection] = useState<Collection | null>(null);
@@ -203,13 +206,14 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
   }
 
   async function handleWaivePenalty() {
-    if (!selectedPenalty || waiveReason.length < 10) return;
+    if (!selectedPenalty || waiveReason.length < 10 || !waiveApproverId) return;
     setActionError(null);
     try {
-      await waivePenalty.mutateAsync({ id: selectedPenalty.id, reason: waiveReason });
+      await waivePenalty.mutateAsync({ id: selectedPenalty.id, reason: waiveReason, approverId: waiveApproverId });
       setWaivePenaltyOpen(false);
       setSelectedPenalty(null);
       setWaiveReason('');
+      setWaiveApproverId('');
       showToast({ message: 'Penalty waived successfully' });
     } catch (err) {
       setActionError((err as Error).message || 'Failed to waive penalty');
@@ -837,6 +841,7 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
           if (!open) {
             setSelectedPenalty(null);
             setWaiveReason('');
+            setWaiveApproverId('');
           }
         }}
         title="Waive Penalty"
@@ -845,18 +850,38 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
         loading={waivePenalty.isPending}
         onConfirm={handleWaivePenalty}
       >
-        <div className="space-y-2 py-2">
-          <Label htmlFor="waive-reason">Reason (min 10 characters)</Label>
-          <Input
-            id="waive-reason"
-            placeholder="Enter reason for waiving penalty…"
-            value={waiveReason}
-            onChange={(e) => setWaiveReason(e.target.value)}
-            disabled={waivePenalty.isPending}
-          />
-          {waiveReason.length > 0 && waiveReason.length < 10 && (
-            <p className="text-xs text-destructive">{10 - waiveReason.length} more characters required</p>
-          )}
+        <div className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label htmlFor="waive-reason">Reason (min 10 characters)</Label>
+            <Input
+              id="waive-reason"
+              placeholder="Enter reason for waiving penalty…"
+              value={waiveReason}
+              onChange={(e) => setWaiveReason(e.target.value)}
+              disabled={waivePenalty.isPending}
+            />
+            {waiveReason.length > 0 && waiveReason.length < 10 && (
+              <p className="text-xs text-destructive">{10 - waiveReason.length} more characters required</p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="waive-approver">Approver</Label>
+            <Select value={waiveApproverId} onValueChange={setWaiveApproverId} disabled={waivePenalty.isPending}>
+              <SelectTrigger id="waive-approver">
+                <SelectValue placeholder="Select approver…" />
+              </SelectTrigger>
+              <SelectContent>
+                {usersData?.data?.filter(u => u.is_active).map((user) => (
+                  <SelectItem key={user.id} value={user.id}>
+                    {user.full_name} ({user.role.replace(/_/g, ' ')})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {!waiveApproverId && (
+              <p className="text-xs text-muted-foreground">Required: Select user authorizing this waiver</p>
+            )}
+          </div>
         </div>
       </ConfirmDialog>
 

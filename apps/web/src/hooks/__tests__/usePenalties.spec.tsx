@@ -174,7 +174,7 @@ describe('usePenalties Hook', () => {
   });
 
   describe('useWaivePenalty', () => {
-    it('waives a penalty with reason', async () => {
+    it('waives a penalty with reason and approverId', async () => {
       mockPost.mockResolvedValueOnce({ id: 'pen-1', status: 'waived' });
 
       const { result } = renderHook(() => useWaivePenalty(), { wrapper });
@@ -182,17 +182,18 @@ describe('usePenalties Hook', () => {
       result.current.mutate({
         id: 'pen-1',
         reason: 'Customer facing financial hardship',
+        approverId: 'manager-1',
       });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(mockPost).toHaveBeenCalledWith('/penalties/pen-1/waive', {
         reason: 'Customer facing financial hardship',
-        approver: undefined,
+        approverId: 'manager-1',
       });
     });
 
-    it('waives a penalty with approver', async () => {
+    it('waives a penalty with approverId', async () => {
       mockPost.mockResolvedValueOnce({ id: 'pen-1', status: 'waived' });
 
       const { result } = renderHook(() => useWaivePenalty(), { wrapper });
@@ -200,14 +201,14 @@ describe('usePenalties Hook', () => {
       result.current.mutate({
         id: 'pen-1',
         reason: 'Manager approved waiver',
-        approver: 'manager-1',
+        approverId: 'manager-1',
       });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(mockPost).toHaveBeenCalledWith('/penalties/pen-1/waive', {
         reason: 'Manager approved waiver',
-        approver: 'manager-1',
+        approverId: 'manager-1',
       });
     });
 
@@ -218,7 +219,7 @@ describe('usePenalties Hook', () => {
 
       const { result } = renderHook(() => useWaivePenalty(), { wrapper });
 
-      result.current.mutate({ id: 'pen-1', reason: 'Test waiver' });
+      result.current.mutate({ id: 'pen-1', reason: 'Test waiver', approverId: 'manager-1' });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
@@ -233,7 +234,7 @@ describe('usePenalties Hook', () => {
 
       const { result } = renderHook(() => useWaivePenalty(), { wrapper });
 
-      result.current.mutate({ id: 'invalid-pen', reason: 'Test' });
+      result.current.mutate({ id: 'invalid-pen', reason: 'Test', approverId: 'manager-1' });
 
       await waitFor(() => expect(result.current.isError).toBe(true));
 
@@ -247,7 +248,7 @@ describe('usePenalties Hook', () => {
 
       const { result } = renderHook(() => useWaivePenalty(), { wrapper });
 
-      result.current.mutate({ id: 'pen-already-waived', reason: 'Test' });
+      result.current.mutate({ id: 'pen-already-waived', reason: 'Test', approverId: 'manager-1' });
 
       await waitFor(() => expect(result.current.isError).toBe(true));
 
@@ -261,7 +262,7 @@ describe('usePenalties Hook', () => {
 
       const { result } = renderHook(() => useWaivePenalty(), { wrapper });
 
-      result.current.mutate({ id: 'pen-1', reason: 'Test' });
+      result.current.mutate({ id: 'pen-1', reason: 'Test', approverId: 'manager-1' });
 
       // Eventually succeeds even with slow response
       await waitFor(() => expect(result.current.isSuccess).toBe(true), { timeout: 2000 });
@@ -274,7 +275,7 @@ describe('usePenalties Hook', () => {
 
       const { result } = renderHook(() => useWaivePenalty(), { wrapper });
 
-      result.current.mutate({ id: 'pen-1', reason: 'Test' });
+      result.current.mutate({ id: 'pen-1', reason: 'Test', approverId: 'manager-1' });
 
       await waitFor(() => expect(result.current.isError).toBe(true));
 
@@ -294,7 +295,7 @@ describe('usePenalties Hook', () => {
 
       const { result } = renderHook(() => useWaivePenalty(), { wrapper });
 
-      result.current.mutate({ id: 'pen-1', reason });
+      result.current.mutate({ id: 'pen-1', reason, approverId: 'manager-1' });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
