@@ -13,11 +13,14 @@ export function useCreateReversal() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: CreateReversalInput) =>
-      apiClient.post('/reversals', {
-        collectionId: data.collectionId,
-        reason: data.reason,
-        idempotencyKey: data.idempotencyKey,
-      }),
+      apiClient.post(
+        '/reversals',
+        {
+          collectionId: data.collectionId,
+          reason: data.reason,
+        },
+        { headers: { 'X-Idempotency-Key': data.idempotencyKey } }
+      ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['collections'] });
       qc.invalidateQueries({ queryKey: ['loans'] });

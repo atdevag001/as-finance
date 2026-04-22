@@ -61,54 +61,58 @@ export default function LoanProductsPage() {
         <>
           {/* Mobile Card View */}
           <div className="space-y-3 lg:hidden">
-            {data.data.map((p) => (
-              <div key={p.id} className="rounded-lg border p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <Link
-                      href={`/loan-products/${p.id}`}
-                      className="font-medium text-primary hover:underline"
-                    >
-                      {p.name}
-                    </Link>
-                    <span className="ml-1 text-xs text-muted-foreground">v{p.version}</span>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {p.interest_type?.replace(/_/g, ' ') ?? '-'} @ {((p.annual_rate ?? 0) / 100).toFixed(2)}% p.a.
-                      {(() => {
-                        const periodic = calculatePeriodicRate((p.annual_rate ?? 0) / 100, p.frequency);
-                        return <span className="ml-1">({periodic.formatted}% {periodic.label})</span>;
-                      })()}
-                    </p>
-                  </div>
-                  <StatusBadge status={p.is_active ? 'active' : 'inactive'} type="product" />
-                </div>
-                <div className="mt-3 text-sm text-muted-foreground">
-                  <span className="capitalize">{p.frequency ?? '-'}</span>
-                  <span className="mx-2">•</span>
-                  <MoneyDisplay paise={p.min_principal_paise ?? 0} /> – <MoneyDisplay paise={p.max_principal_paise ?? 0} />
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <PermissionGate permission="loan_product.update">
-                    <Button variant="outline" size="sm" className="min-h-[40px] flex-1" asChild>
-                      <Link href={`/loan-products/${p.id}/edit`}>Edit</Link>
-                    </Button>
-                  </PermissionGate>
-                  {p.is_active && (
-                    <PermissionGate permission="loan_product.deactivate">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="min-h-[40px] flex-1"
-                        onClick={() => setDeactivateProduct(p)}
-                        disabled={deactivate.isPending}
+            {data.data.map((p) => {
+              const v = p.current_version;
+              const annualRate = (v?.annual_rate_bps ?? 0) / 100;
+              return (
+                <div key={p.id} className="rounded-lg border p-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <Link
+                        href={`/loan-products/${p.id}`}
+                        className="font-medium text-primary hover:underline"
                       >
-                        Deactivate
+                        {p.name}
+                      </Link>
+                      <span className="ml-1 text-xs text-muted-foreground">v{v?.version_number ?? 1}</span>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {v?.interest_type?.replace(/_/g, ' ') ?? '-'} @ {annualRate.toFixed(2)}% p.a.
+                        {(() => {
+                          const periodic = calculatePeriodicRate(annualRate, v?.repayment_frequency);
+                          return <span className="ml-1">({periodic.formatted}% {periodic.label})</span>;
+                        })()}
+                      </p>
+                    </div>
+                    <StatusBadge status={p.is_active ? 'active' : 'inactive'} type="product" />
+                  </div>
+                  <div className="mt-3 text-sm text-muted-foreground">
+                    <span className="capitalize">{v?.repayment_frequency ?? '-'}</span>
+                    <span className="mx-2">•</span>
+                    <MoneyDisplay paise={v?.min_principal_paise ?? 0} /> – <MoneyDisplay paise={v?.max_principal_paise ?? 0} />
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <PermissionGate permission="loan_product.update">
+                      <Button variant="outline" size="sm" className="min-h-[40px] flex-1" asChild>
+                        <Link href={`/loan-products/${p.id}/edit`}>Edit</Link>
                       </Button>
                     </PermissionGate>
-                  )}
+                    {p.is_active && (
+                      <PermissionGate permission="loan_product.deactivate">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="min-h-[40px] flex-1"
+                          onClick={() => setDeactivateProduct(p)}
+                          disabled={deactivate.isPending}
+                        >
+                          Deactivate
+                        </Button>
+                      </PermissionGate>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
             {data.data.length === 0 && (
               <div className="py-8 text-center text-muted-foreground">
                 No loan products found.
@@ -132,57 +136,61 @@ export default function LoanProductsPage() {
                 </tr>
               </thead>
               <tbody>
-                {data.data.map((p) => (
-                  <tr key={p.id} className="border-b last:border-0 hover:bg-muted/30">
-                    <td className="px-4 py-3">
-                      <Link
-                        href={`/loan-products/${p.id}`}
-                        className="font-medium text-primary hover:underline"
-                      >
-                        {p.name}
-                      </Link>
-                      <span className="ml-1 text-xs text-muted-foreground">v{p.version}</span>
-                    </td>
-                    <td className="px-4 py-3 capitalize">
-                      {p.interest_type?.replace(/_/g, ' ') ?? '-'}
-                    </td>
-                    <td className="px-4 py-3 text-right">{((p.annual_rate ?? 0) / 100).toFixed(2)}</td>
-                    <td className="px-4 py-3 text-right">
-                      {(() => {
-                        const periodic = calculatePeriodicRate((p.annual_rate ?? 0) / 100, p.frequency);
-                        return `${periodic.formatted}% ${periodic.label}`;
-                      })()}
-                    </td>
-                    <td className="px-4 py-3 capitalize">{p.frequency ?? '-'}</td>
-                    <td className="px-4 py-3 text-right">
-                      <MoneyDisplay paise={p.min_principal_paise ?? 0} /> – <MoneyDisplay paise={p.max_principal_paise ?? 0} />
-                    </td>
-                    <td className="px-4 py-3">
-                      <StatusBadge status={p.is_active ? 'active' : 'inactive'} type="product" />
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex justify-end gap-2">
-                        <PermissionGate permission="loan_product.update">
-                          <Button variant="outline" size="sm" asChild>
-                            <Link href={`/loan-products/${p.id}/edit`}>Edit</Link>
-                          </Button>
-                        </PermissionGate>
-                        {p.is_active && (
-                          <PermissionGate permission="loan_product.deactivate">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setDeactivateProduct(p)}
-                              disabled={deactivate.isPending}
-                            >
-                              Deactivate
+                {data.data.map((p) => {
+                  const v = p.current_version;
+                  const annualRate = (v?.annual_rate_bps ?? 0) / 100;
+                  return (
+                    <tr key={p.id} className="border-b last:border-0 hover:bg-muted/30">
+                      <td className="px-4 py-3">
+                        <Link
+                          href={`/loan-products/${p.id}`}
+                          className="font-medium text-primary hover:underline"
+                        >
+                          {p.name}
+                        </Link>
+                        <span className="ml-1 text-xs text-muted-foreground">v{v?.version_number ?? 1}</span>
+                      </td>
+                      <td className="px-4 py-3 capitalize">
+                        {v?.interest_type?.replace(/_/g, ' ') ?? '-'}
+                      </td>
+                      <td className="px-4 py-3 text-right">{annualRate.toFixed(2)}</td>
+                      <td className="px-4 py-3 text-right">
+                        {(() => {
+                          const periodic = calculatePeriodicRate(annualRate, v?.repayment_frequency);
+                          return `${periodic.formatted}% ${periodic.label}`;
+                        })()}
+                      </td>
+                      <td className="px-4 py-3 capitalize">{v?.repayment_frequency ?? '-'}</td>
+                      <td className="px-4 py-3 text-right">
+                        <MoneyDisplay paise={v?.min_principal_paise ?? 0} /> – <MoneyDisplay paise={v?.max_principal_paise ?? 0} />
+                      </td>
+                      <td className="px-4 py-3">
+                        <StatusBadge status={p.is_active ? 'active' : 'inactive'} type="product" />
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex justify-end gap-2">
+                          <PermissionGate permission="loan_product.update">
+                            <Button variant="outline" size="sm" asChild>
+                              <Link href={`/loan-products/${p.id}/edit`}>Edit</Link>
                             </Button>
                           </PermissionGate>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                          {p.is_active && (
+                            <PermissionGate permission="loan_product.deactivate">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setDeactivateProduct(p)}
+                                disabled={deactivate.isPending}
+                              >
+                                Deactivate
+                              </Button>
+                            </PermissionGate>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
                 {data.data.length === 0 && (
                   <tr>
                     <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">

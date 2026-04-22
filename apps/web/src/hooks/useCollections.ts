@@ -25,9 +25,9 @@ export interface Receipt {
   customer_name: string;
   loan_number: string;
   amount_paise: number;
-  principal_paise: number;
-  interest_paise: number;
-  penalty_paise: number;
+  principal_component_paise: number;
+  interest_component_paise: number;
+  penalty_component_paise: number;
   outstanding_after_paise: number;
   officer_name: string;
   payment_mode: string;

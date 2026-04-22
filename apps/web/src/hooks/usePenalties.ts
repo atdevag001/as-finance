@@ -7,15 +7,23 @@ export interface Penalty {
   id: string;
   loan_id: string;
   installment_id?: string;
-  installment_number?: number;
   amount_paise: number;
-  period: string;
-  status: string;
-  posted_date: string;
-  waived_at?: string;
+  penalty_period: string;
+  calculation_details?: Record<string, unknown>;
+  is_paid: boolean;
+  is_waived: boolean;
   waived_by?: string;
-  waive_reason?: string;
+  waiver_approved_by?: string;
+  waived_reason?: string;
+  journal_entry_id?: string;
   created_at: string;
+}
+
+/** Derive display status from is_paid/is_waived booleans */
+export function getPenaltyStatus(penalty: Penalty): 'paid' | 'waived' | 'pending' {
+  if (penalty.is_paid) return 'paid';
+  if (penalty.is_waived) return 'waived';
+  return 'pending';
 }
 
 export function usePenalties(params: { loanId: string }) {

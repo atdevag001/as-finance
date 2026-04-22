@@ -53,6 +53,17 @@ export function useGroups(params: { page?: number } = {}) {
   });
 }
 
+export function useGroupsList() {
+  return useQuery<Group[]>({
+    queryKey: ['groups', 'list'],
+    queryFn: async () => {
+      const result = await apiClient.get<PaginatedResult<Group> | Group[]>('/groups?status=active');
+      const groups = Array.isArray(result) ? result : result.data ?? [];
+      return groups.filter(g => g.status === 'active');
+    },
+  });
+}
+
 export function useGroup(id: string) {
   return useQuery<GroupDetail>({
     queryKey: ['groups', id],

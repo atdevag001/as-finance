@@ -385,6 +385,9 @@ export class CashbookService {
       rent: '5002',
       travel: '5003',
       office: '5004',
+      office_supplies: '5004',
+      utilities: '5005',
+      maintenance: '5006',
       other: '5099',
     };
     return mapping[category.toLowerCase()] ?? '5099';

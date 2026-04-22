@@ -5,14 +5,8 @@ import { apiClient } from '@/lib/api-client';
 
 export interface Setting {
   key: string;
-  value: string;
+  value: unknown;
   description?: string;
-}
-
-export interface Holiday {
-  id: string;
-  date: string;
-  description: string;
 }
 
 export function useSettings() {
@@ -23,39 +17,28 @@ export function useSettings() {
 }
 
 export function useHolidays() {
-  return useQuery<Holiday[]>({
+  return useQuery<string[]>({
     queryKey: ['settings', 'holidays'],
     queryFn: () => apiClient.get('/settings/holidays'),
   });
 }
 
-export function useUpdateSettings() {
+export function useUpdateSetting() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: Record<string, string>) =>
-      apiClient.patch('/settings', data),
+    mutationFn: ({ key, value, description }: { key: string; value: unknown; description?: string }) =>
+      apiClient.patch(`/settings/${key}`, { value, description }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['settings'] });
     },
   });
 }
 
-export function useCreateHoliday() {
+export function useSetHolidays() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { date: string; description: string }) =>
-      apiClient.post('/settings/holidays', data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['settings', 'holidays'] });
-    },
-  });
-}
-
-export function useDeleteHoliday() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) =>
-      apiClient.delete(`/settings/holidays/${id}`),
+    mutationFn: (holidays: string[]) =>
+      apiClient.put('/settings/holidays', { holidays }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['settings', 'holidays'] });
     },

@@ -18,24 +18,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { calculatePeriodicRate } from '@/lib/utils';
 
-interface LoanProductDetail extends LoanProduct {
-  current_version?: {
-    id: string;
-    interest_type: 'flat' | 'reducing_balance';
-    annual_rate_bps: number;
-    repayment_frequency: 'daily' | 'weekly' | 'monthly';
-    min_principal_paise: number;
-    max_principal_paise: number;
-    min_tenure_months: number;
-    max_tenure_months: number;
-    processing_fee_type?: string | null;
-    processing_fee_value?: number | null;
-    penalty_type?: string | null;
-    penalty_value?: number | null;
-    allocation_order?: string[];
-  };
-}
-
 export default function EditLoanProductPage() {
   const { user } = useAuth();
   const role = user?.role ?? '';
@@ -54,7 +36,7 @@ function EditLoanProductContent() {
   const update = useUpdateLoanProduct();
   const { showToast } = useToast();
 
-  const { data: product, isLoading, error: fetchError } = useQuery<LoanProductDetail>({
+  const { data: product, isLoading, error: fetchError } = useQuery<LoanProduct>({
     queryKey: ['loan-product', productId],
     queryFn: () => apiClient.get(`/loan-products/${productId}`),
     enabled: !!productId,

@@ -130,8 +130,8 @@ function AccountingContent() {
                         {je.lines.map((l, i) => (
                           <tr key={i} className="border-b last:border-0">
                             <td className="py-1">{l.account.name}</td>
-                            <td className="py-1 text-right">{l.debitPaise > 0 ? <MoneyDisplay paise={l.debitPaise} /> : ''}</td>
-                            <td className="py-1 text-right">{l.creditPaise > 0 ? <MoneyDisplay paise={l.creditPaise} /> : ''}</td>
+                            <td className="py-1 text-right">{l.debit_paise > 0 ? <MoneyDisplay paise={l.debit_paise} /> : ''}</td>
+                            <td className="py-1 text-right">{l.credit_paise > 0 ? <MoneyDisplay paise={l.credit_paise} /> : ''}</td>
                           </tr>
                         ))}
                       </tbody>

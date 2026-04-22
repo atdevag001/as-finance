@@ -2,7 +2,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { usePenalties, useWaivePenalty } from '../usePenalties';
+import { usePenalties, useWaivePenalty, getPenaltyStatus } from '../usePenalties';
 import type { ReactNode } from 'react';
 
 // Mock the API client
@@ -53,36 +53,33 @@ describe('usePenalties Hook', () => {
         id: 'pen-1',
         loan_id: 'loan-1',
         installment_id: 'inst-1',
-        installment_number: 1,
         amount_paise: 5000,
-        period: '2024-01',
-        status: 'active',
-        posted_date: '2024-01-15',
+        penalty_period: '2024-01',
+        is_paid: false,
+        is_waived: false,
         created_at: '2024-01-15T10:00:00.000Z',
       },
       {
         id: 'pen-2',
         loan_id: 'loan-1',
         installment_id: 'inst-2',
-        installment_number: 2,
         amount_paise: 7500,
-        period: '2024-02',
-        status: 'active',
-        posted_date: '2024-02-15',
+        penalty_period: '2024-02',
+        is_paid: false,
+        is_waived: false,
         created_at: '2024-02-15T10:00:00.000Z',
       },
       {
         id: 'pen-3',
         loan_id: 'loan-1',
         installment_id: 'inst-1',
-        installment_number: 1,
         amount_paise: 5000,
-        period: '2024-01',
-        status: 'waived',
-        posted_date: '2024-01-15',
-        waived_at: '2024-01-20T10:00:00.000Z',
-        waived_by: 'manager-1',
-        waive_reason: 'Customer hardship',
+        penalty_period: '2024-01',
+        is_paid: false,
+        is_waived: true,
+        waived_by: 'user-1',
+        waiver_approved_by: 'manager-1',
+        waived_reason: 'Customer hardship',
         created_at: '2024-01-15T10:00:00.000Z',
       },
     ];
@@ -138,10 +135,10 @@ describe('usePenalties Hook', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      const waivedPenalty = result.current.data?.find(p => p.status === 'waived');
-      expect(waivedPenalty?.waived_at).toBeDefined();
+      const waivedPenalty = result.current.data?.find(p => p.is_waived);
       expect(waivedPenalty?.waived_by).toBeDefined();
-      expect(waivedPenalty?.waive_reason).toBeDefined();
+      expect(waivedPenalty?.waiver_approved_by).toBeDefined();
+      expect(waivedPenalty?.waived_reason).toBeDefined();
     });
 
     it('penalty amounts are in paise', async () => {
@@ -157,18 +154,18 @@ describe('usePenalties Hook', () => {
     });
 
     const statusTests = [
-      { status: 'active', count: 2 },
-      { status: 'waived', count: 1 },
+      { status: 'pending', count: 2, filter: (p: { is_paid: boolean; is_waived: boolean }) => !p.is_paid && !p.is_waived },
+      { status: 'waived', count: 1, filter: (p: { is_waived: boolean }) => p.is_waived },
     ];
 
-    it.each(statusTests)('includes penalties with status=$status', async ({ status, count }) => {
+    it.each(statusTests)('includes penalties with status=$status', async ({ count, filter }) => {
       mockGet.mockResolvedValueOnce(mockPenaltiesList);
 
       const { result } = renderHook(() => usePenalties({ loanId: 'loan-1' }), { wrapper });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      const matchingPenalties = result.current.data?.filter(p => p.status === status);
+      const matchingPenalties = result.current.data?.filter(filter);
       expect(matchingPenalties?.length).toBe(count);
     });
   });

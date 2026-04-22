@@ -3,33 +3,38 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 
-export interface LoanProduct {
+export interface LoanProductVersion {
   id: string;
-  name: string;
-  current_version_id: string;
-  version: number;
+  product_id: string;
+  version_number: number;
   interest_type: 'flat' | 'reducing_balance';
-  annual_rate: number;
+  annual_rate_bps: number;
   min_principal_paise: number;
   max_principal_paise: number;
   min_tenure_months: number;
   max_tenure_months: number;
-  frequency: 'daily' | 'weekly' | 'monthly';
+  repayment_frequency: 'daily' | 'weekly' | 'monthly';
+  processing_fee_type?: string | null;
+  processing_fee_value?: number | null;
+  penalty_grace_days: number;
+  penalty_type?: string | null;
+  penalty_value?: number | null;
+  penalty_frequency?: string | null;
+  max_concurrent_loans: number;
+  allocation_order: string[];
   is_active: boolean;
-  processing_fee_percent?: number;
-  penalty_rate_percent?: number;
-  allocation_order?: string;
-  created_at?: string;
-  current_version?: {
-    id: string;
-    interest_type: 'flat' | 'reducing_balance';
-    annual_rate_bps: number;
-    repayment_frequency: 'daily' | 'weekly' | 'monthly';
-    min_principal_paise: number;
-    max_principal_paise: number;
-    min_tenure_months: number;
-    max_tenure_months: number;
-  };
+  created_at: string;
+}
+
+export interface LoanProduct {
+  id: string;
+  name: string;
+  is_active: boolean;
+  current_version_id: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  current_version?: LoanProductVersion | null;
 }
 
 interface PaginatedResult<T> {

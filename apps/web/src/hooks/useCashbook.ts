@@ -16,12 +16,12 @@ export interface CashbookSummary {
 export interface CashHandover {
   id: string;
   collection_officer_id: string;
-  officer_name: string;
+  collection_officer: { id: string; full_name: string };
+  receiving_officer: { id: string; full_name: string };
   total_amount_paise: number;
-  receiving_officer_id: string;
   handover_date: string;
   verification_status: 'pending' | 'verified' | 'discrepancy';
-  verified_by?: string;
+  verified_at?: string;
   created_at: string;
 }
 

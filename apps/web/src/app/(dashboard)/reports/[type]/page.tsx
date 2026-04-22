@@ -70,7 +70,9 @@ function ReportDetailContent() {
   async function handleExport(format: 'pdf' | 'excel') {
     setExporting(true);
     try {
-      const qs = new URLSearchParams({ startDate, endDate, format }).toString();
+      // Backend expects 'xlsx' not 'excel'
+      const exportFormat = format === 'excel' ? 'xlsx' : format;
+      const qs = new URLSearchParams({ startDate, endDate, format: exportFormat }).toString();
       const blob = await apiClient.get<Blob>(`/reports/${type}/export?${qs}`);
       const ext = format === 'pdf' ? 'pdf' : 'xlsx';
       const url = URL.createObjectURL(blob as unknown as Blob);

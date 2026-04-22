@@ -56,9 +56,9 @@ describe('useReceipts Hook', () => {
           customer_name: 'John Doe',
           loan_number: 'LN-2024-001',
           amount_paise: 466666,
-          principal_paise: 350000,
-          interest_paise: 100000,
-          penalty_paise: 16666,
+          principal_component_paise: 350000,
+          interest_component_paise: 100000,
+          penalty_component_paise: 16666,
           outstanding_after_paise: 4533334,
           officer_name: 'Field Officer 1',
           payment_mode: 'cash',
@@ -73,9 +73,9 @@ describe('useReceipts Hook', () => {
           customer_name: 'Jane Smith',
           loan_number: 'LN-2024-002',
           amount_paise: 500000,
-          principal_paise: 400000,
-          interest_paise: 100000,
-          penalty_paise: 0,
+          principal_component_paise: 400000,
+          interest_component_paise: 100000,
+          penalty_component_paise: 0,
           outstanding_after_paise: 9500000,
           officer_name: 'Field Officer 2',
           payment_mode: 'upi',
@@ -147,9 +147,9 @@ describe('useReceipts Hook', () => {
         expect(receipt.customer_name).toBeDefined();
         expect(receipt.loan_number).toBeDefined();
         expect(receipt.amount_paise).toBeDefined();
-        expect(receipt.principal_paise).toBeDefined();
-        expect(receipt.interest_paise).toBeDefined();
-        expect(receipt.penalty_paise).toBeDefined();
+        expect(receipt.principal_component_paise).toBeDefined();
+        expect(receipt.interest_component_paise).toBeDefined();
+        expect(receipt.penalty_component_paise).toBeDefined();
         expect(receipt.outstanding_after_paise).toBeDefined();
         expect(receipt.officer_name).toBeDefined();
         expect(receipt.payment_mode).toBeDefined();
@@ -167,7 +167,7 @@ describe('useReceipts Hook', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       result.current.data?.data.forEach(receipt => {
-        const allocationTotal = receipt.principal_paise + receipt.interest_paise + receipt.penalty_paise;
+        const allocationTotal = receipt.principal_component_paise + receipt.interest_component_paise + receipt.penalty_component_paise;
         expect(allocationTotal).toBe(receipt.amount_paise);
       });
     });
@@ -181,9 +181,9 @@ describe('useReceipts Hook', () => {
 
       result.current.data?.data.forEach(receipt => {
         expect(Number.isInteger(receipt.amount_paise)).toBe(true);
-        expect(Number.isInteger(receipt.principal_paise)).toBe(true);
-        expect(Number.isInteger(receipt.interest_paise)).toBe(true);
-        expect(Number.isInteger(receipt.penalty_paise)).toBe(true);
+        expect(Number.isInteger(receipt.principal_component_paise)).toBe(true);
+        expect(Number.isInteger(receipt.interest_component_paise)).toBe(true);
+        expect(Number.isInteger(receipt.penalty_component_paise)).toBe(true);
         expect(Number.isInteger(receipt.outstanding_after_paise)).toBe(true);
       });
     });
@@ -246,9 +246,9 @@ describe('useReceipts Hook', () => {
       customer_name: 'John Doe',
       loan_number: 'LN-2024-001',
       amount_paise: 466666,
-      principal_paise: 350000,
-      interest_paise: 100000,
-      penalty_paise: 16666,
+      principal_component_paise: 350000,
+      interest_component_paise: 100000,
+      penalty_component_paise: 16666,
       outstanding_after_paise: 4533334,
       officer_name: 'Field Officer 1',
       payment_mode: 'cash',
@@ -296,9 +296,9 @@ describe('useReceipts Hook', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       const receipt = result.current.data!;
-      expect(receipt.principal_paise).toBe(350000);
-      expect(receipt.interest_paise).toBe(100000);
-      expect(receipt.penalty_paise).toBe(16666);
+      expect(receipt.principal_component_paise).toBe(350000);
+      expect(receipt.interest_component_paise).toBe(100000);
+      expect(receipt.penalty_component_paise).toBe(16666);
     });
 
     it('returns 404 error when receipt not found', async () => {

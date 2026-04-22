@@ -15,7 +15,18 @@ export interface JournalEntry {
   entry_date: string;
   description: string;
   source_type: string;
-  lines: { account: { name: string }; debitPaise: number; creditPaise: number }[];
+  source_id: string;
+  total_debit_paise: number;
+  total_credit_paise: number;
+  created_by: string;
+  created_at: string;
+  lines: {
+    id: string;
+    account_id: string;
+    debit_paise: number;
+    credit_paise: number;
+    account: { id: string; code: string; name: string; category: string };
+  }[];
 }
 
 export interface TrialBalanceRow {
@@ -61,8 +72,37 @@ export function useDaybook(params: DateRangeParams = {}) {
   return useQuery<JournalEntry[]>({
     queryKey: ['accounting', 'daybook', params.startDate, params.endDate],
     queryFn: async () => {
-      const response = await apiClient.get<JournalEntry[]>(`/accounting/daybook${buildDateQuery(params)}`);
-      return response;
+      interface BackendJournalLine {
+        id: string;
+        account_id: string;
+        debit_paise: string | number;
+        credit_paise: string | number;
+        account: { id: string; code: string; name: string; category: string };
+      }
+      interface BackendJournalEntry {
+        id: string;
+        entry_date: string;
+        description: string;
+        source_type: string;
+        source_id: string;
+        total_debit_paise: string | number;
+        total_credit_paise: string | number;
+        created_by: string;
+        created_at: string;
+        lines: BackendJournalLine[];
+      }
+
+      const response = await apiClient.get<BackendJournalEntry[]>(`/accounting/daybook${buildDateQuery(params)}`);
+      return response.map((entry) => ({
+        ...entry,
+        total_debit_paise: Number(entry.total_debit_paise),
+        total_credit_paise: Number(entry.total_credit_paise),
+        lines: entry.lines.map((line) => ({
+          ...line,
+          debit_paise: Number(line.debit_paise),
+          credit_paise: Number(line.credit_paise),
+        })),
+      }));
     },
   });
 }

@@ -46,11 +46,11 @@ describe('useReports Hook', () => {
   });
 
   describe('useReport', () => {
+    // Mock data in BackendReportResponse format (what the API returns)
     const mockCollectionReport = {
-      type: 'collection',
-      label: 'Collection Report',
-      columns: ['date', 'loan_number', 'customer', 'amount', 'mode'],
-      rows: [
+      reportType: 'daily-collection',
+      generatedAt: '2024-01-16T10:00:00Z',
+      data: [
         { date: '2024-01-15', loan_number: 'LN-2024-001', customer: 'John Doe', amount: 50000, mode: 'cash' },
         { date: '2024-01-15', loan_number: 'LN-2024-002', customer: 'Jane Smith', amount: 75000, mode: 'upi' },
         { date: '2024-01-16', loan_number: 'LN-2024-001', customer: 'John Doe', amount: 50000, mode: 'cash' },
@@ -58,10 +58,9 @@ describe('useReports Hook', () => {
     };
 
     const mockOutstandingReport = {
-      type: 'outstanding',
-      label: 'Outstanding Report',
-      columns: ['loan_number', 'customer', 'principal', 'interest', 'penalty', 'total'],
-      rows: [
+      reportType: 'loan-portfolio',
+      generatedAt: '2024-01-16T10:00:00Z',
+      data: [
         { loan_number: 'LN-2024-001', customer: 'John Doe', principal: 400000, interest: 50000, penalty: 5000, total: 455000 },
         { loan_number: 'LN-2024-002', customer: 'Jane Smith', principal: 900000, interest: 100000, penalty: 0, total: 1000000 },
       ],
@@ -70,26 +69,27 @@ describe('useReports Hook', () => {
     it('fetches report by type', async () => {
       mockGet.mockResolvedValueOnce(mockCollectionReport);
 
-      const { result } = renderHook(() => useReport('collection'), { wrapper });
+      const { result } = renderHook(() => useReport('daily-collection'), { wrapper });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(mockGet).toHaveBeenCalledWith('/reports/collection');
-      expect(result.current.data).toEqual(mockCollectionReport);
+      expect(mockGet).toHaveBeenCalledWith('/reports/daily-collection');
+      expect(result.current.data?.type).toBe('daily-collection');
+      expect(result.current.data?.rows).toHaveLength(3);
     });
 
     it('fetches report with date range', async () => {
       mockGet.mockResolvedValueOnce(mockCollectionReport);
 
       const { result } = renderHook(
-        () => useReport('collection', { startDate: '2024-01-01', endDate: '2024-01-31' }),
+        () => useReport('daily-collection', { startDate: '2024-01-01', endDate: '2024-01-31' }),
         { wrapper }
       );
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(mockGet).toHaveBeenCalledWith(
-        '/reports/collection?startDate=2024-01-01&endDate=2024-01-31'
+        '/reports/daily-collection?startDate=2024-01-01&endDate=2024-01-31'
       );
     });
 
@@ -97,26 +97,26 @@ describe('useReports Hook', () => {
       mockGet.mockResolvedValueOnce(mockCollectionReport);
 
       const { result } = renderHook(
-        () => useReport('collection', { startDate: '2024-01-01' }),
+        () => useReport('daily-collection', { startDate: '2024-01-01' }),
         { wrapper }
       );
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(mockGet).toHaveBeenCalledWith('/reports/collection?startDate=2024-01-01');
+      expect(mockGet).toHaveBeenCalledWith('/reports/daily-collection?startDate=2024-01-01');
     });
 
     it('fetches report with only endDate', async () => {
       mockGet.mockResolvedValueOnce(mockCollectionReport);
 
       const { result } = renderHook(
-        () => useReport('collection', { endDate: '2024-01-31' }),
+        () => useReport('daily-collection', { endDate: '2024-01-31' }),
         { wrapper }
       );
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(mockGet).toHaveBeenCalledWith('/reports/collection?endDate=2024-01-31');
+      expect(mockGet).toHaveBeenCalledWith('/reports/daily-collection?endDate=2024-01-31');
     });
 
     it('does not fetch when type is empty', () => {
@@ -128,7 +128,7 @@ describe('useReports Hook', () => {
     it('returns report data structure', async () => {
       mockGet.mockResolvedValueOnce(mockCollectionReport);
 
-      const { result } = renderHook(() => useReport('collection'), { wrapper });
+      const { result } = renderHook(() => useReport('daily-collection'), { wrapper });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
@@ -144,7 +144,7 @@ describe('useReports Hook', () => {
     it('returns loading state initially', () => {
       mockGet.mockImplementation(() => new Promise(() => {}));
 
-      const { result } = renderHook(() => useReport('collection'), { wrapper });
+      const { result } = renderHook(() => useReport('daily-collection'), { wrapper });
 
       expect(result.current.isLoading).toBe(true);
       expect(result.current.data).toBeUndefined();
@@ -153,21 +153,20 @@ describe('useReports Hook', () => {
     it('handles error state', async () => {
       mockGet.mockRejectedValueOnce(new Error('Server Error'));
 
-      const { result } = renderHook(() => useReport('collection'), { wrapper });
+      const { result } = renderHook(() => useReport('daily-collection'), { wrapper });
 
       await waitFor(() => expect(result.current.isError).toBe(true));
     });
 
     it('returns empty rows when no data', async () => {
       const emptyReport = {
-        type: 'collection',
-        label: 'Collection Report',
-        columns: ['date', 'loan_number', 'customer', 'amount', 'mode'],
-        rows: [],
+        reportType: 'daily-collection',
+        generatedAt: '2024-01-16T10:00:00Z',
+        data: [],
       };
       mockGet.mockResolvedValueOnce(emptyReport);
 
-      const { result } = renderHook(() => useReport('collection'), { wrapper });
+      const { result } = renderHook(() => useReport('daily-collection'), { wrapper });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
@@ -175,20 +174,19 @@ describe('useReports Hook', () => {
     });
 
     const reportTypeTests = [
-      { type: 'collection', description: 'collection report' },
-      { type: 'outstanding', description: 'outstanding report' },
+      { type: 'daily-collection', description: 'collection report' },
+      { type: 'loan-portfolio', description: 'outstanding report' },
       { type: 'disbursement', description: 'disbursement report' },
       { type: 'overdue', description: 'overdue report' },
-      { type: 'demand', description: 'demand report' },
-      { type: 'portfolio', description: 'portfolio report' },
+      { type: 'repayment-schedule', description: 'demand report' },
+      { type: 'dpd-aging', description: 'portfolio report' },
     ];
 
     it.each(reportTypeTests)('fetches $description', async ({ type }) => {
       const mockReport = {
-        type,
-        label: `${type.charAt(0).toUpperCase() + type.slice(1)} Report`,
-        columns: ['column1', 'column2'],
-        rows: [],
+        reportType: type,
+        generatedAt: '2024-01-16T10:00:00Z',
+        data: [],
       };
       mockGet.mockResolvedValueOnce(mockReport);
 
@@ -203,7 +201,7 @@ describe('useReports Hook', () => {
     it('handles outstanding report with multiple columns', async () => {
       mockGet.mockResolvedValueOnce(mockOutstandingReport);
 
-      const { result } = renderHook(() => useReport('outstanding'), { wrapper });
+      const { result } = renderHook(() => useReport('loan-portfolio'), { wrapper });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
@@ -219,7 +217,7 @@ describe('useReports Hook', () => {
     it('report rows have corresponding column values', async () => {
       mockGet.mockResolvedValueOnce(mockOutstandingReport);
 
-      const { result } = renderHook(() => useReport('outstanding'), { wrapper });
+      const { result } = renderHook(() => useReport('loan-portfolio'), { wrapper });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
@@ -250,16 +248,16 @@ describe('useReports Hook', () => {
     ];
 
     it.each(dateRangeTests)('handles date range $startDate to $endDate', async ({ startDate, endDate, expected }) => {
-      mockGet.mockResolvedValueOnce({ type: 'collection', label: 'Test', columns: [], rows: [] });
+      mockGet.mockResolvedValueOnce({ reportType: 'daily-collection', generatedAt: '2024-01-16T10:00:00Z', data: [] });
 
       const { result } = renderHook(
-        () => useReport('collection', { startDate, endDate }),
+        () => useReport('daily-collection', { startDate, endDate }),
         { wrapper }
       );
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(mockGet).toHaveBeenCalledWith(`/reports/collection${expected}`);
+      expect(mockGet).toHaveBeenCalledWith(`/reports/daily-collection${expected}`);
     });
   });
 });

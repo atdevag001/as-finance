@@ -5,24 +5,21 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   useSettings,
   useHolidays,
-  useUpdateSettings,
-  useCreateHoliday,
-  useDeleteHoliday,
+  useUpdateSetting,
+  useSetHolidays,
 } from '../useSettings';
 import type { ReactNode } from 'react';
 
 // Mock the API client
 const mockGet = vi.fn();
-const mockPost = vi.fn();
 const mockPatch = vi.fn();
-const mockDelete = vi.fn();
+const mockPut = vi.fn();
 
 vi.mock('@/lib/api-client', () => ({
   apiClient: {
     get: (...args: unknown[]) => mockGet(...args),
-    post: (...args: unknown[]) => mockPost(...args),
     patch: (...args: unknown[]) => mockPatch(...args),
-    delete: (...args: unknown[]) => mockDelete(...args),
+    put: (...args: unknown[]) => mockPut(...args),
   },
 }));
 
@@ -31,11 +28,9 @@ vi.mock('@/lib/api-client', () => ({
  *
  * Tests the useSettings hooks for:
  * - List settings query
- * - Holidays list query
- * - Update settings mutation
- * - Create holiday mutation
- * - Delete holiday mutation
- * - Query invalidation
+ * - Holidays list query (returns string[] of ISO dates)
+ * - Update single setting mutation
+ * - Set holidays (bulk replace) mutation
  *
  * **Validates: Settings and holidays management workflow**
  */
@@ -141,11 +136,11 @@ describe('useSettings Hook', () => {
 
   describe('useHolidays', () => {
     const mockHolidays = [
-      { id: 'hol-1', date: '2024-01-26', description: 'Republic Day' },
-      { id: 'hol-2', date: '2024-03-25', description: 'Holi' },
-      { id: 'hol-3', date: '2024-08-15', description: 'Independence Day' },
-      { id: 'hol-4', date: '2024-10-02', description: 'Gandhi Jayanti' },
-      { id: 'hol-5', date: '2024-11-01', description: 'Diwali' },
+      '2024-01-26',
+      '2024-03-25',
+      '2024-08-15',
+      '2024-10-02',
+      '2024-11-01',
     ];
 
     it('fetches holidays list', async () => {
@@ -159,21 +154,7 @@ describe('useSettings Hook', () => {
       expect(result.current.data).toEqual(mockHolidays);
     });
 
-    it('holidays have id, date, and description', async () => {
-      mockGet.mockResolvedValueOnce(mockHolidays);
-
-      const { result } = renderHook(() => useHolidays(), { wrapper });
-
-      await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-      result.current.data?.forEach(holiday => {
-        expect(holiday.id).toBeDefined();
-        expect(holiday.date).toBeDefined();
-        expect(holiday.description).toBeDefined();
-      });
-    });
-
-    it('holiday dates are in YYYY-MM-DD format', async () => {
+    it('holidays are ISO date strings', async () => {
       mockGet.mockResolvedValueOnce(mockHolidays);
 
       const { result } = renderHook(() => useHolidays(), { wrapper });
@@ -181,8 +162,8 @@ describe('useSettings Hook', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-      result.current.data?.forEach(holiday => {
-        expect(holiday.date).toMatch(dateRegex);
+      result.current.data?.forEach(dateStr => {
+        expect(dateStr).toMatch(dateRegex);
       });
     });
 
@@ -213,33 +194,52 @@ describe('useSettings Hook', () => {
     });
   });
 
-  describe('useUpdateSettings', () => {
-    it('updates settings', async () => {
-      mockPatch.mockResolvedValueOnce({ success: true });
+  describe('useUpdateSetting', () => {
+    it('updates a single setting by key', async () => {
+      mockPatch.mockResolvedValueOnce({ key: 'penalty_rate', value: '2.5' });
 
-      const { result } = renderHook(() => useUpdateSettings(), { wrapper });
+      const { result } = renderHook(() => useUpdateSetting(), { wrapper });
 
       result.current.mutate({
-        penalty_rate: '2.5',
-        grace_period_days: '5',
+        key: 'penalty_rate',
+        value: '2.5',
       });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(mockPatch).toHaveBeenCalledWith('/settings', {
-        penalty_rate: '2.5',
-        grace_period_days: '5',
+      expect(mockPatch).toHaveBeenCalledWith('/settings/penalty_rate', {
+        value: '2.5',
+        description: undefined,
+      });
+    });
+
+    it('updates setting with description', async () => {
+      mockPatch.mockResolvedValueOnce({ key: 'penalty_rate', value: '3', description: 'Updated rate' });
+
+      const { result } = renderHook(() => useUpdateSetting(), { wrapper });
+
+      result.current.mutate({
+        key: 'penalty_rate',
+        value: '3',
+        description: 'Updated rate',
+      });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(mockPatch).toHaveBeenCalledWith('/settings/penalty_rate', {
+        value: '3',
+        description: 'Updated rate',
       });
     });
 
     it('invalidates settings query on success', async () => {
-      mockPatch.mockResolvedValueOnce({ success: true });
+      mockPatch.mockResolvedValueOnce({ key: 'penalty_rate', value: '3' });
 
       const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
 
-      const { result } = renderHook(() => useUpdateSettings(), { wrapper });
+      const { result } = renderHook(() => useUpdateSetting(), { wrapper });
 
-      result.current.mutate({ penalty_rate: '3' });
+      result.current.mutate({ key: 'penalty_rate', value: '3' });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
@@ -249,187 +249,78 @@ describe('useSettings Hook', () => {
     it('handles mutation error', async () => {
       mockPatch.mockRejectedValueOnce(new Error('Invalid setting value'));
 
-      const { result } = renderHook(() => useUpdateSettings(), { wrapper });
+      const { result } = renderHook(() => useUpdateSetting(), { wrapper });
 
-      result.current.mutate({ invalid_key: 'value' });
+      result.current.mutate({ key: 'invalid_key', value: 'value' });
 
       await waitFor(() => expect(result.current.isError).toBe(true));
     });
-
-    it('handles slow mutation', async () => {
-      mockPatch.mockImplementation(() => new Promise((resolve) => {
-        setTimeout(() => resolve({ success: true }), 100);
-      }));
-
-      const { result } = renderHook(() => useUpdateSettings(), { wrapper });
-
-      result.current.mutate({ penalty_rate: '2' });
-
-      
-
-      await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    });
-
-    it('updates single setting', async () => {
-      mockPatch.mockResolvedValueOnce({ success: true });
-
-      const { result } = renderHook(() => useUpdateSettings(), { wrapper });
-
-      result.current.mutate({ max_loan_principal: '100000000' });
-
-      await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-      expect(mockPatch).toHaveBeenCalledWith('/settings', {
-        max_loan_principal: '100000000',
-      });
-    });
-
-    it('updates multiple settings at once', async () => {
-      mockPatch.mockResolvedValueOnce({ success: true });
-
-      const { result } = renderHook(() => useUpdateSettings(), { wrapper });
-
-      result.current.mutate({
-        penalty_rate: '2.5',
-        grace_period_days: '7',
-        office_hours: '08:00-19:00',
-      });
-
-      await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-      expect(mockPatch).toHaveBeenCalledWith('/settings', {
-        penalty_rate: '2.5',
-        grace_period_days: '7',
-        office_hours: '08:00-19:00',
-      });
-    });
   });
 
-  describe('useCreateHoliday', () => {
-    it('creates a new holiday', async () => {
-      mockPost.mockResolvedValueOnce({ id: 'hol-new', date: '2024-12-25', description: 'Christmas' });
+  describe('useSetHolidays', () => {
+    it('replaces all holidays', async () => {
+      const newHolidays = ['2024-01-26', '2024-08-15', '2024-12-25'];
+      mockPut.mockResolvedValueOnce(newHolidays);
 
-      const { result } = renderHook(() => useCreateHoliday(), { wrapper });
+      const { result } = renderHook(() => useSetHolidays(), { wrapper });
 
-      result.current.mutate({
-        date: '2024-12-25',
-        description: 'Christmas',
-      });
+      result.current.mutate(newHolidays);
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(mockPost).toHaveBeenCalledWith('/settings/holidays', {
-        date: '2024-12-25',
-        description: 'Christmas',
+      expect(mockPut).toHaveBeenCalledWith('/settings/holidays', {
+        holidays: newHolidays,
       });
     });
 
     it('invalidates holidays query on success', async () => {
-      mockPost.mockResolvedValueOnce({ id: 'hol-new' });
+      mockPut.mockResolvedValueOnce(['2024-12-25']);
 
       const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
 
-      const { result } = renderHook(() => useCreateHoliday(), { wrapper });
+      const { result } = renderHook(() => useSetHolidays(), { wrapper });
 
-      result.current.mutate({ date: '2024-12-25', description: 'Test' });
+      result.current.mutate(['2024-12-25']);
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['settings', 'holidays'] });
     });
 
-    it('handles 409 error for duplicate date', async () => {
-      const conflictError = new Error('Holiday already exists for this date');
-      (conflictError as Error & { statusCode: number }).statusCode = 409;
-      mockPost.mockRejectedValueOnce(conflictError);
+    it('handles error for invalid date', async () => {
+      mockPut.mockRejectedValueOnce(new Error('Invalid ISO date string'));
 
-      const { result } = renderHook(() => useCreateHoliday(), { wrapper });
+      const { result } = renderHook(() => useSetHolidays(), { wrapper });
 
-      result.current.mutate({ date: '2024-01-26', description: 'Duplicate' });
+      result.current.mutate(['invalid-date']);
 
       await waitFor(() => expect(result.current.isError).toBe(true));
 
-      expect(result.current.error?.message).toBe('Holiday already exists for this date');
+      expect(result.current.error?.message).toBe('Invalid ISO date string');
     });
 
-    it('handles slow mutation', async () => {
-      mockPost.mockImplementation(() => new Promise((resolve) => {
-        setTimeout(() => resolve({ id: 'hol-new' }), 100);
-      }));
+    it('can clear all holidays', async () => {
+      mockPut.mockResolvedValueOnce([]);
 
-      const { result } = renderHook(() => useCreateHoliday(), { wrapper });
+      const { result } = renderHook(() => useSetHolidays(), { wrapper });
 
-      result.current.mutate({ date: '2024-12-25', description: 'Test' });
-
-      
-
-      await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    });
-  });
-
-  describe('useDeleteHoliday', () => {
-    it('deletes a holiday', async () => {
-      mockDelete.mockResolvedValueOnce({ success: true });
-
-      const { result } = renderHook(() => useDeleteHoliday(), { wrapper });
-
-      result.current.mutate('hol-1');
+      result.current.mutate([]);
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(mockDelete).toHaveBeenCalledWith('/settings/holidays/hol-1');
-    });
-
-    it('invalidates holidays query on success', async () => {
-      mockDelete.mockResolvedValueOnce({ success: true });
-
-      const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
-
-      const { result } = renderHook(() => useDeleteHoliday(), { wrapper });
-
-      result.current.mutate('hol-1');
-
-      await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['settings', 'holidays'] });
-    });
-
-    it('handles 404 error when holiday not found', async () => {
-      const notFoundError = new Error('Holiday not found');
-      (notFoundError as Error & { statusCode: number }).statusCode = 404;
-      mockDelete.mockRejectedValueOnce(notFoundError);
-
-      const { result } = renderHook(() => useDeleteHoliday(), { wrapper });
-
-      result.current.mutate('invalid-hol');
-
-      await waitFor(() => expect(result.current.isError).toBe(true));
-
-      expect(result.current.error?.message).toBe('Holiday not found');
-    });
-
-    it('handles slow mutation', async () => {
-      mockDelete.mockImplementation(() => new Promise((resolve) => {
-        setTimeout(() => resolve({ success: true }), 100);
-      }));
-
-      const { result } = renderHook(() => useDeleteHoliday(), { wrapper });
-
-      result.current.mutate('hol-1');
-
-      
-
-      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockPut).toHaveBeenCalledWith('/settings/holidays', {
+        holidays: [],
+      });
     });
 
     it('does not invalidate queries on error', async () => {
-      mockDelete.mockRejectedValueOnce(new Error('Server Error'));
+      mockPut.mockRejectedValueOnce(new Error('Server Error'));
 
       const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
 
-      const { result } = renderHook(() => useDeleteHoliday(), { wrapper });
+      const { result } = renderHook(() => useSetHolidays(), { wrapper });
 
-      result.current.mutate('hol-1');
+      result.current.mutate(['2024-01-01']);
 
       await waitFor(() => expect(result.current.isError).toBe(true));
 

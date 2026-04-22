@@ -125,43 +125,55 @@ describe('useAccounting Hook', () => {
   });
 
   describe('useDaybook', () => {
-    const mockJournalEntries = [
+    const mockBackendJournalEntries = [
       {
         id: 'je-1',
-        date: '2024-01-15',
+        entry_date: '2024-01-15',
         description: 'Loan disbursement',
-        sourceType: 'loan_disbursement',
+        source_type: 'loan_disbursement',
+        source_id: 'loan-1',
+        total_debit_paise: '5000000',
+        total_credit_paise: '5000000',
+        created_by: 'user-1',
+        created_at: '2024-01-15T10:00:00.000Z',
         lines: [
-          { accountName: 'Loan Receivable', debitPaise: 5000000, creditPaise: 0 },
-          { accountName: 'Cash', debitPaise: 0, creditPaise: 5000000 },
+          { id: 'line-1', account_id: 'acc-1', debit_paise: '5000000', credit_paise: '0', account: { id: 'acc-1', code: '1200', name: 'Loan Receivable', category: 'asset' } },
+          { id: 'line-2', account_id: 'acc-2', debit_paise: '0', credit_paise: '5000000', account: { id: 'acc-2', code: '1000', name: 'Cash', category: 'asset' } },
         ],
       },
       {
         id: 'je-2',
-        date: '2024-01-16',
+        entry_date: '2024-01-16',
         description: 'Collection received',
-        sourceType: 'collection',
+        source_type: 'collection',
+        source_id: 'coll-1',
+        total_debit_paise: '466666',
+        total_credit_paise: '466666',
+        created_by: 'user-1',
+        created_at: '2024-01-16T10:00:00.000Z',
         lines: [
-          { accountName: 'Cash', debitPaise: 466666, creditPaise: 0 },
-          { accountName: 'Loan Receivable', debitPaise: 0, creditPaise: 416666 },
-          { accountName: 'Interest Income', debitPaise: 0, creditPaise: 50000 },
+          { id: 'line-3', account_id: 'acc-2', debit_paise: '466666', credit_paise: '0', account: { id: 'acc-2', code: '1000', name: 'Cash', category: 'asset' } },
+          { id: 'line-4', account_id: 'acc-1', debit_paise: '0', credit_paise: '416666', account: { id: 'acc-1', code: '1200', name: 'Loan Receivable', category: 'asset' } },
+          { id: 'line-5', account_id: 'acc-3', debit_paise: '0', credit_paise: '50000', account: { id: 'acc-3', code: '4000', name: 'Interest Income', category: 'income' } },
         ],
       },
     ];
 
     it('fetches daybook entries without date filter', async () => {
-      mockGet.mockResolvedValueOnce(mockJournalEntries);
+      mockGet.mockResolvedValueOnce(mockBackendJournalEntries);
 
       const { result } = renderHook(() => useDaybook(), { wrapper });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(mockGet).toHaveBeenCalledWith('/accounting/daybook');
-      expect(result.current.data).toEqual(mockJournalEntries);
+      expect(result.current.data).toHaveLength(2);
+      expect(result.current.data?.[0].total_debit_paise).toBe(5000000);
+      expect(result.current.data?.[0].lines[0].debit_paise).toBe(5000000);
     });
 
     it('fetches daybook with date range', async () => {
-      mockGet.mockResolvedValueOnce(mockJournalEntries);
+      mockGet.mockResolvedValueOnce(mockBackendJournalEntries);
 
       const { result } = renderHook(
         () => useDaybook({ startDate: '2024-01-01', endDate: '2024-01-31' }),
@@ -176,7 +188,7 @@ describe('useAccounting Hook', () => {
     });
 
     it('fetches daybook with only startDate', async () => {
-      mockGet.mockResolvedValueOnce(mockJournalEntries);
+      mockGet.mockResolvedValueOnce(mockBackendJournalEntries);
 
       const { result } = renderHook(
         () => useDaybook({ startDate: '2024-01-01' }),
@@ -189,7 +201,7 @@ describe('useAccounting Hook', () => {
     });
 
     it('fetches daybook with only endDate', async () => {
-      mockGet.mockResolvedValueOnce(mockJournalEntries);
+      mockGet.mockResolvedValueOnce(mockBackendJournalEntries);
 
       const { result } = renderHook(
         () => useDaybook({ endDate: '2024-01-31' }),
@@ -202,15 +214,15 @@ describe('useAccounting Hook', () => {
     });
 
     it('journal entries have balanced debits and credits', async () => {
-      mockGet.mockResolvedValueOnce(mockJournalEntries);
+      mockGet.mockResolvedValueOnce(mockBackendJournalEntries);
 
       const { result } = renderHook(() => useDaybook(), { wrapper });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       result.current.data?.forEach(entry => {
-        const totalDebits = entry.lines.reduce((sum, line) => sum + line.debitPaise, 0);
-        const totalCredits = entry.lines.reduce((sum, line) => sum + line.creditPaise, 0);
+        const totalDebits = entry.lines.reduce((sum, line) => sum + line.debit_paise, 0);
+        const totalCredits = entry.lines.reduce((sum, line) => sum + line.credit_paise, 0);
         expect(totalDebits).toBe(totalCredits);
       });
     });
@@ -233,43 +245,49 @@ describe('useAccounting Hook', () => {
   });
 
   describe('useTrialBalance', () => {
-    const mockTrialBalance = [
-      { accountCode: '1000', accountName: 'Cash', debitPaise: 1000000, creditPaise: 0 },
-      { accountCode: '1100', accountName: 'Bank', debitPaise: 5000000, creditPaise: 0 },
-      { accountCode: '1200', accountName: 'Loan Receivable', debitPaise: 10000000, creditPaise: 0 },
-      { accountCode: '2000', accountName: 'Accounts Payable', debitPaise: 0, creditPaise: 500000 },
-      { accountCode: '3000', accountName: 'Capital', debitPaise: 0, creditPaise: 10000000 },
-      { accountCode: '4000', accountName: 'Interest Income', debitPaise: 0, creditPaise: 5500000 },
-    ];
+    // Backend format mock data
+    const mockBackendTrialBalance = {
+      asOfDate: '2024-01-31',
+      rows: [
+        { code: '1000', name: 'Cash', debitBalancePaise: '1000000', creditBalancePaise: '0' },
+        { code: '1100', name: 'Bank', debitBalancePaise: '5000000', creditBalancePaise: '0' },
+        { code: '1200', name: 'Loan Receivable', debitBalancePaise: '10000000', creditBalancePaise: '0' },
+        { code: '2000', name: 'Accounts Payable', debitBalancePaise: '0', creditBalancePaise: '500000' },
+        { code: '3000', name: 'Capital', debitBalancePaise: '0', creditBalancePaise: '10000000' },
+        { code: '4000', name: 'Interest Income', debitBalancePaise: '0', creditBalancePaise: '5500000' },
+      ],
+      totalDebitBalancePaise: '16000000',
+      totalCreditBalancePaise: '16000000',
+      isBalanced: true,
+    };
 
     it('fetches trial balance', async () => {
-      mockGet.mockResolvedValueOnce(mockTrialBalance);
+      mockGet.mockResolvedValueOnce(mockBackendTrialBalance);
 
       const { result } = renderHook(() => useTrialBalance(), { wrapper });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(mockGet).toHaveBeenCalledWith('/accounting/trial-balance');
-      expect(result.current.data).toEqual(mockTrialBalance);
+      expect(result.current.data).toHaveLength(6);
+      expect(result.current.data?.[0].accountCode).toBe('1000');
     });
 
     it('fetches trial balance with date range', async () => {
-      mockGet.mockResolvedValueOnce(mockTrialBalance);
+      mockGet.mockResolvedValueOnce(mockBackendTrialBalance);
 
       const { result } = renderHook(
-        () => useTrialBalance({ startDate: '2024-01-01', endDate: '2024-01-31' }),
+        () => useTrialBalance({ endDate: '2024-01-31' }),
         { wrapper }
       );
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(mockGet).toHaveBeenCalledWith(
-        '/accounting/trial-balance?startDate=2024-01-01&endDate=2024-01-31'
-      );
+      expect(mockGet).toHaveBeenCalledWith('/accounting/trial-balance?asOfDate=2024-01-31');
     });
 
     it('total debits equal total credits', async () => {
-      mockGet.mockResolvedValueOnce(mockTrialBalance);
+      mockGet.mockResolvedValueOnce(mockBackendTrialBalance);
 
       const { result } = renderHook(() => useTrialBalance(), { wrapper });
 
@@ -281,7 +299,7 @@ describe('useAccounting Hook', () => {
     });
 
     it('amounts are in paise (integers)', async () => {
-      mockGet.mockResolvedValueOnce(mockTrialBalance);
+      mockGet.mockResolvedValueOnce(mockBackendTrialBalance);
 
       const { result } = renderHook(() => useTrialBalance(), { wrapper });
 
@@ -311,33 +329,37 @@ describe('useAccounting Hook', () => {
   });
 
   describe('useProfitLoss', () => {
-    const mockProfitLoss = {
+    // Backend format mock data
+    const mockBackendProfitLoss = {
+      startDate: '2024-01-01',
+      endDate: '2024-01-31',
       income: [
-        { category: 'Interest Income', totalPaise: 5000000 },
-        { category: 'Processing Fees', totalPaise: 500000 },
-        { category: 'Penalty Income', totalPaise: 200000 },
+        { name: 'Interest Income', amountPaise: '5000000' },
+        { name: 'Processing Fees', amountPaise: '500000' },
+        { name: 'Penalty Income', amountPaise: '200000' },
       ],
       expenses: [
-        { category: 'Salaries', totalPaise: 2000000 },
-        { category: 'Rent', totalPaise: 300000 },
-        { category: 'Utilities', totalPaise: 100000 },
+        { name: 'Salaries', amountPaise: '2000000' },
+        { name: 'Rent', amountPaise: '300000' },
+        { name: 'Utilities', amountPaise: '100000' },
       ],
-      netProfitPaise: 3300000,
+      netProfitPaise: '3300000',
     };
 
     it('fetches profit & loss report', async () => {
-      mockGet.mockResolvedValueOnce(mockProfitLoss);
+      mockGet.mockResolvedValueOnce(mockBackendProfitLoss);
 
       const { result } = renderHook(() => useProfitLoss(), { wrapper });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(mockGet).toHaveBeenCalledWith('/accounting/profit-loss');
-      expect(result.current.data).toEqual(mockProfitLoss);
+      expect(result.current.data?.income).toHaveLength(3);
+      expect(result.current.data?.income[0].category).toBe('Interest Income');
     });
 
     it('fetches profit & loss with date range', async () => {
-      mockGet.mockResolvedValueOnce(mockProfitLoss);
+      mockGet.mockResolvedValueOnce(mockBackendProfitLoss);
 
       const { result } = renderHook(
         () => useProfitLoss({ startDate: '2024-01-01', endDate: '2024-01-31' }),
@@ -352,7 +374,7 @@ describe('useAccounting Hook', () => {
     });
 
     it('net profit = total income - total expenses', async () => {
-      mockGet.mockResolvedValueOnce(mockProfitLoss);
+      mockGet.mockResolvedValueOnce(mockBackendProfitLoss);
 
       const { result } = renderHook(() => useProfitLoss(), { wrapper });
 
@@ -365,7 +387,7 @@ describe('useAccounting Hook', () => {
     });
 
     it('returns income categories', async () => {
-      mockGet.mockResolvedValueOnce(mockProfitLoss);
+      mockGet.mockResolvedValueOnce(mockBackendProfitLoss);
 
       const { result } = renderHook(() => useProfitLoss(), { wrapper });
 
@@ -379,7 +401,7 @@ describe('useAccounting Hook', () => {
     });
 
     it('returns expense categories', async () => {
-      mockGet.mockResolvedValueOnce(mockProfitLoss);
+      mockGet.mockResolvedValueOnce(mockBackendProfitLoss);
 
       const { result } = renderHook(() => useProfitLoss(), { wrapper });
 
@@ -393,7 +415,7 @@ describe('useAccounting Hook', () => {
     });
 
     it('amounts are in paise (integers)', async () => {
-      mockGet.mockResolvedValueOnce(mockProfitLoss);
+      mockGet.mockResolvedValueOnce(mockBackendProfitLoss);
 
       const { result } = renderHook(() => useProfitLoss(), { wrapper });
 
@@ -423,50 +445,54 @@ describe('useAccounting Hook', () => {
   });
 
   describe('useBalanceSheet', () => {
-    const mockBalanceSheet = {
+    // Backend format mock data
+    const mockBackendBalanceSheet = {
+      asOfDate: '2024-01-31',
       assets: [
-        { name: 'Cash', totalPaise: 1000000 },
-        { name: 'Bank', totalPaise: 5000000 },
-        { name: 'Loan Receivable', totalPaise: 10000000 },
+        { name: 'Cash', balancePaise: '1000000' },
+        { name: 'Bank', balancePaise: '5000000' },
+        { name: 'Loan Receivable', balancePaise: '10000000' },
       ],
       liabilities: [
-        { name: 'Accounts Payable', totalPaise: 500000 },
-        { name: 'Borrowings', totalPaise: 5500000 },
+        { name: 'Accounts Payable', balancePaise: '500000' },
+        { name: 'Borrowings', balancePaise: '5500000' },
       ],
       equity: [
-        { name: 'Capital', totalPaise: 7000000 },
-        { name: 'Retained Earnings', totalPaise: 3000000 },
+        { name: 'Capital', balancePaise: '7000000' },
+        { name: 'Retained Earnings', balancePaise: '3000000' },
       ],
+      totalAssetsPaise: '16000000',
+      totalLiabilitiesPaise: '6000000',
+      totalEquityPaise: '10000000',
     };
 
     it('fetches balance sheet', async () => {
-      mockGet.mockResolvedValueOnce(mockBalanceSheet);
+      mockGet.mockResolvedValueOnce(mockBackendBalanceSheet);
 
       const { result } = renderHook(() => useBalanceSheet(), { wrapper });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(mockGet).toHaveBeenCalledWith('/accounting/balance-sheet');
-      expect(result.current.data).toEqual(mockBalanceSheet);
+      expect(result.current.data?.assets).toHaveLength(3);
+      expect(result.current.data?.assets[0].name).toBe('Cash');
     });
 
     it('fetches balance sheet with date range', async () => {
-      mockGet.mockResolvedValueOnce(mockBalanceSheet);
+      mockGet.mockResolvedValueOnce(mockBackendBalanceSheet);
 
       const { result } = renderHook(
-        () => useBalanceSheet({ startDate: '2024-01-01', endDate: '2024-01-31' }),
+        () => useBalanceSheet({ endDate: '2024-01-31' }),
         { wrapper }
       );
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(mockGet).toHaveBeenCalledWith(
-        '/accounting/balance-sheet?startDate=2024-01-01&endDate=2024-01-31'
-      );
+      expect(mockGet).toHaveBeenCalledWith('/accounting/balance-sheet?asOfDate=2024-01-31');
     });
 
     it('assets = liabilities + equity', async () => {
-      mockGet.mockResolvedValueOnce(mockBalanceSheet);
+      mockGet.mockResolvedValueOnce(mockBackendBalanceSheet);
 
       const { result } = renderHook(() => useBalanceSheet(), { wrapper });
 
@@ -480,7 +506,7 @@ describe('useAccounting Hook', () => {
     });
 
     it('returns assets list', async () => {
-      mockGet.mockResolvedValueOnce(mockBalanceSheet);
+      mockGet.mockResolvedValueOnce(mockBackendBalanceSheet);
 
       const { result } = renderHook(() => useBalanceSheet(), { wrapper });
 
@@ -494,7 +520,7 @@ describe('useAccounting Hook', () => {
     });
 
     it('returns liabilities list', async () => {
-      mockGet.mockResolvedValueOnce(mockBalanceSheet);
+      mockGet.mockResolvedValueOnce(mockBackendBalanceSheet);
 
       const { result } = renderHook(() => useBalanceSheet(), { wrapper });
 
@@ -508,7 +534,7 @@ describe('useAccounting Hook', () => {
     });
 
     it('returns equity list', async () => {
-      mockGet.mockResolvedValueOnce(mockBalanceSheet);
+      mockGet.mockResolvedValueOnce(mockBackendBalanceSheet);
 
       const { result } = renderHook(() => useBalanceSheet(), { wrapper });
 
@@ -522,7 +548,7 @@ describe('useAccounting Hook', () => {
     });
 
     it('amounts are in paise (integers)', async () => {
-      mockGet.mockResolvedValueOnce(mockBalanceSheet);
+      mockGet.mockResolvedValueOnce(mockBackendBalanceSheet);
 
       const { result } = renderHook(() => useBalanceSheet(), { wrapper });
 

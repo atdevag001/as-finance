@@ -82,6 +82,7 @@ const GROUP_STATUS_MAP: Record<string, StatusVariant> = {
   active: 'success',
   inactive: 'neutral',
   dissolved: 'danger',
+  disbanded: 'danger',
 };
 
 /** Maps notification statuses to visual variants */

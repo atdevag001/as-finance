@@ -121,7 +121,7 @@ describe('useAuditLogs Hook', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(mockGet).toHaveBeenCalledWith(expect.stringContaining('entity=customer'));
+      expect(mockGet).toHaveBeenCalledWith(expect.stringContaining('targetEntity=customer'));
     });
 
     it('filters by action', async () => {
@@ -131,7 +131,7 @@ describe('useAuditLogs Hook', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(mockGet).toHaveBeenCalledWith(expect.stringContaining('action=loan_approved'));
+      expect(mockGet).toHaveBeenCalledWith(expect.stringContaining('actionType=loan_approved'));
     });
 
     it('filters by startDate', async () => {
@@ -164,8 +164,8 @@ describe('useAuditLogs Hook', () => {
 
       const url = mockGet.mock.calls[0][0] as string;
       expect(url).toContain('skip=20');
-      expect(url).toContain('entity=loan');
-      expect(url).toContain('action=loan_created');
+      expect(url).toContain('targetEntity=loan');
+      expect(url).toContain('actionType=loan_created');
       expect(url).toContain('startDate=2024-01-01');
     });
 
@@ -243,7 +243,7 @@ describe('useAuditLogs Hook', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(mockGet).toHaveBeenCalledWith(expect.stringContaining(`entity=${entity}`));
+      expect(mockGet).toHaveBeenCalledWith(expect.stringContaining(`targetEntity=${entity}`));
     });
 
     const actionTests = [
@@ -264,7 +264,7 @@ describe('useAuditLogs Hook', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(mockGet).toHaveBeenCalledWith(expect.stringContaining(`action=${action}`));
+      expect(mockGet).toHaveBeenCalledWith(expect.stringContaining(`actionType=${action}`));
     });
 
     const pageTests = [

@@ -146,7 +146,7 @@ function HandoversContent() {
         <Card key={h.id}>
           <CardContent className="flex flex-col gap-2 pt-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="space-y-1 text-sm">
-              <div><span className="font-medium">{h.officer_name}</span> — <MoneyDisplay paise={h.total_amount_paise} /></div>
+              <div><span className="font-medium">{h.collection_officer?.full_name}</span> — <MoneyDisplay paise={h.total_amount_paise} /></div>
               <div className="text-muted-foreground">
                 <DateDisplay date={h.handover_date} /> · Created <DateDisplay date={h.created_at} showTime />
               </div>

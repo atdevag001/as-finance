@@ -311,22 +311,21 @@ describe('useGroups Hook', () => {
       const { result } = renderHook(() => usePostGroupCollection(), { wrapper });
 
       result.current.mutate({
-        group_id: 'grp-1',
-        payment_date: '2024-01-20',
+        groupId: 'grp-1',
+        paymentDate: '2024-01-20',
         payments: [
-          { loan_id: 'loan-1', amount_paise: 233333 },
-          { loan_id: 'loan-2', amount_paise: 200000 },
+          { loanId: 'loan-1', amountPaise: 233333 },
+          { loanId: 'loan-2', amountPaise: 200000 },
         ],
       });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(mockPost).toHaveBeenCalledWith('/group-collections', {
-        group_id: 'grp-1',
-        payment_date: '2024-01-20',
+      expect(mockPost).toHaveBeenCalledWith('/groups/grp-1/collections', {
+        paymentDate: '2024-01-20',
         payments: [
-          { loan_id: 'loan-1', amount_paise: 233333 },
-          { loan_id: 'loan-2', amount_paise: 200000 },
+          { loanId: 'loan-1', amountPaise: 233333 },
+          { loanId: 'loan-2', amountPaise: 200000 },
         ],
       });
     });
@@ -339,8 +338,8 @@ describe('useGroups Hook', () => {
       const { result } = renderHook(() => usePostGroupCollection(), { wrapper });
 
       result.current.mutate({
-        group_id: 'grp-1',
-        payments: [{ loan_id: 'loan-1', amount_paise: 100000 }],
+        groupId: 'grp-1',
+        payments: [{ loanId: 'loan-1', amountPaise: 100000 }],
       });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -356,7 +355,7 @@ describe('useGroups Hook', () => {
       const { result } = renderHook(() => usePostGroupCollection(), { wrapper });
 
       result.current.mutate({
-        group_id: 'grp-1',
+        groupId: 'grp-1',
         payments: [],
       });
 

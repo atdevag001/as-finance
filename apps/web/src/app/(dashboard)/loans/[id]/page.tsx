@@ -6,7 +6,7 @@ import { ArrowLeft, Clock, AlertTriangle } from 'lucide-react';
 import { useLoan, useLoanAction } from '@/hooks/useLoans';
 import { useCollections, type Collection } from '@/hooks/useCollections';
 import { useReceipts } from '@/hooks/useReceipts';
-import { usePenalties, useWaivePenalty, type Penalty } from '@/hooks/usePenalties';
+import { usePenalties, useWaivePenalty, getPenaltyStatus, type Penalty } from '@/hooks/usePenalties';
 import { useUsers } from '@/hooks/useUsers';
 import { useGenerateForeclosureQuote, useExecuteForeclosure, usePendingForeclosure, type ForeclosureQuote } from '@/hooks/useForeclosures';
 import { useToast } from '@/providers/toast-provider';
@@ -76,6 +76,7 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
   const [foreclosureQuote, setForeclosureQuote] = useState<ForeclosureQuote | null>(null);
   const [foreclosureConfirmOpen, setForeclosureConfirmOpen] = useState(false);
   const [quoteExpired, setQuoteExpired] = useState(false);
+  const [foreclosurePaymentMode, setForeclosurePaymentMode] = useState<string>('cash');
 
   // Penalty waiver state
   const [waivePenaltyOpen, setWaivePenaltyOpen] = useState(false);
@@ -191,14 +192,19 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
   }
 
   async function handleExecuteForeclosure() {
-    if (!foreclosureQuote || quoteExpired) return;
+    if (!foreclosureQuote || quoteExpired || !foreclosurePaymentMode) return;
     setActionError(null);
     try {
       const idempotencyKey = crypto.randomUUID();
-      await executeForeclosure.mutateAsync({ foreclosureId: foreclosureQuote.foreclosureId, idempotencyKey });
+      await executeForeclosure.mutateAsync({
+        foreclosureId: foreclosureQuote.foreclosureId,
+        paymentMode: foreclosurePaymentMode,
+        idempotencyKey,
+      });
       setForeclosureConfirmOpen(false);
       setForeclosureOpen(false);
       setForeclosureQuote(null);
+      setForeclosurePaymentMode('cash');
       showToast({ message: 'Foreclosure completed. Loan is now closed.' });
     } catch (err) {
       setActionError((err as Error).message || 'Failed to execute foreclosure');
@@ -242,7 +248,7 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
   const canForeclose = loan.status === 'active' || loan.status === 'overdue';
 
   const penalties = penaltiesData ?? [];
-  const pendingPenalties = penalties.filter(p => p.status === 'pending');
+  const pendingPenalties = penalties.filter(p => !p.is_paid && !p.is_waived);
 
   // Loan can be closed only if: active/overdue, zero outstanding, and no pending penalties
   const canClose = (loan.status === 'active' || loan.status === 'overdue') &&
@@ -603,19 +609,19 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {penalties.map((penalty) => (
+                  {penalties.map((penalty) => {
+                    const penaltyStatus = getPenaltyStatus(penalty);
+                    return (
                     <tr key={penalty.id} className="border-b last:border-0">
-                      <td className="px-3 py-2"><DateDisplay date={penalty.posted_date} /></td>
+                      <td className="px-3 py-2"><DateDisplay date={penalty.created_at} /></td>
                       <td className="px-3 py-2 text-right"><MoneyDisplay paise={Number(penalty.amount_paise)} /></td>
-                      <td className="px-3 py-2 hidden sm:table-cell">{penalty.period}</td>
-                      <td className="px-3 py-2 hidden md:table-cell">
-                        {penalty.installment_number ? `#${penalty.installment_number}` : '—'}
-                      </td>
+                      <td className="px-3 py-2 hidden sm:table-cell">{penalty.penalty_period}</td>
+                      <td className="px-3 py-2 hidden md:table-cell">—</td>
                       <td className="px-3 py-2">
-                        <StatusBadge status={penalty.status} type="penalty" />
+                        <StatusBadge status={penaltyStatus} type="penalty" />
                       </td>
                       <td className="px-3 py-2 text-right">
-                        {penalty.status === 'pending' && (
+                        {penaltyStatus === 'pending' && (
                           <PermissionGate permission="penalty.waive">
                             <Button
                               variant="outline"
@@ -632,7 +638,8 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
                         )}
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -824,14 +831,33 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
       {/* Foreclosure Confirm Dialog */}
       <ConfirmDialog
         open={foreclosureConfirmOpen}
-        onOpenChange={setForeclosureConfirmOpen}
+        onOpenChange={(open) => {
+          setForeclosureConfirmOpen(open);
+          if (!open) setForeclosurePaymentMode('cash');
+        }}
         title="Confirm Foreclosure"
         description={`This will close the loan with a final settlement of ₹${foreclosureQuote ? (foreclosureQuote.settlementAmountPaise / 100).toLocaleString('en-IN') : '0'}. This action cannot be undone.`}
         confirmLabel="Execute Foreclosure"
         variant="destructive"
         loading={executeForeclosure.isPending}
         onConfirm={handleExecuteForeclosure}
-      />
+      >
+        <div className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label htmlFor="foreclosure-mode">Payment Mode</Label>
+            <Select value={foreclosurePaymentMode} onValueChange={setForeclosurePaymentMode}>
+              <SelectTrigger id="foreclosure-mode">
+                <SelectValue placeholder="Select mode" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="cash">Cash</SelectItem>
+                <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                <SelectItem value="online">Online</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </ConfirmDialog>
 
       {/* Waive Penalty Dialog */}
       <ConfirmDialog
@@ -845,7 +871,7 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
           }
         }}
         title="Waive Penalty"
-        description={selectedPenalty ? `Waive penalty of ₹${(selectedPenalty.amount_paise / 100).toLocaleString('en-IN')} for ${selectedPenalty.period}` : ''}
+        description={selectedPenalty ? `Waive penalty of ₹${(selectedPenalty.amount_paise / 100).toLocaleString('en-IN')} for ${selectedPenalty.penalty_period}` : ''}
         confirmLabel="Waive Penalty"
         loading={waivePenalty.isPending}
         onConfirm={handleWaivePenalty}

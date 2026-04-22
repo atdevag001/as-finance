@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { useCreateLoan } from '@/hooks/useLoans';
 import { useLoanProductsList } from '@/hooks/useLoanProducts';
 import { useCustomers, type Customer } from '@/hooks/useCustomers';
+import { useGroupsList } from '@/hooks/useGroups';
 import { useToast } from '@/providers/toast-provider';
 import { ApiClientError } from '@/lib/api-client';
 import { ErrorMessage } from '@/components/shared';
@@ -30,6 +31,7 @@ const formSchema = z.object({
     }, 'Principal must be a positive amount'),
   tenureMonths: z.coerce.number().int().min(1, 'Tenure must be at least 1 month'),
   purpose: z.string().min(1, 'Purpose is required'),
+  groupId: z.string().optional(),
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -39,6 +41,7 @@ export default function NewLoanPage() {
   const createLoan = useCreateLoan();
   const { showToast } = useToast();
   const { data: loanProducts, isLoading: productsLoading } = useLoanProductsList();
+  const { data: groups, isLoading: groupsLoading } = useGroupsList();
   const [serverError, setServerError] = useState<string | null>(null);
   const [selectedProductVersionId, setSelectedProductVersionId] = useState<string>('');
 
@@ -97,6 +100,7 @@ export default function NewLoanPage() {
       productVersionId: '',
       principalRupees: '',
       purpose: '',
+      groupId: '',
     },
   });
 
@@ -148,6 +152,9 @@ export default function NewLoanPage() {
       tenureMonths: data.tenureMonths,
       purpose: data.purpose,
     };
+    if (data.groupId) {
+      payload['groupId'] = data.groupId;
+    }
 
     try {
       await createLoan.mutateAsync(payload);
@@ -268,7 +275,9 @@ export default function NewLoanPage() {
                 <option value="">
                   {productsLoading ? 'Loading products…' : 'Select loan product'}
                 </option>
-                {(Array.isArray(loanProducts) ? loanProducts : []).filter(p => p.current_version_id).map((p) => (
+                {(Array.isArray(loanProducts) ? loanProducts : [])
+                  .filter((p): p is typeof p & { current_version_id: string } => !!p.current_version_id)
+                  .map((p) => (
                   <option key={p.current_version_id} value={p.current_version_id}>
                     {p.name} — {p.current_version?.interest_type === 'flat' ? 'Flat' : 'Reducing'} @{' '}
                     {(p.current_version?.annual_rate_bps ?? 0) / 100}% ({p.current_version?.repayment_frequency ?? 'monthly'})
@@ -310,6 +319,27 @@ export default function NewLoanPage() {
                   Range: {minTenure} – {maxTenure} months
                 </p>
               )}
+            </Field>
+
+            {/* Group (optional for group loans) */}
+            <Field label="Group (Optional)">
+              <select
+                {...register('groupId')}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                disabled={groupsLoading}
+              >
+                <option value="">
+                  {groupsLoading ? 'Loading groups…' : 'No group (individual loan)'}
+                </option>
+                {(groups ?? []).map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name} — {g.leader_name} ({g.member_count} members)
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground mt-1">
+                Select a group if this is a group loan
+              </p>
             </Field>
 
             {/* Purpose */}

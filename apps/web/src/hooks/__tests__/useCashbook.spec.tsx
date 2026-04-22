@@ -167,9 +167,9 @@ describe('useCashbook Hook', () => {
       {
         id: 'ho-1',
         collection_officer_id: 'user-1',
-        officer_name: 'John Doe',
+        collection_officer: { id: 'user-1', full_name: 'John Doe' },
+        receiving_officer: { id: 'manager-1', full_name: 'Manager One' },
         total_amount_paise: 250000,
-        receiving_officer_id: 'manager-1',
         handover_date: '2024-01-15',
         verification_status: 'pending',
         created_at: '2024-01-15T18:00:00.000Z',
@@ -177,12 +177,12 @@ describe('useCashbook Hook', () => {
       {
         id: 'ho-2',
         collection_officer_id: 'user-2',
-        officer_name: 'Jane Smith',
+        collection_officer: { id: 'user-2', full_name: 'Jane Smith' },
+        receiving_officer: { id: 'manager-2', full_name: 'Manager Two' },
         total_amount_paise: 180000,
-        receiving_officer_id: 'manager-2',
         handover_date: '2024-01-15',
         verification_status: 'verified',
-        verified_by: 'manager-1',
+        verified_at: '2024-01-15T17:30:00.000Z',
         created_at: '2024-01-15T17:00:00.000Z',
       },
     ];
@@ -209,7 +209,7 @@ describe('useCashbook Hook', () => {
       expect(pendingHandovers?.length).toBeGreaterThan(0);
     });
 
-    it('includes verified handovers with verified_by', async () => {
+    it('includes verified handovers with verified_at', async () => {
       mockGet.mockResolvedValueOnce(mockHandovers);
 
       const { result } = renderHook(() => useHandovers(), { wrapper });
@@ -218,7 +218,7 @@ describe('useCashbook Hook', () => {
 
       const verifiedHandovers = result.current.data?.filter(h => h.verification_status === 'verified');
       verifiedHandovers?.forEach(h => {
-        expect(h.verified_by).toBeDefined();
+        expect(h.verified_at).toBeDefined();
       });
     });
 

@@ -68,14 +68,24 @@ export function useGenerateForeclosureQuote() {
   });
 }
 
+export interface ExecuteForeclosureInput {
+  foreclosureId: string;
+  paymentMode: string;
+  idempotencyKey: string;
+  rebatePaise?: number;
+  rebateReason?: string;
+  rebateAuthorizedBy?: string;
+}
+
 export function useExecuteForeclosure() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ foreclosureId, paymentMode = 'cash', idempotencyKey }: { foreclosureId: string; paymentMode?: string; idempotencyKey: string }) =>
-      apiClient.post('/foreclosures', { foreclosureId, paymentMode, idempotencyKey }),
+    mutationFn: (input: ExecuteForeclosureInput) =>
+      apiClient.post('/foreclosures', input),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['loans'] });
       qc.invalidateQueries({ queryKey: ['collections'] });
+      qc.invalidateQueries({ queryKey: ['foreclosures'] });
     },
   });
 }

@@ -6,10 +6,9 @@ import { hasPermission } from '@/lib/permissions';
 import { getChangedSettings } from '@/lib/settings-utils';
 import {
   useSettings,
-  useUpdateSettings,
+  useUpdateSetting,
   useHolidays,
-  useCreateHoliday,
-  useDeleteHoliday,
+  useSetHolidays,
 } from '@/hooks/useSettings';
 import { useToast } from '@/providers/toast-provider';
 import { ApiClientError } from '@/lib/api-client';
@@ -45,9 +44,10 @@ export default function SettingsPage() {
 
 function SettingsSection() {
   const { data: settings, isLoading, error } = useSettings();
-  const updateSettings = useUpdateSettings();
+  const updateSetting = useUpdateSetting();
   const { showToast } = useToast();
   const [serverError, setServerError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Original values from server
   const [originalValues, setOriginalValues] = useState<Record<string, string>>({});
@@ -58,7 +58,7 @@ function SettingsSection() {
     if (settings) {
       const vals: Record<string, string> = {};
       for (const s of settings) {
-        vals[s.key] = s.value;
+        vals[s.key] = String(s.value ?? '');
       }
       setOriginalValues(vals);
       setCurrentValues(vals);
@@ -78,8 +78,12 @@ function SettingsSection() {
   async function handleSave() {
     if (!isDirty) return;
     setServerError(null);
+    setIsSaving(true);
     try {
-      await updateSettings.mutateAsync(changedSettings);
+      // Update each changed setting individually
+      for (const [key, value] of Object.entries(changedSettings)) {
+        await updateSetting.mutateAsync({ key, value });
+      }
       setOriginalValues({ ...currentValues });
       showToast({ message: 'Settings saved successfully', variant: 'success' });
     } catch (err) {
@@ -88,6 +92,8 @@ function SettingsSection() {
       } else {
         setServerError('Unable to connect to server. Please check your connection.');
       }
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -132,10 +138,10 @@ function SettingsSection() {
         <div className="flex justify-end pt-2">
           <Button
             onClick={handleSave}
-            disabled={!isDirty || updateSettings.isPending}
+            disabled={!isDirty || isSaving}
             className="w-full min-h-[48px] sm:w-auto"
           >
-            {updateSettings.isPending ? 'Saving…' : 'Save Changes'}
+            {isSaving ? 'Saving…' : 'Save Changes'}
           </Button>
         </div>
       </CardContent>
@@ -149,32 +155,30 @@ function HolidaySection() {
   const canUpdate = hasPermission(role, 'settings.update');
 
   const { data: holidays, isLoading, error } = useHolidays();
-  const createHoliday = useCreateHoliday();
-  const deleteHoliday = useDeleteHoliday();
+  const setHolidays = useSetHolidays();
   const { showToast } = useToast();
 
   const [newDate, setNewDate] = useState('');
-  const [newDescription, setNewDescription] = useState('');
   const [serverError, setServerError] = useState<string | null>(null);
 
   const currentYear = new Date().getFullYear();
   const currentYearHolidays = useMemo(
     () =>
-      (holidays ?? []).filter((h) => {
-        const year = new Date(h.date).getFullYear();
+      (holidays ?? []).filter((dateStr) => {
+        const year = new Date(dateStr).getFullYear();
         return year === currentYear;
-      }),
+      }).sort(),
     [holidays, currentYear],
   );
 
   async function handleAddHoliday(e: React.FormEvent) {
     e.preventDefault();
-    if (!newDate || !newDescription.trim()) return;
+    if (!newDate) return;
     setServerError(null);
     try {
-      await createHoliday.mutateAsync({ date: newDate, description: newDescription.trim() });
+      const updatedHolidays = [...(holidays ?? []), newDate];
+      await setHolidays.mutateAsync(updatedHolidays);
       setNewDate('');
-      setNewDescription('');
       showToast({ message: 'Holiday added', variant: 'success' });
     } catch (err) {
       if (err instanceof ApiClientError) {
@@ -185,9 +189,11 @@ function HolidaySection() {
     }
   }
 
-  async function handleRemoveHoliday(id: string) {
+  async function handleRemoveHoliday(dateStr: string) {
+    setServerError(null);
     try {
-      await deleteHoliday.mutateAsync(id);
+      const updatedHolidays = (holidays ?? []).filter((d) => d !== dateStr);
+      await setHolidays.mutateAsync(updatedHolidays);
       showToast({ message: 'Holiday removed', variant: 'success' });
     } catch (err) {
       if (err instanceof ApiClientError) {
@@ -226,24 +232,22 @@ function HolidaySection() {
               <thead>
                 <tr className="border-b bg-muted/50">
                   <th className="px-4 py-2 text-left font-medium">Date</th>
-                  <th className="px-4 py-2 text-left font-medium">Description</th>
                   {canUpdate && <th className="px-4 py-2 text-left font-medium">Actions</th>}
                 </tr>
               </thead>
               <tbody>
-                {currentYearHolidays.map((h) => (
-                  <tr key={h.id} className="border-b">
+                {currentYearHolidays.map((dateStr) => (
+                  <tr key={dateStr} className="border-b">
                     <td className="px-4 py-2">
-                      <DateDisplay date={h.date} />
+                      <DateDisplay date={dateStr} />
                     </td>
-                    <td className="px-4 py-2">{h.description}</td>
                     {canUpdate && (
                       <td className="px-4 py-2">
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleRemoveHoliday(h.id)}
-                          disabled={deleteHoliday.isPending}
+                          onClick={() => handleRemoveHoliday(dateStr)}
+                          disabled={setHolidays.isPending}
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
@@ -268,19 +272,9 @@ function HolidaySection() {
                 required
               />
             </div>
-            <div className="flex-1 space-y-1.5">
-              <Label htmlFor="holiday-desc">Description</Label>
-              <Input
-                id="holiday-desc"
-                value={newDescription}
-                onChange={(e) => setNewDescription(e.target.value)}
-                placeholder="e.g. Republic Day"
-                required
-              />
-            </div>
-            <Button type="submit" disabled={createHoliday.isPending} className="w-full min-h-[48px] sm:w-auto sm:min-h-[44px]">
+            <Button type="submit" disabled={setHolidays.isPending} className="w-full min-h-[48px] sm:w-auto sm:min-h-[44px]">
               <Plus className="mr-1 h-4 w-4" />
-              {createHoliday.isPending ? 'Adding…' : 'Add Holiday'}
+              {setHolidays.isPending ? 'Adding…' : 'Add Holiday'}
             </Button>
           </form>
         )}

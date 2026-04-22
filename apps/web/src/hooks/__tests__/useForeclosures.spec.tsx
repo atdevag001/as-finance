@@ -19,7 +19,7 @@ vi.mock('@/lib/api-client', () => ({
  *
  * Tests the foreclosure hooks for:
  * - Quote generation with settlement amounts
- * - Quote execution with idempotency
+ * - Quote execution with idempotency and payment mode
  * - Query invalidation after successful foreclosure
  * - Error handling for expired quotes and invalid states
  *
@@ -47,14 +47,15 @@ describe('useForeclosures Hook', () => {
 
   describe('useGenerateForeclosureQuote', () => {
     const mockQuote = {
-      id: 'fc-quote-1',
-      loan_id: 'loan-1',
-      outstanding_principal_paise: 4000000,
-      accrued_interest_paise: 200000,
-      pending_penalties_paise: 50000,
-      rebate_paise: 100000,
-      settlement_amount_paise: 4150000,
-      expires_at: '2024-01-20T18:00:00.000Z',
+      foreclosureId: 'fc-quote-1',
+      loanId: 'loan-1',
+      loanNumber: 'LN-001',
+      outstandingPrincipalPaise: 4000000,
+      accruedInterestPaise: 200000,
+      pendingPenaltiesPaise: 50000,
+      rebatePaise: 100000,
+      settlementAmountPaise: 4150000,
+      quoteExpiresAt: '2024-01-20T18:00:00.000Z',
       status: 'pending',
     };
 
@@ -80,13 +81,13 @@ describe('useForeclosures Hook', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       const quote = result.current.data!;
-      expect(quote.id).toBe('fc-quote-1');
-      expect(quote.outstanding_principal_paise).toBe(4000000);
-      expect(quote.accrued_interest_paise).toBe(200000);
-      expect(quote.pending_penalties_paise).toBe(50000);
-      expect(quote.rebate_paise).toBe(100000);
-      expect(quote.settlement_amount_paise).toBe(4150000);
-      expect(quote.expires_at).toBeDefined();
+      expect(quote.foreclosureId).toBe('fc-quote-1');
+      expect(quote.outstandingPrincipalPaise).toBe(4000000);
+      expect(quote.accruedInterestPaise).toBe(200000);
+      expect(quote.pendingPenaltiesPaise).toBe(50000);
+      expect(quote.rebatePaise).toBe(100000);
+      expect(quote.settlementAmountPaise).toBe(4150000);
+      expect(quote.quoteExpiresAt).toBeDefined();
     });
 
     it('returns amounts in paise', async () => {
@@ -100,11 +101,11 @@ describe('useForeclosures Hook', () => {
 
       const quote = result.current.data!;
       // All amounts should be integers (paise)
-      expect(Number.isInteger(quote.outstanding_principal_paise)).toBe(true);
-      expect(Number.isInteger(quote.accrued_interest_paise)).toBe(true);
-      expect(Number.isInteger(quote.pending_penalties_paise)).toBe(true);
-      expect(Number.isInteger(quote.rebate_paise)).toBe(true);
-      expect(Number.isInteger(quote.settlement_amount_paise)).toBe(true);
+      expect(Number.isInteger(quote.outstandingPrincipalPaise)).toBe(true);
+      expect(Number.isInteger(quote.accruedInterestPaise)).toBe(true);
+      expect(Number.isInteger(quote.pendingPenaltiesPaise)).toBe(true);
+      expect(Number.isInteger(quote.rebatePaise)).toBe(true);
+      expect(Number.isInteger(quote.settlementAmountPaise)).toBe(true);
     });
 
     it('settlement = principal + interest + penalties - rebate', async () => {
@@ -118,20 +119,20 @@ describe('useForeclosures Hook', () => {
 
       const quote = result.current.data!;
       const expectedSettlement =
-        quote.outstanding_principal_paise +
-        quote.accrued_interest_paise +
-        quote.pending_penalties_paise -
-        quote.rebate_paise;
-      expect(quote.settlement_amount_paise).toBe(expectedSettlement);
+        quote.outstandingPrincipalPaise +
+        quote.accruedInterestPaise +
+        quote.pendingPenaltiesPaise -
+        quote.rebatePaise;
+      expect(quote.settlementAmountPaise).toBe(expectedSettlement);
     });
 
-    it('expires_at is set in the future', async () => {
+    it('quoteExpiresAt is set in the future', async () => {
       const futureDate = new Date();
       futureDate.setHours(futureDate.getHours() + 24);
 
       mockPost.mockResolvedValueOnce({
         ...mockQuote,
-        expires_at: futureDate.toISOString(),
+        quoteExpiresAt: futureDate.toISOString(),
       });
 
       const { result } = renderHook(() => useGenerateForeclosureQuote(), { wrapper });
@@ -140,7 +141,7 @@ describe('useForeclosures Hook', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      const expiresAt = new Date(result.current.data!.expires_at);
+      const expiresAt = new Date(result.current.data!.quoteExpiresAt);
       expect(expiresAt.getTime()).toBeGreaterThan(Date.now());
     });
 
@@ -185,48 +186,66 @@ describe('useForeclosures Hook', () => {
   });
 
   describe('useExecuteForeclosure', () => {
-    it('executes a foreclosure', async () => {
+    it('executes a foreclosure with required paymentMode', async () => {
       mockPost.mockResolvedValueOnce({ status: 'closed' });
 
       const { result } = renderHook(() => useExecuteForeclosure(), { wrapper });
 
-      result.current.mutate({ id: 'fc-quote-1', idempotencyKey: 'idem-key-123' });
+      result.current.mutate({
+        foreclosureId: 'fc-quote-1',
+        paymentMode: 'cash',
+        idempotencyKey: 'idem-key-123',
+      });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(mockPost).toHaveBeenCalledWith('/foreclosures/fc-quote-1/execute', {
+      expect(mockPost).toHaveBeenCalledWith('/foreclosures', {
+        foreclosureId: 'fc-quote-1',
+        paymentMode: 'cash',
         idempotencyKey: 'idem-key-123',
       });
     });
 
-    it('sends idempotency key in body', async () => {
+    it('sends idempotency key and payment mode in body', async () => {
       mockPost.mockResolvedValueOnce({ status: 'closed' });
 
       const { result } = renderHook(() => useExecuteForeclosure(), { wrapper });
 
-      result.current.mutate({ id: 'fc-quote-1', idempotencyKey: 'unique-key-456' });
+      result.current.mutate({
+        foreclosureId: 'fc-quote-1',
+        paymentMode: 'bank_transfer',
+        idempotencyKey: 'unique-key-456',
+      });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(mockPost).toHaveBeenCalledWith(
-        '/foreclosures/fc-quote-1/execute',
-        expect.objectContaining({ idempotencyKey: 'unique-key-456' })
+        '/foreclosures',
+        expect.objectContaining({
+          idempotencyKey: 'unique-key-456',
+          paymentMode: 'bank_transfer',
+        })
       );
     });
 
-    it('invalidates loans and collections queries on success', async () => {
+    it('invalidates loans, collections, and foreclosures queries on success', async () => {
       mockPost.mockResolvedValueOnce({ status: 'closed' });
 
       const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
 
       const { result } = renderHook(() => useExecuteForeclosure(), { wrapper });
 
-      result.current.mutate({ id: 'fc-quote-1', idempotencyKey: 'key-1' });
+      result.current.mutate({
+        foreclosureId: 'fc-quote-1',
+        paymentMode: 'cash',
+        idempotencyKey: 'key-1',
+      });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['loans'] });
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['collections'] });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['foreclosures'] });
     });
 
     it('handles 400 error when quote expired', async () => {
@@ -236,7 +255,11 @@ describe('useForeclosures Hook', () => {
 
       const { result } = renderHook(() => useExecuteForeclosure(), { wrapper });
 
-      result.current.mutate({ id: 'fc-quote-expired', idempotencyKey: 'key-1' });
+      result.current.mutate({
+        foreclosureId: 'fc-quote-expired',
+        paymentMode: 'cash',
+        idempotencyKey: 'key-1',
+      });
 
       await waitFor(() => expect(result.current.isError).toBe(true));
 
@@ -250,7 +273,11 @@ describe('useForeclosures Hook', () => {
 
       const { result } = renderHook(() => useExecuteForeclosure(), { wrapper });
 
-      result.current.mutate({ id: 'invalid-quote', idempotencyKey: 'key-1' });
+      result.current.mutate({
+        foreclosureId: 'invalid-quote',
+        paymentMode: 'cash',
+        idempotencyKey: 'key-1',
+      });
 
       await waitFor(() => expect(result.current.isError).toBe(true));
     });
@@ -262,7 +289,11 @@ describe('useForeclosures Hook', () => {
 
       const { result } = renderHook(() => useExecuteForeclosure(), { wrapper });
 
-      result.current.mutate({ id: 'fc-quote-done', idempotencyKey: 'key-1' });
+      result.current.mutate({
+        foreclosureId: 'fc-quote-done',
+        paymentMode: 'cash',
+        idempotencyKey: 'key-1',
+      });
 
       await waitFor(() => expect(result.current.isError).toBe(true));
 
@@ -276,7 +307,11 @@ describe('useForeclosures Hook', () => {
 
       const { result } = renderHook(() => useExecuteForeclosure(), { wrapper });
 
-      result.current.mutate({ id: 'fc-quote-1', idempotencyKey: 'key-1' });
+      result.current.mutate({
+        foreclosureId: 'fc-quote-1',
+        paymentMode: 'cash',
+        idempotencyKey: 'key-1',
+      });
 
       // Eventually succeeds even with slow response
       await waitFor(() => expect(result.current.isSuccess).toBe(true), { timeout: 2000 });
@@ -289,11 +324,41 @@ describe('useForeclosures Hook', () => {
 
       const { result } = renderHook(() => useExecuteForeclosure(), { wrapper });
 
-      result.current.mutate({ id: 'fc-quote-1', idempotencyKey: 'key-1' });
+      result.current.mutate({
+        foreclosureId: 'fc-quote-1',
+        paymentMode: 'cash',
+        idempotencyKey: 'key-1',
+      });
 
       await waitFor(() => expect(result.current.isError).toBe(true));
 
       expect(invalidateSpy).not.toHaveBeenCalled();
+    });
+
+    it('supports optional rebate fields', async () => {
+      mockPost.mockResolvedValueOnce({ status: 'closed' });
+
+      const { result } = renderHook(() => useExecuteForeclosure(), { wrapper });
+
+      result.current.mutate({
+        foreclosureId: 'fc-quote-1',
+        paymentMode: 'cash',
+        idempotencyKey: 'key-1',
+        rebatePaise: 10000,
+        rebateReason: 'Good customer',
+        rebateAuthorizedBy: 'user-123',
+      });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(mockPost).toHaveBeenCalledWith('/foreclosures', {
+        foreclosureId: 'fc-quote-1',
+        paymentMode: 'cash',
+        idempotencyKey: 'key-1',
+        rebatePaise: 10000,
+        rebateReason: 'Good customer',
+        rebateAuthorizedBy: 'user-123',
+      });
     });
   });
 });

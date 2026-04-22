@@ -308,9 +308,9 @@ describe('useCollections Hook', () => {
       customer_name: 'John Doe',
       loan_number: 'LN-2024-001',
       amount_paise: 500000,
-      principal_paise: 350000,
-      interest_paise: 100000,
-      penalty_paise: 50000,
+      principal_component_paise: 350000,
+      interest_component_paise: 100000,
+      penalty_component_paise: 50000,
       outstanding_after_paise: 4500000,
       officer_name: 'Field Officer',
       payment_mode: 'cash',
@@ -337,9 +337,9 @@ describe('useCollections Hook', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(result.current.data?.principal_paise).toBe(350000);
-      expect(result.current.data?.interest_paise).toBe(100000);
-      expect(result.current.data?.penalty_paise).toBe(50000);
+      expect(result.current.data?.principal_component_paise).toBe(350000);
+      expect(result.current.data?.interest_component_paise).toBe(100000);
+      expect(result.current.data?.penalty_component_paise).toBe(50000);
     });
 
     it('does not fetch when ID is empty', () => {
@@ -366,7 +366,7 @@ describe('useCollections Hook', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       const receipt = result.current.data!;
-      const allocationTotal = receipt.principal_paise + receipt.interest_paise + receipt.penalty_paise;
+      const allocationTotal = receipt.principal_component_paise + receipt.interest_component_paise + receipt.penalty_component_paise;
       expect(allocationTotal).toBe(receipt.amount_paise);
     });
   });
