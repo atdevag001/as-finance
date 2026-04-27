@@ -19,6 +19,7 @@ import { ApproveLoanDto } from './dto/approve-loan.dto';
 import { RejectLoanDto } from './dto/reject-loan.dto';
 import { DisburseLoanDto } from './dto/disburse-loan.dto';
 import { LoanQueryDto } from './dto/loan-query.dto';
+import { RegenerateScheduleDto } from './dto/regenerate-schedule.dto';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 import { JwtPayload } from '../../common/guards/jwt-auth.guard';
 
@@ -159,7 +160,28 @@ export class LoanController {
         mode: dto.mode,
         referenceNumber: dto.referenceNumber,
         idempotencyKey,
+        firstEmiDate: dto.firstEmiDate,
       },
+      req.user.sub,
+      req.user.role,
+    );
+  }
+
+  @Post(':id/regenerate-schedule')
+  @RequirePermission('loan.approve')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Regenerate EMI schedule with a new first EMI date' })
+  @ApiResponse({ status: 200, description: 'Schedule regenerated successfully' })
+  @ApiResponse({ status: 404, description: 'Loan not found' })
+  @ApiResponse({ status: 422, description: 'Cannot regenerate - payments collected or invalid status' })
+  async regenerateSchedule(
+    @Param('id') id: string,
+    @Body() dto: RegenerateScheduleDto,
+    @Req() req: Request & { user: JwtPayload },
+  ) {
+    return this.loanService.regenerateSchedule(
+      id,
+      dto.firstEmiDate,
       req.user.sub,
       req.user.role,
     );

@@ -513,4 +513,47 @@ export class LoanRepository {
       },
     });
   }
+
+  /**
+   * Check if any collections (payments) exist for a loan.
+   * Used to prevent schedule regeneration after payments have been made.
+   */
+  async hasCollections(loanId: string): Promise<boolean> {
+    const count = await this.prisma['collections'].count({
+      where: {
+        loan_id: loanId,
+        status: 'posted',
+      },
+    });
+    return count > 0;
+  }
+
+  /**
+   * Delete all schedule installments for a loan.
+   * Used when regenerating a schedule with a new first EMI date.
+   */
+  async deleteScheduleInstallments(loanId: string) {
+    return this.prisma['loan_schedules'].deleteMany({
+      where: { loan_id: loanId },
+    });
+  }
+
+  /**
+   * Update loan with new schedule dates and totals.
+   */
+  async updateLoanScheduleDates(
+    loanId: string,
+    data: {
+      first_due_date?: Date;
+      last_due_date?: Date;
+      total_interest_paise?: number;
+      total_payable_paise?: number;
+    },
+  ) {
+    return this.prisma['loans'].update({
+      where: { id: loanId },
+      data: data as never,
+      select: LOAN_SELECT,
+    });
+  }
 }

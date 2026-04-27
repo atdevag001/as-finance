@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import Decimal from 'decimal.js';
-import { JournalSourceType } from '@as-finance/shared';
+import { JournalSourceType, InterestType, Frequency } from '@as-finance/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { DisbursementRepository } from './disbursement.repository';
 import { AccountingService } from '../accounting/accounting.service';
@@ -270,11 +270,83 @@ export class DisbursementService {
       }
     }
 
-    // ── Step 6: Set loan dates and cached outstanding ──
-    const schedules = loan.schedules;
-    const firstDueDate = schedules.length > 0 ? schedules[0]!.due_date : disbursementDate;
-    const lastDueDate = schedules.length > 0 ? schedules[schedules.length - 1]!.due_date : disbursementDate;
-    const totalPayable = loan.total_payable_paise ?? loan.principal_paise;
+    // ── Step 6: Handle first EMI date override if provided ──
+    let schedules = loan.schedules;
+    let totalPayable = loan.total_payable_paise ?? loan.principal_paise;
+
+    // Track first/last due dates for later use
+    let computedFirstDueDate: Date | undefined;
+    let computedLastDueDate: Date | undefined;
+
+    if (dto.firstEmiDate) {
+      // Validate first EMI date is after disbursement date
+      const firstEmi = new Date(dto.firstEmiDate);
+      if (firstEmi <= disbursementDate) {
+        throw new BusinessRuleError(
+          'First EMI date must be after disbursement date',
+          'FIRST_EMI_DATE_BEFORE_DISBURSEMENT',
+        );
+      }
+
+      // Regenerate the schedule with the new first EMI date
+      const pv = loan.product_version;
+      const scheduleStartDate = this.calculateStartDateFromFirstEmi(firstEmi, pv.repayment_frequency);
+
+      // Import and use schedule generator
+      const { generateSchedule } = await import('../schedule/schedule.service');
+      const newSchedule = generateSchedule({
+        principalPaise: Number(loan.principal_paise),
+        annualRateBps: pv.annual_rate_bps,
+        tenureMonths: loan.tenure_months,
+        interestType: pv.interest_type as InterestType,
+        frequency: pv.repayment_frequency as Frequency,
+        startDate: scheduleStartDate,
+        holidays: [],
+      });
+
+      // Calculate new totals
+      const totalInterestPaise = newSchedule.reduce((sum, inst) => sum + inst.interestPaise, 0);
+      const totalPayablePaise = Number(loan.principal_paise) + totalInterestPaise;
+      totalPayable = BigInt(totalPayablePaise);
+
+      // Delete old schedule and create new one within transaction
+      await tx['loan_schedules'].deleteMany({
+        where: { loan_id: dto.loanId },
+      });
+
+      for (const inst of newSchedule) {
+        await tx['loan_schedules'].create({
+          data: {
+            loan_id: dto.loanId,
+            installment_number: inst.installmentNumber,
+            due_date: inst.dueDate,
+            principal_paise: inst.principalPaise,
+            interest_paise: inst.interestPaise,
+            total_paise: inst.totalPaise,
+            principal_paid_paise: 0,
+            interest_paid_paise: 0,
+            penalty_paid_paise: 0,
+            status: 'pending',
+          } as never,
+        });
+      }
+
+      // Update totals on loan
+      await tx['loans'].update({
+        where: { id: dto.loanId },
+        data: {
+          total_interest_paise: totalInterestPaise,
+          total_payable_paise: totalPayablePaise,
+        },
+      });
+
+      // Set computed due dates from new schedule
+      computedFirstDueDate = newSchedule[0]?.dueDate;
+      computedLastDueDate = newSchedule[newSchedule.length - 1]?.dueDate;
+    }
+
+    const firstDueDate = computedFirstDueDate ?? (schedules.length > 0 ? schedules[0]!.due_date : disbursementDate);
+    const lastDueDate = computedLastDueDate ?? (schedules.length > 0 ? schedules[schedules.length - 1]!.due_date : disbursementDate);
 
     await this.disbursementRepository.updateLoanForDisbursement(
       dto.loanId,
@@ -357,6 +429,27 @@ export class DisbursementService {
     });
 
     return resultBody;
+  }
+
+  /**
+   * Calculate the schedule start date from a desired first EMI date.
+   * The schedule generator adds 1 frequency period to startDate for the first EMI,
+   * so we need to subtract 1 period from the desired first EMI date.
+   */
+  private calculateStartDateFromFirstEmi(firstEmiDate: Date, frequency: string): Date {
+    const startDate = new Date(firstEmiDate);
+    switch (frequency) {
+      case 'monthly':
+        startDate.setMonth(startDate.getMonth() - 1);
+        break;
+      case 'weekly':
+        startDate.setDate(startDate.getDate() - 7);
+        break;
+      case 'daily':
+        startDate.setDate(startDate.getDate() - 1);
+        break;
+    }
+    return startDate;
   }
 
   /**

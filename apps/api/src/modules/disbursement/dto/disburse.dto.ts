@@ -1,5 +1,5 @@
-import { IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { IsEnum, IsOptional, IsString, IsUUID, IsDateString } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PaymentMode } from '@as-finance/shared';
 
 /**
@@ -24,4 +24,12 @@ export class DisburseDto {
   @ApiProperty({ description: 'Idempotency key for duplicate prevention' })
   @IsString()
   idempotencyKey!: string;
+
+  @ApiPropertyOptional({
+    description: 'Override first EMI due date (ISO date string). Must be after disbursement date. If provided, regenerates the schedule.',
+    example: '2026-05-27',
+  })
+  @IsOptional()
+  @IsDateString()
+  firstEmiDate?: string;
 }

@@ -324,13 +324,27 @@ export class LoanService {
     // Generate and persist the EMI schedule
     if (loan.product_version) {
       const pv = loan.product_version;
+      // Use provided firstEmiDate or default to current date
+      // The schedule generator adds 1 frequency period to startDate for the first EMI
+      // So if user wants first EMI on May 27, we need to calculate the startDate accordingly
+      let scheduleStartDate = new Date();
+      if (dto.firstEmiDate) {
+        // User provided a specific first EMI date
+        // We need to set startDate such that first EMI falls on the desired date
+        // For monthly: startDate = firstEmiDate - 1 month
+        // For weekly: startDate = firstEmiDate - 7 days
+        // For daily: startDate = firstEmiDate - 1 day
+        const firstEmi = new Date(dto.firstEmiDate);
+        scheduleStartDate = this.calculateStartDateFromFirstEmi(firstEmi, pv.repayment_frequency);
+      }
+
       const schedule = generateSchedule({
         principalPaise: Number(loan.principal_paise),
         annualRateBps: pv.annual_rate_bps,
         tenureMonths: loan.tenure_months,
         interestType: pv.interest_type,
         frequency: pv.repayment_frequency,
-        startDate: new Date(),
+        startDate: scheduleStartDate,
         holidays: [],
       } as ScheduleParams);
 
@@ -605,5 +619,161 @@ export class LoanService {
       throw new NotFoundError(`Loan not found: ${id}`);
     }
     return this.loanRepository.getStatusHistory(id);
+  }
+
+  /**
+   * Calculate the schedule start date from a desired first EMI date.
+   * The schedule generator adds 1 frequency period to startDate for the first EMI,
+   * so we need to subtract 1 period from the desired first EMI date.
+   */
+  private calculateStartDateFromFirstEmi(firstEmiDate: Date, frequency: string): Date {
+    const startDate = new Date(firstEmiDate);
+    switch (frequency) {
+      case 'monthly':
+        startDate.setMonth(startDate.getMonth() - 1);
+        break;
+      case 'weekly':
+        startDate.setDate(startDate.getDate() - 7);
+        break;
+      case 'daily':
+        startDate.setDate(startDate.getDate() - 1);
+        break;
+    }
+    return startDate;
+  }
+
+  /**
+   * Regenerate the EMI schedule with a new first EMI date.
+   *
+   * Constraints:
+   * - Loan must be in approved or active status
+   * - No payments must have been collected yet
+   * - First EMI date must be in the future
+   * - If loan is disbursed, first EMI date must be after disbursement date
+   */
+  async regenerateSchedule(
+    loanId: string,
+    firstEmiDate: string,
+    actorId: string,
+    actorRole: string,
+  ) {
+    const loan = await this.loanRepository.findById(loanId);
+    if (!loan) {
+      throw new NotFoundError(`Loan not found: ${loanId}`);
+    }
+
+    // Validate loan status - only approved or active loans can have schedule regenerated
+    if (!['approved', 'active'].includes(loan.status)) {
+      throw new BusinessRuleError(
+        `Schedule can only be regenerated for approved or active loans. Current status: ${loan.status}`,
+        'INVALID_LOAN_STATUS_FOR_REGENERATION',
+      );
+    }
+
+    // Check if any payments have been collected
+    const hasCollections = await this.loanRepository.hasCollections(loanId);
+    if (hasCollections) {
+      throw new BusinessRuleError(
+        'Cannot regenerate schedule after payments have been collected',
+        'COLLECTIONS_EXIST',
+      );
+    }
+
+    // Validate first EMI date is in the future
+    const firstEmi = new Date(firstEmiDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (firstEmi <= today) {
+      throw new BusinessRuleError(
+        'First EMI date must be in the future',
+        'FIRST_EMI_DATE_NOT_FUTURE',
+      );
+    }
+
+    // If loan is disbursed, first EMI date must be after disbursement date
+    if (loan.disbursement_date) {
+      const disbursementDate = new Date(loan.disbursement_date);
+      if (firstEmi <= disbursementDate) {
+        throw new BusinessRuleError(
+          'First EMI date must be after disbursement date',
+          'FIRST_EMI_DATE_BEFORE_DISBURSEMENT',
+        );
+      }
+    }
+
+    // Get product version for schedule generation
+    if (!loan.product_version) {
+      throw new BusinessRuleError(
+        'Loan product version not found',
+        'PRODUCT_VERSION_NOT_FOUND',
+      );
+    }
+
+    const pv = loan.product_version;
+
+    // Calculate start date from first EMI date
+    const scheduleStartDate = this.calculateStartDateFromFirstEmi(firstEmi, pv.repayment_frequency);
+
+    // Generate new schedule
+    const schedule = generateSchedule({
+      principalPaise: Number(loan.principal_paise),
+      annualRateBps: pv.annual_rate_bps,
+      tenureMonths: loan.tenure_months,
+      interestType: pv.interest_type,
+      frequency: pv.repayment_frequency,
+      startDate: scheduleStartDate,
+      holidays: [],
+    } as ScheduleParams);
+
+    // Calculate new totals
+    const totalInterestPaise = schedule.reduce((sum, inst) => sum + inst.interestPaise, 0);
+    const totalPayablePaise = Number(loan.principal_paise) + totalInterestPaise;
+
+    // Get old schedule for audit
+    const oldSchedule = loan.schedules || [];
+    const oldFirstDueDate = oldSchedule.length > 0 ? oldSchedule[0]?.due_date : null;
+
+    // Delete old schedule and create new one
+    await this.loanRepository.deleteScheduleInstallments(loanId);
+    await this.loanRepository.createScheduleInstallments(loanId, schedule);
+
+    // Update loan with new totals and dates
+    const firstDueDate = schedule[0]?.dueDate;
+    const lastDueDate = schedule[schedule.length - 1]?.dueDate;
+
+    await this.loanRepository.updateLoanScheduleDates(loanId, {
+      first_due_date: firstDueDate,
+      last_due_date: lastDueDate,
+      total_interest_paise: totalInterestPaise,
+      total_payable_paise: totalPayablePaise,
+    });
+
+    // Record audit log
+    await this.loanRepository.createAuditLog({
+      action_type: 'loan_approved', // Using existing action type for audit
+      actor_id: actorId,
+      actor_role: actorRole,
+      target_entity: 'loan',
+      target_id: loanId,
+      before_state: {
+        first_due_date: oldFirstDueDate?.toISOString(),
+        schedule_count: oldSchedule.length,
+      },
+      after_state: {
+        first_due_date: firstDueDate?.toISOString(),
+        schedule_count: schedule.length,
+        regenerated: true,
+      },
+      remarks: `Schedule regenerated with new first EMI date: ${firstEmiDate}`,
+    });
+
+    return {
+      loanId,
+      firstEmiDate: firstDueDate?.toISOString().split('T')[0],
+      lastEmiDate: lastDueDate?.toISOString().split('T')[0],
+      numberOfInstallments: schedule.length,
+      totalInterestPaise,
+      totalPayablePaise,
+    };
   }
 }
