@@ -6,6 +6,28 @@ AS-Finance is a microfinance loan management system with:
 - **Web**: Next.js frontend (`apps/web/`)
 - **Packages**: Shared configs and testing utilities
 
+## Bidirectional Update Rule
+
+**ALWAYS maintain frontend-backend sync when implementing features:**
+
+| When you update... | Also check/update... |
+|-------------------|---------------------|
+| Backend API endpoint | Frontend hooks, forms, and components that call it |
+| Backend DTO fields | Frontend form fields, types, and validation |
+| Backend response format | Frontend data handling and display |
+| Frontend form fields | Backend DTO to accept the new fields |
+| Frontend API calls | Backend endpoint exists and accepts the payload |
+
+**Workflow:**
+1. When adding a backend feature → implement corresponding frontend UI
+2. When adding frontend UI → ensure backend API supports it
+3. After any API change → update frontend hooks/types if affected
+4. After any form change → verify backend accepts the new data
+
+**Example:** Adding `firstEmiDate` to loan approval:
+- Backend: Add field to `ApproveLoanDto`, update `LoanService.approve()`
+- Frontend: Add date input to approval dialog, pass field in API call
+
 ## Autonomous Testing System
 
 ### Quick Start Commands
