@@ -71,6 +71,12 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
   const [disburseMode, setDisburseMode] = useState<string>('cash');
   const [disburseReference, setDisburseReference] = useState('');
 
+  // EMI date customization state
+  const [approveFirstEmiDate, setApproveFirstEmiDate] = useState('');
+  const [disburseFirstEmiDate, setDisburseFirstEmiDate] = useState('');
+  const [regenerateOpen, setRegenerateOpen] = useState(false);
+  const [regenerateFirstEmiDate, setRegenerateFirstEmiDate] = useState('');
+
   // Foreclosure state
   const [foreclosureOpen, setForeclosureOpen] = useState(false);
   const [foreclosureQuote, setForeclosureQuote] = useState<ForeclosureQuote | null>(null);
@@ -129,8 +135,13 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
   async function handleApprove() {
     setActionError(null);
     try {
-      await loanAction.mutateAsync({ id, action: 'approve' });
+      await loanAction.mutateAsync({
+        id,
+        action: 'approve',
+        body: approveFirstEmiDate ? { firstEmiDate: approveFirstEmiDate } : undefined,
+      });
       setApproveOpen(false);
+      setApproveFirstEmiDate('');
       showToast({ message: 'Loan approved successfully' });
     } catch (err) {
       setActionError((err as Error).message || 'Failed to approve loan');
@@ -160,11 +171,13 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
           idempotencyKey,
           mode: disburseMode,
           referenceNumber: disburseMode === 'bank_transfer' ? disburseReference : undefined,
+          firstEmiDate: disburseFirstEmiDate || undefined,
         },
       });
       setDisburseOpen(false);
       setDisburseMode('cash');
       setDisburseReference('');
+      setDisburseFirstEmiDate('');
       showToast({ message: 'Loan disbursed successfully' });
     } catch (err) {
       setActionError((err as Error).message || 'Failed to disburse loan');
@@ -234,6 +247,23 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
       showToast({ message: 'Loan closed successfully' });
     } catch (err) {
       setActionError((err as Error).message || 'Failed to close loan');
+    }
+  }
+
+  async function handleRegenerateSchedule() {
+    if (!regenerateFirstEmiDate) return;
+    setActionError(null);
+    try {
+      await loanAction.mutateAsync({
+        id,
+        action: 'regenerate-schedule',
+        body: { firstEmiDate: regenerateFirstEmiDate },
+      });
+      setRegenerateOpen(false);
+      setRegenerateFirstEmiDate('');
+      showToast({ message: 'EMI schedule regenerated successfully' });
+    } catch (err) {
+      setActionError((err as Error).message || 'Failed to regenerate schedule');
     }
   }
 
@@ -353,6 +383,23 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
               className="min-h-[44px] flex-1 sm:flex-none bg-green-600 hover:bg-green-700 text-white"
             >
               Close Loan
+            </Button>
+          </PermissionGate>
+        )}
+        {/* Change EMI Date - only for approved or active loans with no collections */}
+        {(loan.status === 'approved' ||
+          (loan.status === 'active' && collectionsData && collectionsData.data.length === 0)) && (
+          <PermissionGate permission="loan.approve">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRegenerateFirstEmiDate(loan.first_due_date ? String(loan.first_due_date).slice(0, 10) : '');
+                setRegenerateOpen(true);
+              }}
+              disabled={isActionInProgress}
+              className="min-h-[44px] flex-1 sm:flex-none"
+            >
+              Change EMI Date
             </Button>
           </PermissionGate>
         )}
@@ -696,13 +743,32 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
       {/* Approve Dialog */}
       <ConfirmDialog
         open={approveOpen}
-        onOpenChange={setApproveOpen}
+        onOpenChange={(open) => {
+          setApproveOpen(open);
+          if (!open) setApproveFirstEmiDate('');
+        }}
         title="Approve Loan"
-        description={`Are you sure you want to approve loan ${loan.loan_number}?`}
+        description={`Approve loan ${loan.loan_number}. Optionally set the first EMI due date.`}
         confirmLabel="Approve"
         loading={isActionInProgress}
         onConfirm={handleApprove}
-      />
+      >
+        <div className="space-y-2 py-2">
+          <Label htmlFor="approve-first-emi">First EMI Date (optional)</Label>
+          <Input
+            id="approve-first-emi"
+            type="date"
+            value={approveFirstEmiDate}
+            onChange={(e) => setApproveFirstEmiDate(e.target.value)}
+            disabled={isActionInProgress}
+            min={new Date().toISOString().split('T')[0]}
+            className="min-h-[44px] text-base"
+          />
+          <p className="text-xs text-muted-foreground">
+            Leave empty to use default (approval date + 1 payment period)
+          </p>
+        </div>
+      </ConfirmDialog>
 
       {/* Reject Dialog */}
       <ConfirmDialog
@@ -738,6 +804,7 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
           if (!open) {
             setDisburseMode('cash');
             setDisburseReference('');
+            setDisburseFirstEmiDate('');
           }
         }}
         title="Disburse Loan"
@@ -771,6 +838,21 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
               />
             </div>
           )}
+          <div className="space-y-2">
+            <Label htmlFor="disburse-first-emi">First EMI Date (optional)</Label>
+            <Input
+              id="disburse-first-emi"
+              type="date"
+              value={disburseFirstEmiDate}
+              onChange={(e) => setDisburseFirstEmiDate(e.target.value)}
+              disabled={isActionInProgress}
+              min={new Date().toISOString().split('T')[0]}
+              className="min-h-[44px] text-base"
+            />
+            <p className="text-xs text-muted-foreground">
+              Override first EMI date. Leave empty to keep existing schedule.
+            </p>
+          </div>
         </div>
       </ConfirmDialog>
 
@@ -921,6 +1003,41 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
         loading={isActionInProgress}
         onConfirm={handleCloseLoan}
       />
+
+      {/* Change EMI Date Dialog */}
+      <ConfirmDialog
+        open={regenerateOpen}
+        onOpenChange={(open) => {
+          setRegenerateOpen(open);
+          if (!open) setRegenerateFirstEmiDate('');
+        }}
+        title="Change EMI Date"
+        description="Set a new first EMI date. This will regenerate the entire repayment schedule with new due dates."
+        confirmLabel="Regenerate Schedule"
+        loading={isActionInProgress}
+        onConfirm={handleRegenerateSchedule}
+      >
+        <div className="space-y-2 py-2">
+          <Label htmlFor="regenerate-first-emi">New First EMI Date</Label>
+          <Input
+            id="regenerate-first-emi"
+            type="date"
+            value={regenerateFirstEmiDate}
+            onChange={(e) => setRegenerateFirstEmiDate(e.target.value)}
+            disabled={isActionInProgress}
+            min={new Date().toISOString().split('T')[0]}
+            className="min-h-[44px] text-base"
+          />
+          {loan.disbursement_date && (
+            <p className="text-xs text-muted-foreground">
+              Must be after disbursement date ({String(loan.disbursement_date).slice(0, 10)})
+            </p>
+          )}
+          {!regenerateFirstEmiDate && (
+            <p className="text-xs text-destructive">Please select a date</p>
+          )}
+        </div>
+      </ConfirmDialog>
 
       {/* Reversal dialog */}
       <ReversalDialog
