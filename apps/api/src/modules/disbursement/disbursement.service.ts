@@ -186,35 +186,78 @@ export class DisbursementService {
       );
     }
 
-    // ── Step 3: Create journal entry (DR Loans Receivable, CR Cash/Bank) ──
+    // ── Step 3: Calculate processing fee (deducted from disbursement) ──
+    let processingFeePaise = 0n;
+    const pv = loan.product_version;
+    let processingFeeAccount: { id: string } | null = null;
+
+    if (pv.processing_fee_type && pv.processing_fee_value) {
+      processingFeePaise = this.calculateProcessingFee(
+        BigInt(loan.principal_paise),
+        pv.processing_fee_type,
+        pv.processing_fee_value,
+      );
+
+      if (processingFeePaise > 0n) {
+        processingFeeAccount = await this.disbursementRepository.findAccountByCode('4002', tx);
+        if (!processingFeeAccount) {
+          throw new BusinessRuleError(
+            'Processing Fee Income account (4002) not found',
+            'ACCOUNTS_NOT_CONFIGURED',
+          );
+        }
+      }
+    }
+
+    // Calculate net disbursement amount (principal - processing fee)
+    const grossAmountPaise = BigInt(loan.principal_paise);
+    const netDisbursementPaise = grossAmountPaise - processingFeePaise;
+
+    // ── Step 4: Create journal entry (single entry with net disbursement) ──
+    // DR Loans Receivable (full principal - what customer owes)
+    // CR Cash/Bank (net amount - what customer receives)
+    // CR Processing Fee Income (fee - deducted upfront)
+    const journalLines = [
+      {
+        accountId: loansReceivableAccount.id,
+        debitPaise: Number(grossAmountPaise),
+        creditPaise: 0,
+      },
+      {
+        accountId: cashAccount.id,
+        debitPaise: 0,
+        creditPaise: Number(netDisbursementPaise),
+      },
+    ];
+
+    // Add processing fee line if applicable
+    if (processingFeePaise > 0n && processingFeeAccount) {
+      journalLines.push({
+        accountId: processingFeeAccount.id,
+        debitPaise: 0,
+        creditPaise: Number(processingFeePaise),
+      });
+    }
+
     const journalEntry = await this.accountingService.createJournalEntry(
       {
         date: disbursementDate.toISOString(),
-        description: `Disbursement for loan ${loan.loan_number}`,
+        description: processingFeePaise > 0n
+          ? `Disbursement for loan ${loan.loan_number} (net of ₹${Number(processingFeePaise) / 100} processing fee)`
+          : `Disbursement for loan ${loan.loan_number}`,
         sourceType: JournalSourceType.DISBURSEMENT,
         sourceId: dto.loanId,
         createdBy: actorId,
-        lines: [
-          {
-            accountId: loansReceivableAccount.id,
-            debitPaise: Number(loan.principal_paise),
-            creditPaise: 0,
-          },
-          {
-            accountId: cashAccount.id,
-            debitPaise: 0,
-            creditPaise: Number(loan.principal_paise),
-          },
-        ],
+        lines: journalLines,
       },
       tx,
     );
 
-    // ── Step 4: Create disbursement record ──
+    // ── Step 5: Create disbursement record (stores net amount disbursed) ──
     const disbursement = await this.disbursementRepository.create(
       {
         loan_id: dto.loanId,
-        amount_paise: loan.principal_paise,
+        amount_paise: netDisbursementPaise,
         mode: dto.mode,
         reference_number: dto.referenceNumber,
         disbursed_by: actorId,
@@ -224,51 +267,6 @@ export class DisbursementService {
       },
       tx,
     );
-
-    // ── Step 5: Processing fee journal entry (if configured) ──
-    let processingFeePaise = 0n;
-    const pv = loan.product_version;
-    if (pv.processing_fee_type && pv.processing_fee_value) {
-      processingFeePaise = this.calculateProcessingFee(
-        BigInt(loan.principal_paise),
-        pv.processing_fee_type,
-        pv.processing_fee_value,
-      );
-
-      if (processingFeePaise > 0n) {
-        const processingFeeAccount = await this.disbursementRepository.findAccountByCode('4002', tx);
-        if (!processingFeeAccount) {
-          throw new BusinessRuleError(
-            'Processing Fee Income account (4002) not found',
-            'ACCOUNTS_NOT_CONFIGURED',
-          );
-        }
-
-        // DR Cash/Bank, CR Processing Fee Income
-        await this.accountingService.createJournalEntry(
-          {
-            date: disbursementDate.toISOString(),
-            description: `Processing fee for loan ${loan.loan_number}`,
-            sourceType: JournalSourceType.PROCESSING_FEE,
-            sourceId: dto.loanId,
-            createdBy: actorId,
-            lines: [
-              {
-                accountId: cashAccount.id,
-                debitPaise: Number(processingFeePaise),
-                creditPaise: 0,
-              },
-              {
-                accountId: processingFeeAccount.id,
-                debitPaise: 0,
-                creditPaise: Number(processingFeePaise),
-              },
-            ],
-          },
-          tx,
-        );
-      }
-    }
 
     // ── Step 6: Handle first EMI date override if provided ──
     let schedules = loan.schedules;
@@ -373,24 +371,32 @@ export class DisbursementService {
         after_state: {
           status: 'active',
           disbursement_date: disbursementDate.toISOString(),
-          amount_paise: loan.principal_paise.toString(),
-          mode: dto.mode,
+          gross_amount_paise: grossAmountPaise.toString(),
+          net_amount_paise: netDisbursementPaise.toString(),
           processing_fee_paise: processingFeePaise.toString(),
+          mode: dto.mode,
         },
       },
       tx,
     );
 
-    // ── Step 8: Enqueue SMS notification to outbox (placeholder) ──
+    // ── Step 8: Enqueue SMS notification to outbox ──
+    // SMS shows net amount (what customer actually receives) with fee breakdown if applicable
+    const smsMessage = processingFeePaise > 0n
+      ? `Dear ${loan.customer.full_name}, your loan ${loan.loan_number} has been disbursed. Amount: Rs ${Number(netDisbursementPaise) / 100} (after deducting Rs ${Number(processingFeePaise) / 100} processing fee from Rs ${Number(grossAmountPaise) / 100}).`
+      : `Dear ${loan.customer.full_name}, your loan ${loan.loan_number} of amount Rs ${Number(netDisbursementPaise) / 100} has been disbursed.`;
+
     await this.disbursementRepository.enqueueOutboxMessage(
       {
         event_type: 'disbursed',
         recipient_mobile: loan.customer.mobile,
-        message_body: `Dear ${loan.customer.full_name}, your loan ${loan.loan_number} of amount Rs ${Number(loan.principal_paise) / 100} has been disbursed.`,
+        message_body: smsMessage,
         variables: {
           customer_name: loan.customer.full_name,
           loan_number: loan.loan_number,
-          amount_paise: loan.principal_paise.toString(),
+          gross_amount_paise: grossAmountPaise.toString(),
+          net_amount_paise: netDisbursementPaise.toString(),
+          processing_fee_paise: processingFeePaise.toString(),
           mode: dto.mode,
         },
         source_type: 'disbursement',
@@ -404,12 +410,13 @@ export class DisbursementService {
       disbursementId: disbursement.id,
       loanId: dto.loanId,
       loanNumber: loan.loan_number,
-      amountPaise: loan.principal_paise.toString(),
+      grossAmountPaise: grossAmountPaise.toString(),
+      netAmountPaise: netDisbursementPaise.toString(),
+      processingFeePaise: processingFeePaise.toString(),
       mode: dto.mode,
       referenceNumber: dto.referenceNumber,
       journalEntryId: journalEntry.id,
       disbursedAt: now.toISOString(),
-      processingFeePaise: processingFeePaise.toString(),
     };
 
     await this.idempotencyService.store(
@@ -424,7 +431,9 @@ export class DisbursementService {
       msg: 'Loan disbursed successfully',
       loanId: dto.loanId,
       loanNumber: loan.loan_number,
-      amountPaise: loan.principal_paise.toString(),
+      grossAmountPaise: grossAmountPaise.toString(),
+      netAmountPaise: netDisbursementPaise.toString(),
+      processingFeePaise: processingFeePaise.toString(),
       disbursementId: disbursement.id,
     });
 

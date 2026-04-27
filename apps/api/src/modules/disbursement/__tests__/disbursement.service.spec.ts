@@ -266,7 +266,7 @@ describe('DisbursementService', () => {
       expect(createCall.idempotency_key).toBe('idem-key-1');
     });
 
-    it('should return result body with correct disbursement fields', async () => {
+    it('should return result body with correct disbursement fields (net disbursement)', async () => {
       const result = await service.disburse(dto, 'actor-1', 'manager');
       expect(result.statusCode).toBe(201);
       const data = result.data as Record<string, unknown>;
@@ -274,11 +274,12 @@ describe('DisbursementService', () => {
         disbursementId: 'disb-1',
         loanId: 'loan-1',
         loanNumber: 'LN-2024-00001',
-        amountPaise: '10000000',
+        grossAmountPaise: '10000000',
+        netAmountPaise: '10000000', // Same as gross when no processing fee
+        processingFeePaise: '0',
         mode: PaymentMode.CASH,
         journalEntryId: 'je-1',
       });
-      expect(data['processingFeePaise']).toBe('0');
       expect(data['disbursedAt']).toBeDefined();
     });
 
@@ -350,7 +351,7 @@ describe('DisbursementService', () => {
       idempotencyKey: 'idem-key-2',
     };
 
-    it('should create processing fee journal entry for fixed fee', async () => {
+    it('should include processing fee in single journal entry for fixed fee (net disbursement)', async () => {
       const loanWithFee = createMockLoan({
         product_version: {
           id: 'pv-1',
@@ -366,17 +367,21 @@ describe('DisbursementService', () => {
 
       await service.disburse(dto, 'actor-1', 'manager');
 
-      // Two journal entries: disbursement + processing fee
-      expect(accountingService.createJournalEntry).toHaveBeenCalledTimes(2);
-      const feeJe = accountingService.createJournalEntry.mock.calls[1]![0];
-      expect(feeJe.sourceType).toBe('processing_fee');
-      // DR Cash, CR Processing Fee Income
-      expect(feeJe.lines[0].debitPaise).toBe(50000);
-      expect(feeJe.lines[1].creditPaise).toBe(50000);
-      expect(feeJe.lines[1].accountId).toBe('acc-pfi');
+      // Single journal entry with 3 lines (net disbursement approach)
+      expect(accountingService.createJournalEntry).toHaveBeenCalledTimes(1);
+      const je = accountingService.createJournalEntry.mock.calls[0]![0];
+      expect(je.sourceType).toBe('disbursement');
+      expect(je.lines).toHaveLength(3);
+      // DR Loans Receivable (full principal)
+      expect(je.lines[0].debitPaise).toBe(10000000);
+      // CR Cash (net = principal - fee = 10000000 - 50000)
+      expect(je.lines[1].creditPaise).toBe(9950000);
+      // CR Processing Fee Income
+      expect(je.lines[2].creditPaise).toBe(50000);
+      expect(je.lines[2].accountId).toBe('acc-pfi');
     });
 
-    it('should calculate percentage-based processing fee correctly', async () => {
+    it('should calculate percentage-based processing fee correctly (net disbursement)', async () => {
       const loanWithFee = createMockLoan({
         product_version: {
           id: 'pv-1',
@@ -392,16 +397,25 @@ describe('DisbursementService', () => {
 
       await service.disburse(dto, 'actor-1', 'manager');
 
-      // 2% of 10000000 paise = 200000 paise
-      const feeJe = accountingService.createJournalEntry.mock.calls[1]![0];
-      expect(feeJe.lines[0].debitPaise).toBe(200000);
-      expect(feeJe.lines[1].creditPaise).toBe(200000);
+      // Single journal entry with net disbursement
+      expect(accountingService.createJournalEntry).toHaveBeenCalledTimes(1);
+      const je = accountingService.createJournalEntry.mock.calls[0]![0];
+      // 2% of 10000000 paise = 200000 paise fee
+      // Net disbursement = 10000000 - 200000 = 9800000
+      expect(je.lines[0].debitPaise).toBe(10000000); // DR Loans Receivable
+      expect(je.lines[1].creditPaise).toBe(9800000); // CR Cash (net)
+      expect(je.lines[2].creditPaise).toBe(200000);  // CR Fee Income
     });
 
-    it('should not create processing fee entry when no fee configured', async () => {
+    it('should create 2-line journal entry when no fee configured', async () => {
       await service.disburse(dto, 'actor-1', 'manager');
-      // Only one journal entry (disbursement, no processing fee)
+      // Single journal entry with 2 lines (no processing fee)
       expect(accountingService.createJournalEntry).toHaveBeenCalledTimes(1);
+      const je = accountingService.createJournalEntry.mock.calls[0]![0];
+      expect(je.lines).toHaveLength(2);
+      // DR Loans Receivable = CR Cash (full principal, no fee deduction)
+      expect(je.lines[0].debitPaise).toBe(10000000);
+      expect(je.lines[1].creditPaise).toBe(10000000);
     });
   });
 

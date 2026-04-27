@@ -18,6 +18,17 @@ export interface Loan {
   created_at: string;
 }
 
+export interface ProductVersion {
+  id: string;
+  product_id: string;
+  version_number: number;
+  interest_type: string;
+  annual_rate_bps: number;
+  repayment_frequency: string;
+  processing_fee_type?: string;
+  processing_fee_value?: number;
+}
+
 export interface LoanDetail extends Loan {
   purpose: string;
   total_interest_paise?: number;
@@ -28,6 +39,7 @@ export interface LoanDetail extends Loan {
   created_by: string;
   approved_by?: string;
   schedules: Installment[];
+  product_version?: ProductVersion;
 }
 
 export interface Installment {

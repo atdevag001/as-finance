@@ -797,64 +797,99 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
       </ConfirmDialog>
 
       {/* Disburse Dialog with Mode Selection */}
-      <ConfirmDialog
-        open={disburseOpen}
-        onOpenChange={(open) => {
-          setDisburseOpen(open);
-          if (!open) {
-            setDisburseMode('cash');
-            setDisburseReference('');
-            setDisburseFirstEmiDate('');
+      {(() => {
+        // Calculate processing fee for display
+        const pv = loan.product_version;
+        let processingFeePaise = 0;
+        if (pv?.processing_fee_type && pv?.processing_fee_value) {
+          if (pv.processing_fee_type === 'fixed') {
+            processingFeePaise = pv.processing_fee_value;
+          } else if (pv.processing_fee_type === 'percentage') {
+            // fee_value is in basis points (200 = 2%)
+            processingFeePaise = Math.round(Number(loan.principal_paise) * pv.processing_fee_value / 10000);
           }
-        }}
-        title="Disburse Loan"
-        description={`Disbursing loan ${loan.loan_number}. Principal: ₹${(Number(loan.principal_paise) / 100).toLocaleString('en-IN')}`}
-        confirmLabel="Disburse"
-        loading={isActionInProgress}
-        onConfirm={handleDisburse}
-      >
-        <div className="space-y-4 py-2">
-          <div className="space-y-2">
-            <Label htmlFor="disburse-mode">Payment Mode</Label>
-            <Select value={disburseMode} onValueChange={setDisburseMode}>
-              <SelectTrigger id="disburse-mode">
-                <SelectValue placeholder="Select mode" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="cash">Cash</SelectItem>
-                <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          {disburseMode === 'bank_transfer' && (
-            <div className="space-y-2">
-              <Label htmlFor="disburse-reference">Reference Number</Label>
-              <Input
-                id="disburse-reference"
-                placeholder="Enter bank transfer reference…"
-                value={disburseReference}
-                onChange={(e) => setDisburseReference(e.target.value)}
-                disabled={isActionInProgress}
-              />
+        }
+        const netDisbursementPaise = Number(loan.principal_paise) - processingFeePaise;
+
+        return (
+          <ConfirmDialog
+            open={disburseOpen}
+            onOpenChange={(open) => {
+              setDisburseOpen(open);
+              if (!open) {
+                setDisburseMode('cash');
+                setDisburseReference('');
+                setDisburseFirstEmiDate('');
+              }
+            }}
+            title="Disburse Loan"
+            description={`Disbursing loan ${loan.loan_number}`}
+            confirmLabel="Disburse"
+            loading={isActionInProgress}
+            onConfirm={handleDisburse}
+          >
+            <div className="space-y-4 py-2">
+              {/* Disbursement Amount Breakdown */}
+              <div className="rounded-md border p-3 space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Principal</span>
+                  <span>₹{(Number(loan.principal_paise) / 100).toLocaleString('en-IN')}</span>
+                </div>
+                {processingFeePaise > 0 && (
+                  <div className="flex justify-between text-orange-600">
+                    <span>Processing Fee (deducted)</span>
+                    <span>- ₹{(processingFeePaise / 100).toLocaleString('en-IN')}</span>
+                  </div>
+                )}
+                <div className="flex justify-between font-semibold border-t pt-2">
+                  <span>Net Disbursement</span>
+                  <span className="text-green-600">₹{(netDisbursementPaise / 100).toLocaleString('en-IN')}</span>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="disburse-mode">Payment Mode</Label>
+                <Select value={disburseMode} onValueChange={setDisburseMode}>
+                  <SelectTrigger id="disburse-mode">
+                    <SelectValue placeholder="Select mode" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {disburseMode === 'bank_transfer' && (
+                <div className="space-y-2">
+                  <Label htmlFor="disburse-reference">Reference Number</Label>
+                  <Input
+                    id="disburse-reference"
+                    placeholder="Enter bank transfer reference…"
+                    value={disburseReference}
+                    onChange={(e) => setDisburseReference(e.target.value)}
+                    disabled={isActionInProgress}
+                  />
+                </div>
+              )}
+              <div className="space-y-2">
+                <Label htmlFor="disburse-first-emi">First EMI Date (optional)</Label>
+                <Input
+                  id="disburse-first-emi"
+                  type="date"
+                  value={disburseFirstEmiDate}
+                  onChange={(e) => setDisburseFirstEmiDate(e.target.value)}
+                  disabled={isActionInProgress}
+                  min={new Date().toISOString().split('T')[0]}
+                  className="min-h-[44px] text-base"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Override first EMI date. Leave empty to keep existing schedule.
+                </p>
+              </div>
             </div>
-          )}
-          <div className="space-y-2">
-            <Label htmlFor="disburse-first-emi">First EMI Date (optional)</Label>
-            <Input
-              id="disburse-first-emi"
-              type="date"
-              value={disburseFirstEmiDate}
-              onChange={(e) => setDisburseFirstEmiDate(e.target.value)}
-              disabled={isActionInProgress}
-              min={new Date().toISOString().split('T')[0]}
-              className="min-h-[44px] text-base"
-            />
-            <p className="text-xs text-muted-foreground">
-              Override first EMI date. Leave empty to keep existing schedule.
-            </p>
-          </div>
-        </div>
-      </ConfirmDialog>
+          </ConfirmDialog>
+        );
+      })()}
 
       {/* Foreclosure Quote Dialog */}
       <ConfirmDialog
