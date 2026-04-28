@@ -150,10 +150,10 @@ export function calculateReducingBalanceAccruedInterest(
 // ─── Foreclosure Service ─────────────────────────────────────────────────────
 
 /**
- * Foreclosure service — early loan closure with settlement calculation,
- * maker-checker approval, and atomic settlement execution.
+ * Foreclosure service — early loan closure with settlement calculation
+ * and atomic settlement execution.
  *
- * Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7
+ * Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 9.7
  */
 @Injectable()
 export class ForeclosureService {
@@ -269,21 +269,19 @@ export class ForeclosureService {
   /**
    * Execute a foreclosure settlement atomically.
    *
-   * Maker-checker: approver (actorId) must differ from the quote requester.
    * Quote must not be expired.
    *
    * Steps within a single transaction:
    * 1. Lock loan row
    * 2. Verify quote not expired, loan still foreclosable
-   * 3. Maker-checker validation
-   * 4. Post settlement collection with journal entries
-   * 5. Close all remaining schedule installments
-   * 6. Update loan status to foreclosed
-   * 7. Update foreclosure status to settled
-   * 8. Mark pending penalties as paid
-   * 9. Record rebate/waiver in audit log
-   * 10. Create audit log entry
-   * 11. Store idempotency result
+   * 3. Post settlement collection with journal entries
+   * 4. Close all remaining schedule installments
+   * 5. Update loan status to foreclosed
+   * 6. Update foreclosure status to settled
+   * 7. Mark pending penalties as paid
+   * 8. Record rebate/waiver in audit log
+   * 9. Create audit log entry
+   * 10. Store idempotency result
    */
   async executeForeclosure(dto: ExecuteForeclosureDto, actorId: string, actorRole: string) {
     // Idempotency check
@@ -346,14 +344,6 @@ export class ForeclosureService {
       throw new BusinessRuleError(
         `Cannot foreclose a loan with status '${lockedLoan.status}'. Loan must be active or overdue.`,
         'INVALID_LOAN_STATUS_FOR_FORECLOSURE',
-      );
-    }
-
-    // Step 3: Maker-checker — approver must differ from requester
-    if (actorId === foreclosure.requested_by) {
-      throw new BusinessRuleError(
-        'Maker-checker violation: foreclosure approver cannot be the same user who requested the quote',
-        'MAKER_CHECKER_VIOLATION',
       );
     }
 

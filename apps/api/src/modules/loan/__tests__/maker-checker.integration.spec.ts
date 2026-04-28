@@ -3,11 +3,11 @@ import { LoanService } from '../loan.service';
 import { BusinessRuleError } from '../../../common/errors';
 
 /**
- * Maker-checker integration test.
+ * Loan approval workflow integration test.
  *
- * Verifies the full maker-checker workflow:
+ * Verifies the full approval workflow:
  *   field_officer creates loan → submits → manager reviews →
- *   manager approves → audit log records both actor IDs.
+ *   manager approves → audit log records actor IDs.
  *
  * Validates: Requirements 61.6
  */
@@ -102,7 +102,7 @@ describe('Maker-Checker Integration', () => {
     loanService = new LoanService(repo as never);
   });
 
-  describe('Req 61.6 — Full maker-checker flow with audit trail', () => {
+  describe('Req 61.6 — Full approval flow with audit trail', () => {
     it('should complete full flow: field_officer creates → submits → manager reviews → manager approves', async () => {
       // Step 1: field_officer creates loan (draft)
       const loan = await loanService.create(
@@ -132,7 +132,7 @@ describe('Maker-Checker Integration', () => {
       const reviewed = await loanService.review('loan-1', MANAGER_ID, MANAGER_ROLE);
       expect(reviewed!.status).toBe('under_review');
 
-      // Step 4: manager approves loan (different user from creator → maker-checker satisfied)
+      // Step 4: manager approves loan
       repo.findById.mockResolvedValue(buildLoanDetail({ status: 'under_review', created_by: FIELD_OFFICER_ID }));
       repo.updateStatus.mockResolvedValue({ id: 'loan-1', status: 'approved', version: 4 });
 
@@ -272,15 +272,24 @@ describe('Maker-Checker Integration', () => {
       expect(approvedLog!['actor_role']).toBe(MANAGER_ROLE);
     });
 
-    it('should enforce maker-checker: field_officer who created loan cannot approve it', async () => {
+    it('should allow creator to approve their own loan', async () => {
       repo.findById.mockResolvedValue(buildLoanDetail({ status: 'under_review', created_by: FIELD_OFFICER_ID }));
+      repo.updateStatus.mockResolvedValue({ id: 'loan-1', status: 'approved' });
 
-      await expect(
-        loanService.approve('loan-1', { remarks: 'Self-approve' }, FIELD_OFFICER_ID, MANAGER_ROLE),
-      ).rejects.toThrow(BusinessRuleError);
+      const approved = await loanService.approve(
+        'loan-1', { remarks: 'Self-approve' }, FIELD_OFFICER_ID, MANAGER_ROLE,
+      );
+      expect(approved!.status).toBe('approved');
+
+      expect(repo.createAuditLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action_type: 'loan_approved',
+          actor_id: FIELD_OFFICER_ID,
+        }),
+      );
     });
 
-    it('should record approval record with checker actor_id and remarks', async () => {
+    it('should record approval record with approver actor_id and remarks', async () => {
       repo.findById.mockResolvedValue(buildLoanDetail({ status: 'under_review', created_by: FIELD_OFFICER_ID }));
       repo.updateStatus.mockResolvedValue({ id: 'loan-1', status: 'approved' });
 

@@ -649,12 +649,11 @@ describe('PenaltyService', () => {
       expect(mockAuditService.createAuditLog).toHaveBeenCalled();
     });
 
-    it('rejects waiver when requester equals approver (maker-checker)', async () => {
+    it('allows waiver when requester equals approver', async () => {
       const sameUserDto = { ...waiveDto, approverId: 'user-1' };
 
-      await expect(
-        service.waivePenalty('penalty-1', sameUserDto, 'user-1', 'manager'),
-      ).rejects.toThrow(BusinessRuleError);
+      const result = await service.waivePenalty('penalty-1', sameUserDto, 'user-1', 'manager');
+      expect(result.penalty.is_waived).toBe(true);
     });
 
     it('rejects waiver for already waived penalty', async () => {

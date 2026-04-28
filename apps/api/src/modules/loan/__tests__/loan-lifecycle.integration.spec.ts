@@ -8,8 +8,7 @@ import { BusinessRuleError, NotFoundError, ConflictError } from '../../../common
 /**
  * Integration tests for loan lifecycle flow.
  * Tests: customer creation → loan application → submission → review →
- *        approval (maker-checker) → disbursement → active status →
- *        collection → closure.
+ *        approval → disbursement → active status → collection → closure.
  *
  * Uses mocked repositories to verify the correct sequence of service calls.
  *
@@ -157,7 +156,7 @@ describe('Loan Lifecycle Integration', () => {
       const reviewed = await loanService.review('loan-1', reviewerId, 'manager');
       expect(reviewed!.status).toBe('under_review');
 
-      // Step 4: Approve loan (maker-checker: approver ≠ creator)
+      // Step 4: Approve loan
       repo.findById.mockResolvedValue(buildLoanDetail({ status: 'under_review', created_by: creatorId }));
       repo.updateStatus.mockResolvedValue({ id: 'loan-1', status: 'approved', version: 4 });
 
@@ -207,14 +206,6 @@ describe('Loan Lifecycle Integration', () => {
       expect(repo.createAuditLog).toHaveBeenCalledWith(
         expect.objectContaining({ action_type: 'loan_approved' }),
       );
-    });
-
-    it('should enforce maker-checker: creator cannot approve own loan', async () => {
-      repo.findById.mockResolvedValue(buildLoanDetail({ status: 'under_review', created_by: creatorId }));
-
-      await expect(
-        loanService.approve('loan-1', { remarks: 'Self-approve' }, creatorId, 'manager'),
-      ).rejects.toThrow(BusinessRuleError);
     });
 
     it('should transition loan to closed when all prerequisites met via closeLoan', async () => {

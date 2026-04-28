@@ -28,7 +28,7 @@ export class PenaltyController {
   @Post(':id/waive')
   @RequirePermission('penalty.waive')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Waive a penalty (maker-checker required)' })
+  @ApiOperation({ summary: 'Waive a penalty' })
   @ApiResponse({ status: 200, description: 'Penalty waived successfully' })
   @ApiResponse({ status: 400, description: 'Validation or business rule error' })
   @ApiResponse({ status: 404, description: 'Penalty not found' })

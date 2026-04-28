@@ -120,7 +120,6 @@ export function calculatePenaltyAmount(
  * Enforces:
  * - Atomic penalty posting with journal entry (Requirement 8.4)
  * - Duplicate prevention via unique (loan_id, installment_id, penalty_period) (Requirement 8.5)
- * - Maker-checker for penalty waiver (Requirement 8.9)
  * - Loan status transitions: active→overdue, overdue→active (Requirements 8.6, 8.7)
  */
 @Injectable()
@@ -359,16 +358,15 @@ export class PenaltyService {
   }
 
   /**
-   * Waive a penalty with maker-checker enforcement.
+   * Waive a penalty.
    *
    * Steps within a single transaction:
    * 1. Validate penalty exists and is not already waived/paid
-   * 2. Enforce maker-checker: waiver requester ≠ approver
-   * 3. Mark penalty as waived (not deleted)
-   * 4. Update loan outstanding balance
-   * 5. Recalculate DPD and overdue bucket
-   * 6. Handle loan status transitions
-   * 7. Create audit log with waiver details
+   * 2. Mark penalty as waived (not deleted)
+   * 3. Update loan outstanding balance
+   * 4. Recalculate DPD and overdue bucket
+   * 5. Handle loan status transitions
+   * 6. Create audit log with waiver details
    */
   async waivePenalty(penaltyId: string, dto: WaivePenaltyDto, actorId: string, actorRole: string) {
     return this.prisma.$transaction(async (tx) => {
@@ -400,14 +398,6 @@ export class PenaltyService {
       throw new BusinessRuleError(
         'Cannot waive a penalty that has already been paid',
         'PENALTY_ALREADY_PAID',
-      );
-    }
-
-    // Step 2: Maker-checker enforcement
-    if (actorId === dto.approverId) {
-      throw new BusinessRuleError(
-        'Maker-checker violation: waiver requester and approver must be different users',
-        'MAKER_CHECKER_VIOLATION',
       );
     }
 

@@ -89,10 +89,10 @@ export class LoanController {
   @Post(':id/approve')
   @RequirePermission('loan.approve')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Approve a loan (maker-checker: approver ≠ creator)' })
+  @ApiOperation({ summary: 'Approve a loan' })
   @ApiResponse({ status: 200, description: 'Loan approved' })
   @ApiResponse({ status: 404, description: 'Loan not found' })
-  @ApiResponse({ status: 422, description: 'Invalid transition or maker-checker violation' })
+  @ApiResponse({ status: 422, description: 'Invalid status transition' })
   async approve(
     @Param('id') id: string,
     @Body() dto: ApproveLoanDto,

@@ -548,17 +548,14 @@ describe('ForeclosureService', () => {
       ).rejects.toThrow(BusinessRuleError);
     });
 
-    it('enforces maker-checker (approver ≠ requester)', async () => {
-      mockForeclosureRepo.findById.mockResolvedValue(buildQuoteRecord());
-      mockForeclosureRepo.lockLoanForUpdate.mockResolvedValue({
-        id: 'loan-1', status: 'active', cached_outstanding_paise: 105800n,
-      });
-      await expect(
-        service.executeForeclosure(
-          { foreclosureId: 'fc-1', paymentMode: 'cash', idempotencyKey: 'key-1' },
-          'user-1', 'manager', // same as requester
-        ),
-      ).rejects.toThrow('Maker-checker violation');
+    it('allows requester to also execute foreclosure', async () => {
+      setupSuccessfulExecution();
+
+      const result = await service.executeForeclosure(
+        { foreclosureId: 'fc-1', paymentMode: 'cash', idempotencyKey: 'key-1' },
+        'user-1', 'manager', // same as requester (user-1 created the quote)
+      );
+      expect(result.statusCode).toBe(201);
     });
 
     it('throws NotFoundError for non-existent foreclosure', async () => {

@@ -4,9 +4,9 @@ import { BusinessRuleError, NotFoundError } from '../../../common/errors';
 
 /**
  * Unit tests for LoanService — creation, approval, rejection, closure,
- * immutability, and maker-checker enforcement.
+ * and immutability.
  *
- * Validates: Requirements 15.3, 15.4, 15.5, 15.6, 15.7, 61.1, 61.2, 61.3, 61.4, 61.5, 61.7
+ * Validates: Requirements 15.3, 15.4, 15.5, 15.6, 15.7, 61.3, 61.4, 61.5
  */
 
 // ── Mock helpers ─────────────────────────────────────────────────────────────
@@ -302,17 +302,15 @@ describe('LoanService', () => {
   });
 
   // ── Requirement 15.5: Loan approval with role requirements ─────────────
-  // ── Requirement 61.1–61.5: Maker-checker enforcement ───────────────────
 
-  describe('approve (Req 15.5, 61.1–61.5)', () => {
+  describe('approve (Req 15.5)', () => {
     beforeEach(() => {
-      // Loan in under_review status, created by a different user
       repo.findById.mockResolvedValue(
         createLoan({ status: 'under_review', created_by: 'user-creator' }),
       );
     });
 
-    it('approves a loan under review by a different user', async () => {
+    it('approves a loan under review', async () => {
       const result = await service.approve('loan-1', { remarks: 'Looks good' }, 'user-approver', 'manager');
 
       expect(result).toBeDefined();
@@ -392,33 +390,6 @@ describe('LoanService', () => {
       ).rejects.toThrow(BusinessRuleError);
     });
 
-    // ── Maker-checker: approver ≠ creator (Req 61.1) ──────────────────
-
-    it('rejects approval when approver is the same as creator (Req 61.1)', async () => {
-      repo.findById.mockResolvedValue(
-        createLoan({ status: 'under_review', created_by: 'user-same' }),
-      );
-
-      await expect(
-        service.approve('loan-1', {}, 'user-same', 'manager'),
-      ).rejects.toThrow(BusinessRuleError);
-
-      try {
-        await service.approve('loan-1', {}, 'user-same', 'manager');
-      } catch (err) {
-        expect((err as BusinessRuleError).code).toBe('MAKER_CHECKER_VIOLATION');
-      }
-    });
-
-    it('allows approval when approver differs from creator (Req 61.2)', async () => {
-      repo.findById.mockResolvedValue(
-        createLoan({ status: 'under_review', created_by: 'user-creator' }),
-      );
-
-      await expect(
-        service.approve('loan-1', {}, 'user-different-approver', 'manager'),
-      ).resolves.toBeDefined();
-    });
   });
 
   // ── Requirement 15.6: Loan rejection with mandatory remarks ────────────
@@ -737,23 +708,4 @@ describe('LoanService', () => {
     });
   });
 
-  // ── Requirement 61.7: Maker-checker applies to multiple actions ────────
-
-  describe('maker-checker constraint scope (Req 61.7)', () => {
-    it('enforces maker-checker on loan approval (approver ≠ creator)', async () => {
-      repo.findById.mockResolvedValue(
-        createLoan({ status: 'under_review', created_by: 'user-A' }),
-      );
-
-      // Same user → rejected
-      await expect(
-        service.approve('loan-1', {}, 'user-A', 'manager'),
-      ).rejects.toThrow(BusinessRuleError);
-
-      // Different user → allowed
-      await expect(
-        service.approve('loan-1', {}, 'user-B', 'manager'),
-      ).resolves.toBeDefined();
-    });
-  });
 });

@@ -5,7 +5,7 @@ import { BusinessRuleError, NotFoundError } from '../../../common/errors';
 /**
  * Integration tests for foreclosure flow.
  * Tests the full multi-step foreclosure pipeline with mocked repositories:
- *   quote creation → maker-checker approval → atomic settlement → loan closure
+ *   quote creation → approval → atomic settlement → loan closure
  *
  * Validates: Requirements 13.1, 13.2, 13.3, 13.4
  */
@@ -360,13 +360,13 @@ describe('Foreclosure Flow Integration', () => {
       expect(deps.prisma.$transaction).not.toHaveBeenCalled();
     });
 
-    it('should enforce maker-checker: approver must differ from requester', async () => {
-      await expect(
-        service.executeForeclosure(
-          { foreclosureId: 'fc-1', paymentMode: 'cash', idempotencyKey: 'fc-mc-1' },
-          'user-requester', 'manager', // same as quote requester
-        ),
-      ).rejects.toThrow('Maker-checker violation');
+    it('should allow requester to also execute foreclosure', async () => {
+      const result = await service.executeForeclosure(
+        { foreclosureId: 'fc-1', paymentMode: 'cash', idempotencyKey: 'fc-mc-1' },
+        'user-requester', 'manager', // same as quote requester
+      );
+      expect(result.statusCode).toBe(201);
+      expect(result.data.status).toBe('settled');
     });
 
     it('should create audit log entries for the settlement', async () => {

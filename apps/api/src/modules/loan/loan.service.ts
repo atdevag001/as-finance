@@ -294,7 +294,6 @@ export class LoanService {
 
   /**
    * Approve a loan under review.
-   * Maker-checker: approver must differ from the loan creator.
    */
   async approve(
     loanId: string,
@@ -308,14 +307,6 @@ export class LoanService {
     }
 
     this.validateTransition(loan.status, 'approved');
-
-    // Maker-checker enforcement: approver ≠ creator
-    if (loan.created_by === actorId) {
-      throw new BusinessRuleError(
-        'Maker-checker violation: approver cannot be the same user who created the loan',
-        'MAKER_CHECKER_VIOLATION',
-      );
-    }
 
     const updated = await this.loanRepository.updateStatus(loanId, 'approved', {
       approved_by: actorId,
