@@ -8,6 +8,7 @@ import { LoanService } from '../loan/loan.service';
 import { CalculatePenaltyDto } from './dto/calculate-penalty.dto';
 import { WaivePenaltyDto } from './dto/waive-penalty.dto';
 import { BusinessRuleError, NotFoundError, ConflictError } from '../../common/errors';
+import { canBypassMakerChecker } from '../../common/constants/maker-checker';
 import { JournalSourceType } from '@as-finance/shared';
 
 /**
@@ -381,6 +382,14 @@ export class PenaltyService {
     actorId: string,
     actorRole: string,
   ) {
+    // Maker-checker enforcement (bypass for allowed roles)
+    if (actorId === dto.approverId && !canBypassMakerChecker(actorRole)) {
+      throw new BusinessRuleError(
+        'Maker-checker violation: waiver requester and approver must be different users',
+        'MAKER_CHECKER_VIOLATION',
+      );
+    }
+
     // Step 1: Validate penalty exists
     const penalty = await this.penaltyRepository.findByIdTx(penaltyId, tx);
     if (!penalty) {

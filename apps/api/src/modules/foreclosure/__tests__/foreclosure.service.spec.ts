@@ -548,12 +548,42 @@ describe('ForeclosureService', () => {
       ).rejects.toThrow(BusinessRuleError);
     });
 
-    it('allows requester to also execute foreclosure', async () => {
+    it('rejects execution when approver is the same as requester (manager role)', async () => {
+      setupSuccessfulExecution();
+
+      await expect(
+        service.executeForeclosure(
+          { foreclosureId: 'fc-1', paymentMode: 'cash', idempotencyKey: 'key-1' },
+          'user-1', 'manager', // same as requester (user-1 created the quote)
+        ),
+      ).rejects.toThrow(BusinessRuleError);
+
+      try {
+        await service.executeForeclosure(
+          { foreclosureId: 'fc-1', paymentMode: 'cash', idempotencyKey: 'key-2' },
+          'user-1', 'manager',
+        );
+      } catch (err) {
+        expect((err as BusinessRuleError).code).toBe('MAKER_CHECKER_VIOLATION');
+      }
+    });
+
+    it('allows super_admin to execute their own foreclosure quote (bypass maker-checker)', async () => {
       setupSuccessfulExecution();
 
       const result = await service.executeForeclosure(
         { foreclosureId: 'fc-1', paymentMode: 'cash', idempotencyKey: 'key-1' },
-        'user-1', 'manager', // same as requester (user-1 created the quote)
+        'user-1', 'super_admin', // same as requester but super_admin can bypass
+      );
+      expect(result.statusCode).toBe(201);
+    });
+
+    it('allows different user to execute foreclosure regardless of role', async () => {
+      setupSuccessfulExecution();
+
+      const result = await service.executeForeclosure(
+        { foreclosureId: 'fc-1', paymentMode: 'cash', idempotencyKey: 'key-1' },
+        'user-2', 'manager', // different from requester (user-1)
       );
       expect(result.statusCode).toBe(201);
     });

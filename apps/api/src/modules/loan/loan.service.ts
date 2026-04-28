@@ -5,6 +5,7 @@ import { ApproveLoanDto } from './dto/approve-loan.dto';
 import { RejectLoanDto } from './dto/reject-loan.dto';
 import { LoanQueryDto } from './dto/loan-query.dto';
 import { BusinessRuleError, NotFoundError } from '../../common/errors';
+import { canBypassMakerChecker } from '../../common/constants/maker-checker';
 import { generateSchedule, type ScheduleParams } from '../schedule/schedule.service';
 
 /**
@@ -307,6 +308,14 @@ export class LoanService {
     }
 
     this.validateTransition(loan.status, 'approved');
+
+    // Maker-checker enforcement (bypass for allowed roles)
+    if (loan.created_by === actorId && !canBypassMakerChecker(actorRole)) {
+      throw new BusinessRuleError(
+        'Maker-checker violation: approver cannot be the same user who created the loan',
+        'MAKER_CHECKER_VIOLATION',
+      );
+    }
 
     const updated = await this.loanRepository.updateStatus(loanId, 'approved', {
       approved_by: actorId,

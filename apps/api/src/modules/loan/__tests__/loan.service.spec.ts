@@ -390,6 +390,52 @@ describe('LoanService', () => {
       ).rejects.toThrow(BusinessRuleError);
     });
 
+    it('rejects approval when approver is the same as creator (manager role)', async () => {
+      repo.findById.mockResolvedValue(
+        createLoan({ status: 'under_review', created_by: 'user-creator' }),
+      );
+
+      await expect(
+        service.approve('loan-1', {}, 'user-creator', 'manager'),
+      ).rejects.toThrow(BusinessRuleError);
+
+      try {
+        await service.approve('loan-1', {}, 'user-creator', 'manager');
+      } catch (err) {
+        expect((err as BusinessRuleError).code).toBe('MAKER_CHECKER_VIOLATION');
+      }
+    });
+
+    it('allows super_admin to approve their own loan (bypass maker-checker)', async () => {
+      repo.findById.mockResolvedValue(
+        createLoan({ status: 'under_review', created_by: 'admin-user' }),
+      );
+
+      const result = await service.approve('loan-1', { remarks: 'Self-approved' }, 'admin-user', 'super_admin');
+
+      expect(result).toBeDefined();
+      expect(repo.updateStatus).toHaveBeenCalledWith(
+        'loan-1',
+        'approved',
+        expect.objectContaining({ approved_by: 'admin-user' }),
+      );
+    });
+
+    it('allows different user to approve regardless of role', async () => {
+      repo.findById.mockResolvedValue(
+        createLoan({ status: 'under_review', created_by: 'user-creator' }),
+      );
+
+      const result = await service.approve('loan-1', {}, 'different-user', 'manager');
+
+      expect(result).toBeDefined();
+      expect(repo.updateStatus).toHaveBeenCalledWith(
+        'loan-1',
+        'approved',
+        expect.objectContaining({ approved_by: 'different-user' }),
+      );
+    });
+
   });
 
   // ── Requirement 15.6: Loan rejection with mandatory remarks ────────────

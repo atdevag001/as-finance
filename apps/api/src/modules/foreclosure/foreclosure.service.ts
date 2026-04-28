@@ -10,6 +10,7 @@ import { ReceiptService } from '../receipt/receipt.service';
 import { CreateForeclosureQuoteDto } from './dto/create-foreclosure-quote.dto';
 import { ExecuteForeclosureDto } from './dto/execute-foreclosure.dto';
 import { BusinessRuleError, NotFoundError } from '../../common/errors';
+import { canBypassMakerChecker } from '../../common/constants/maker-checker';
 
 // Configure Decimal.js: ROUND_HALF_UP for financial calculations
 Decimal.set({ rounding: Decimal.ROUND_HALF_UP });
@@ -327,6 +328,14 @@ export class ForeclosureService {
       throw new BusinessRuleError(
         'Foreclosure quote has expired. Please generate a new quote.',
         'FORECLOSURE_QUOTE_EXPIRED',
+      );
+    }
+
+    // Maker-checker enforcement (bypass for allowed roles)
+    if (actorId === foreclosure.requested_by && !canBypassMakerChecker(actorRole)) {
+      throw new BusinessRuleError(
+        'Maker-checker violation: foreclosure approver cannot be the same user who requested the quote',
+        'MAKER_CHECKER_VIOLATION',
       );
     }
 

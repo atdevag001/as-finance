@@ -649,10 +649,29 @@ describe('PenaltyService', () => {
       expect(mockAuditService.createAuditLog).toHaveBeenCalled();
     });
 
-    it('allows waiver when requester equals approver', async () => {
+    it('rejects waiver when requester equals approver (manager role)', async () => {
       const sameUserDto = { ...waiveDto, approverId: 'user-1' };
 
-      const result = await service.waivePenalty('penalty-1', sameUserDto, 'user-1', 'manager');
+      await expect(
+        service.waivePenalty('penalty-1', sameUserDto, 'user-1', 'manager'),
+      ).rejects.toThrow(BusinessRuleError);
+
+      try {
+        await service.waivePenalty('penalty-1', sameUserDto, 'user-1', 'manager');
+      } catch (err) {
+        expect((err as BusinessRuleError).code).toBe('MAKER_CHECKER_VIOLATION');
+      }
+    });
+
+    it('allows super_admin to waive with same requester and approver (bypass maker-checker)', async () => {
+      const sameUserDto = { ...waiveDto, approverId: 'admin-user' };
+
+      const result = await service.waivePenalty('penalty-1', sameUserDto, 'admin-user', 'super_admin');
+      expect(result.penalty.is_waived).toBe(true);
+    });
+
+    it('allows waiver when requester and approver are different', async () => {
+      const result = await service.waivePenalty('penalty-1', waiveDto, 'user-1', 'manager');
       expect(result.penalty.is_waived).toBe(true);
     });
 
