@@ -22,6 +22,7 @@ function createMockLoan(overrides: Record<string, unknown> = {}) {
     status: 'approved',
     total_payable_paise: 11200000n,
     created_by: 'user-creator',
+    approved_by: 'user-approver',
     product_version: {
       id: 'pv-1',
       interest_type: 'flat',
@@ -521,6 +522,58 @@ describe('DisbursementService', () => {
       it('should return 0n for arbitrary string fee type', () => {
         expect(calcFee(10_000_00n, 'flat_rate', 500)).toBe(0n);
       });
+    });
+  });
+
+  describe('maker-checker enforcement', () => {
+    const dto = {
+      loanId: 'loan-1',
+      mode: PaymentMode.CASH,
+      idempotencyKey: 'idem-key-mc',
+    };
+
+    it('should reject disbursement when disbursing user is the same as approver (manager role)', async () => {
+      repo.getLoanForDisbursement.mockResolvedValue(
+        createMockLoan({ approved_by: 'user-approver' }),
+      );
+
+      await expect(
+        service.disburse(dto, 'user-approver', 'manager'),
+      ).rejects.toThrow(BusinessRuleError);
+
+      try {
+        await service.disburse(dto, 'user-approver', 'manager');
+      } catch (err) {
+        expect((err as BusinessRuleError).code).toBe('MAKER_CHECKER_VIOLATION');
+      }
+    });
+
+    it('should allow super_admin to disburse their own approved loan (bypass maker-checker)', async () => {
+      repo.getLoanForDisbursement.mockResolvedValue(
+        createMockLoan({ approved_by: 'admin-user' }),
+      );
+
+      const result = await service.disburse(dto, 'admin-user', 'super_admin');
+      expect(result.statusCode).toBe(201);
+    });
+
+    it('should allow different user to disburse regardless of role', async () => {
+      repo.getLoanForDisbursement.mockResolvedValue(
+        createMockLoan({ approved_by: 'user-approver' }),
+      );
+
+      const result = await service.disburse(dto, 'different-user', 'manager');
+      expect(result.statusCode).toBe(201);
+    });
+
+    it('should reject disbursement for field_officer disbursing their own approval', async () => {
+      repo.getLoanForDisbursement.mockResolvedValue(
+        createMockLoan({ approved_by: 'field-officer-1' }),
+      );
+
+      await expect(
+        service.disburse(dto, 'field-officer-1', 'field_officer'),
+      ).rejects.toThrow(BusinessRuleError);
     });
   });
 });

@@ -9,6 +9,7 @@ import { IdempotencyService } from '../idempotency/idempotency.service';
 import { LoanService } from '../loan/loan.service';
 import { DisburseDto } from './dto/disburse.dto';
 import { BusinessRuleError, NotFoundError } from '../../common/errors';
+import { canBypassMakerChecker } from '../../common/constants/maker-checker';
 
 // Configure Decimal.js: ROUND_HALF_UP for financial calculations
 Decimal.set({ rounding: Decimal.ROUND_HALF_UP });
@@ -145,6 +146,15 @@ export class DisbursementService {
 
     // Re-validate status within transaction (guard against race conditions)
     this.loanService.validateTransition(loan.status, 'disbursed');
+
+    // Maker-checker enforcement (bypass for allowed roles)
+    // Disbursing user must be different from approving user
+    if (loan.approved_by === actorId && !canBypassMakerChecker(actorRole)) {
+      throw new BusinessRuleError(
+        'Maker-checker violation: disbursing user cannot be the same user who approved the loan',
+        'MAKER_CHECKER_VIOLATION',
+      );
+    }
 
     const now = new Date();
     const disbursementDate = new Date(now.toISOString().split('T')[0]!); // IST business date

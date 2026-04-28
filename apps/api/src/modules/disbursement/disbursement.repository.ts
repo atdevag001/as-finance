@@ -123,6 +123,7 @@ export class DisbursementRepository {
         status: true,
         total_payable_paise: true,
         created_by: true,
+        approved_by: true,
         product_version: {
           select: {
             id: true,
