@@ -17,6 +17,7 @@ function createMockRepo() {
     getLoanPortfolio: vi.fn().mockResolvedValue([]),
     getDpdAging: vi.fn().mockResolvedValue({ loans: [], journalTotals: [] }),
     getDisbursements: vi.fn().mockResolvedValue([]),
+    getEmiScheduleReport: vi.fn().mockResolvedValue([]),
     getTrialBalanceData: vi.fn().mockResolvedValue([]),
     getAccountsMap: vi.fn().mockResolvedValue(new Map()),
     getProfitLossData: vi.fn().mockResolvedValue([]),
@@ -35,14 +36,14 @@ describe('ReportService', () => {
   });
 
   describe('REPORT_TYPES', () => {
-    it('should define exactly 20 report types', () => {
-      expect(REPORT_TYPES).toHaveLength(20);
+    it('should define exactly 21 report types', () => {
+      expect(REPORT_TYPES).toHaveLength(21);
     });
 
     it('should include all required report types', () => {
       const required = [
         'daily-collection', 'overdue', 'disbursement', 'loan-portfolio',
-        'customer', 'repayment-schedule', 'receipt-register', 'cash-handover',
+        'customer', 'repayment-schedule', 'emi-schedule', 'receipt-register', 'cash-handover',
         'expense', 'income', 'trial-balance', 'profit-loss', 'balance-sheet',
         'group-summary', 'group-collection', 'penalty', 'foreclosure',
         'audit-trail', 'dpd-aging', 'officer-performance',
@@ -189,6 +190,64 @@ describe('ReportService', () => {
       expect(result.filters.endDate).toBeDefined();
       expect(result.data).toHaveLength(2);
       expect(result.data[0].amount_paise).toBe('500000');
+    });
+
+    it('should generate emi-schedule report with status filtering', async () => {
+      const pastDueDate = new Date();
+      pastDueDate.setDate(pastDueDate.getDate() - 5);
+
+      mockRepo.getEmiScheduleReport.mockResolvedValue([
+        {
+          id: 'emi1',
+          installment_number: 1,
+          due_date: pastDueDate,
+          total_paise: BigInt(10000),
+          principal_paise: BigInt(8000),
+          interest_paise: BigInt(2000),
+          principal_paid_paise: BigInt(0),
+          interest_paid_paise: BigInt(0),
+          status: 'overdue',
+          loan: {
+            id: 'l1',
+            loan_number: 'LN-2024-00001',
+            customer: { id: 'c1', full_name: 'Test Customer', mobile: '9876543210' },
+          },
+        },
+        {
+          id: 'emi2',
+          installment_number: 2,
+          due_date: new Date(),
+          total_paise: BigInt(10000),
+          principal_paise: BigInt(8000),
+          interest_paise: BigInt(2000),
+          principal_paid_paise: BigInt(8000),
+          interest_paid_paise: BigInt(2000),
+          status: 'paid',
+          loan: {
+            id: 'l1',
+            loan_number: 'LN-2024-00001',
+            customer: { id: 'c1', full_name: 'Test Customer', mobile: '9876543210' },
+          },
+        },
+      ]);
+
+      const result: any = await service.generateReport(
+        'emi-schedule',
+        { startDate: '2024-01-01', endDate: '2024-12-31', status: 'all' },
+        fullAccessUser,
+      );
+
+      expect(result.reportType).toBe('emi-schedule');
+      expect(result.summary.totalEmis).toBe(2);
+      expect(result.summary.paidCount).toBe(1);
+      expect(result.summary.overdueCount).toBe(1);
+      expect(result.columns).toBeDefined();
+      expect(result.columns.length).toBeGreaterThan(0);
+      expect(result.data).toHaveLength(2);
+      expect(result.data[0].customerName).toBe('Test Customer');
+      expect(result.data[0].loanNumber).toBe('LN-2024-00001');
+      expect(result.data[0].overdueDays).toBeGreaterThan(0);
+      expect(result.data[1].overdueDays).toBe(0);
     });
 
     it('should aggregate multiple daily collections with multiple journal entries', async () => {

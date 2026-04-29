@@ -343,4 +343,53 @@ export class ReportRepository {
       },
     });
   }
+
+  // ─── EMI Schedule Report ─────────────────────────────────────────────────
+
+  async getEmiScheduleReport(params: {
+    startDate: Date;
+    endDate: Date;
+    status?: string;
+    loanIdScope?: string[];
+  }) {
+    const where: Record<string, unknown> = {
+      due_date: { gte: params.startDate, lte: params.endDate },
+      loan: { status: { in: ['active', 'overdue', 'disbursed'] } },
+    };
+
+    if (params.status && params.status !== 'all') {
+      if (params.status === 'unpaid') {
+        where['status'] = { in: ['pending', 'partial', 'overdue'] };
+      } else {
+        where['status'] = params.status;
+      }
+    }
+
+    if (params.loanIdScope) {
+      where['loan_id'] = { in: params.loanIdScope };
+    }
+
+    return this.prisma['loan_schedules'].findMany({
+      where,
+      orderBy: { due_date: 'asc' },
+      select: {
+        id: true,
+        installment_number: true,
+        due_date: true,
+        total_paise: true,
+        principal_paise: true,
+        interest_paise: true,
+        principal_paid_paise: true,
+        interest_paid_paise: true,
+        status: true,
+        loan: {
+          select: {
+            id: true,
+            loan_number: true,
+            customer: { select: { id: true, full_name: true, mobile: true } },
+          },
+        },
+      },
+    });
+  }
 }

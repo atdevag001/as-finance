@@ -12,6 +12,7 @@ export const REPORT_TYPES = [
   'loan-portfolio',
   'customer',
   'repayment-schedule',
+  'emi-schedule',
   'receipt-register',
   'cash-handover',
   'expense',
@@ -96,6 +97,8 @@ export class ReportService {
         return this.profitLossReport(query);
       case 'balance-sheet':
         return this.balanceSheetReport(query);
+      case 'emi-schedule':
+        return this.emiScheduleReport(query, scope);
       // Stubbed report types — return placeholder with metadata
       case 'customer':
       case 'repayment-schedule':
@@ -529,6 +532,101 @@ export class ReportService {
         totalEquityPaise: totalEquityWithRetained.toString(),
         isBalanced: totalAssetsPaise === totalLiabilitiesPaise + totalEquityWithRetained,
       },
+    };
+  }
+
+  /**
+   * EMI Schedule Report — EMIs by due date range with status filtering.
+   */
+  private async emiScheduleReport(query: ReportQuery, scope: ReportScope) {
+    const { startDate, endDate } = this.parseDateRange(query);
+    const filter = this.scopeToLoanFilter(scope);
+
+    const schedules = await this.reportRepo.getEmiScheduleReport({
+      startDate,
+      endDate,
+      status: query.status,
+      loanIdScope: filter.loanIdScope,
+    });
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let totalEmiPaise = BigInt(0);
+    let totalPaidPaise = BigInt(0);
+    let paidCount = 0;
+    let unpaidCount = 0;
+    let overdueCount = 0;
+
+    const rows = schedules.map((s: Record<string, unknown>) => {
+      const totalPaise = BigInt(s['total_paise'] as bigint);
+      const principalPaidPaise = BigInt(s['principal_paid_paise'] as bigint ?? 0);
+      const interestPaidPaise = BigInt(s['interest_paid_paise'] as bigint ?? 0);
+      const paidPaise = principalPaidPaise + interestPaidPaise;
+      const dueDate = new Date(s['due_date'] as Date);
+      const status = s['status'] as string;
+
+      totalEmiPaise += totalPaise;
+      totalPaidPaise += paidPaise;
+
+      if (status === 'paid') paidCount++;
+      else if (status === 'overdue') overdueCount++;
+      else unpaidCount++;
+
+      const overdueDays = status !== 'paid' && dueDate < today
+        ? Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24))
+        : 0;
+
+      const loan = s['loan'] as { id: string; loan_number: string; customer: { id: string; full_name: string; mobile: string } };
+
+      return {
+        id: s['id'],
+        customerId: loan.customer.id,
+        customerName: loan.customer.full_name,
+        customerMobile: loan.customer.mobile,
+        loanId: loan.id,
+        loanNumber: loan.loan_number,
+        installmentNumber: s['installment_number'],
+        dueDate: dueDate.toISOString().slice(0, 10),
+        emiAmountPaise: totalPaise.toString(),
+        principalPaise: String(s['principal_paise']),
+        interestPaise: String(s['interest_paise']),
+        paidPaise: paidPaise.toString(),
+        outstandingPaise: (totalPaise - paidPaise).toString(),
+        status,
+        overdueDays,
+      };
+    });
+
+    return {
+      reportType: 'emi-schedule',
+      generatedAt: new Date().toISOString(),
+      filters: {
+        startDate: startDate.toISOString().slice(0, 10),
+        endDate: endDate.toISOString().slice(0, 10),
+        status: query.status ?? 'all',
+      },
+      summary: {
+        totalEmis: schedules.length,
+        totalEmiPaise: totalEmiPaise.toString(),
+        totalPaidPaise: totalPaidPaise.toString(),
+        totalOutstandingPaise: (totalEmiPaise - totalPaidPaise).toString(),
+        paidCount,
+        unpaidCount,
+        overdueCount,
+      },
+      columns: [
+        { key: 'customerName', label: 'Customer Name' },
+        { key: 'loanNumber', label: 'Loan Number' },
+        { key: 'installmentNumber', label: 'EMI #' },
+        { key: 'dueDate', label: 'Due Date' },
+        { key: 'emiAmountPaise', label: 'EMI Amount', type: 'currency' },
+        { key: 'paidPaise', label: 'Paid', type: 'currency' },
+        { key: 'outstandingPaise', label: 'Outstanding', type: 'currency' },
+        { key: 'status', label: 'Status' },
+        { key: 'overdueDays', label: 'Overdue Days' },
+      ],
+      data: rows,
     };
   }
 

@@ -7,6 +7,7 @@ import { ArrowLeft, Download } from 'lucide-react';
 import { MoneyDisplay, LoadingSpinner, ErrorMessage, AccessDenied, PermissionGate } from '@/components/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/providers/auth-provider';
 import { hasPermission } from '@/lib/permissions';
 import { useReport } from '@/hooks/useReports';
@@ -23,6 +24,7 @@ const REPORT_LABELS: Record<string, string> = {
   disbursement: 'Disbursement',
   overdue: 'Overdue',
   'repayment-schedule': 'Repayment Schedule',
+  'emi-schedule': 'EMI Schedule',
   foreclosure: 'Foreclosure',
   // Customers & Groups
   customer: 'Customer',
@@ -61,9 +63,13 @@ function ReportDetailContent() {
   const today = todayIST();
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(today);
+  const [status, setStatus] = useState('all');
   const [exporting, setExporting] = useState(false);
 
-  const { data, isLoading, error } = useReport(type, { startDate, endDate });
+  const queryParams = type === 'emi-schedule'
+    ? { startDate, endDate, status }
+    : { startDate, endDate };
+  const { data, isLoading, error } = useReport(type, queryParams);
 
   const label = REPORT_LABELS[type] ?? type.replace(/-/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
 
@@ -72,7 +78,9 @@ function ReportDetailContent() {
     try {
       // Backend expects 'xlsx' not 'excel'
       const exportFormat = format === 'excel' ? 'xlsx' : format;
-      const qs = new URLSearchParams({ startDate, endDate, format: exportFormat }).toString();
+      const params: Record<string, string> = { startDate, endDate, format: exportFormat };
+      if (type === 'emi-schedule') params['status'] = status;
+      const qs = new URLSearchParams(params).toString();
       const blob = await apiClient.get<Blob>(`/reports/${type}/export?${qs}`);
       const ext = format === 'pdf' ? 'pdf' : 'xlsx';
       const url = URL.createObjectURL(blob as unknown as Blob);
@@ -104,6 +112,22 @@ function ReportDetailContent() {
           <label className="text-xs text-muted-foreground">End Date</label>
           <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-40" />
         </div>
+        {type === 'emi-schedule' && (
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Status</label>
+            <Select value={status} onValueChange={setStatus}>
+              <SelectTrigger className="w-32">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="paid">Paid</SelectItem>
+                <SelectItem value="unpaid">Unpaid</SelectItem>
+                <SelectItem value="overdue">Overdue</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
         <PermissionGate permission="report.export">
           <Button variant="outline" size="sm" onClick={() => handleExport('pdf')} disabled={exporting}>
             <Download className="h-4 w-4 mr-1" />{exporting ? 'Exporting…' : 'PDF'}

@@ -27,6 +27,7 @@ const REPORT_LABELS: Record<string, string> = {
   disbursement: 'Disbursement',
   overdue: 'Overdue',
   'repayment-schedule': 'Repayment Schedule',
+  'emi-schedule': 'EMI Schedule',
   foreclosure: 'Foreclosure',
   customer: 'Customer',
   'group-summary': 'Group Summary',
@@ -108,14 +109,15 @@ function transformBackendResponse(response: BackendReportResponse): ReportData {
   };
 }
 
-export function useReport(type: string, params: { startDate?: string; endDate?: string } = {}) {
+export function useReport(type: string, params: { startDate?: string; endDate?: string; status?: string } = {}) {
   const query = new URLSearchParams();
   if (params.startDate) query.set('startDate', params.startDate);
   if (params.endDate) query.set('endDate', params.endDate);
+  if (params.status) query.set('status', params.status);
   const qs = query.toString();
 
   return useQuery<ReportData>({
-    queryKey: ['reports', type, params.startDate, params.endDate],
+    queryKey: ['reports', type, params.startDate, params.endDate, params.status],
     queryFn: async () => {
       const response = await apiClient.get<BackendReportResponse>(`/reports/${type}${qs ? `?${qs}` : ''}`);
       return transformBackendResponse(response);

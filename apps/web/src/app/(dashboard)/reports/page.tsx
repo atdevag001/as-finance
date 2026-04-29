@@ -35,6 +35,7 @@ const REPORT_TYPES = [
   { type: 'disbursement', label: 'Disbursement', description: 'Disbursement activity and amounts', icon: FileText, category: 'Loans' },
   { type: 'overdue', label: 'Overdue', description: 'Overdue loans and aging analysis', icon: AlertCircle, category: 'Loans' },
   { type: 'repayment-schedule', label: 'Repayment Schedule', description: 'Installment schedule for loans', icon: CalendarCheck, category: 'Loans' },
+  { type: 'emi-schedule', label: 'EMI Schedule', description: 'EMIs by due date range with status', icon: CalendarCheck, category: 'Loans' },
   { type: 'foreclosure', label: 'Foreclosure', description: 'Foreclosure and early settlement records', icon: Ban, category: 'Loans' },
 
   // Customers & Groups
