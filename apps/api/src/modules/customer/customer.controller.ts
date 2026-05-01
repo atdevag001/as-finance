@@ -13,6 +13,7 @@ import {
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { Request } from 'express';
 import { CustomerService } from './customer.service';
+import { DocumentService } from '../document/document.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { BlacklistDto, ReinstateDto } from './dto/blacklist.dto';
@@ -25,7 +26,10 @@ import { JwtPayload } from '../../common/guards/jwt-auth.guard';
 @ApiTags('customers')
 @Controller('customers')
 export class CustomerController {
-  constructor(private readonly customerService: CustomerService) {}
+  constructor(
+    private readonly customerService: CustomerService,
+    private readonly documentService: DocumentService,
+  ) {}
 
   @Post()
   @RequirePermission('customer.create')
@@ -120,5 +124,14 @@ export class CustomerController {
     @Body() dto: CreateGuarantorDto,
   ) {
     return this.customerService.addGuarantor(customerId, dto);
+  }
+
+  @Get(':id/documents')
+  @RequirePermission('customer.read')
+  @ApiOperation({ summary: 'Get all documents for a customer' })
+  @ApiResponse({ status: 200, description: 'Documents retrieved' })
+  async getDocuments(@Param('id') customerId: string) {
+    const documents = await this.documentService.getCustomerDocuments(customerId);
+    return { data: documents };
   }
 }

@@ -58,6 +58,7 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [selectedDocType, setSelectedDocType] = useState<string>('other');
 
   // Blacklist state
   const [showBlacklistDialog, setShowBlacklistDialog] = useState(false);
@@ -128,16 +129,22 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
     try {
       const formData = new FormData();
       formData.append('file', file);
+      formData.append('prefix', 'kyc');
       formData.append('customerId', id);
-      await fetch(`${process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:3001'}/documents/upload`, {
+      formData.append('documentType', selectedDocType);
+      const response = await fetch(`${process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:3001'}/documents/upload`, {
         method: 'POST',
         body: formData,
         headers: {
           Authorization: `Bearer ${getAccessToken()}`,
         },
       });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Upload failed: ${response.status}`);
+      }
       showToast({ message: 'Document uploaded successfully.' });
-      queryClient.invalidateQueries({ queryKey: ['customers', id] });
+      queryClient.invalidateQueries({ queryKey: ['customers', id, 'documents'] });
     } catch (err) {
       setUploadError((err as Error).message || 'Upload failed.');
     } finally {
@@ -467,7 +474,20 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
 
             {/* Upload Section */}
             <PermissionGate permission="customer.upload_doc">
-              <div className="flex items-center gap-3 pt-2 border-t">
+              <div className="flex flex-wrap items-center gap-3 pt-2 border-t">
+                <Select value={selectedDocType} onValueChange={setSelectedDocType}>
+                  <SelectTrigger className="w-40">
+                    <SelectValue placeholder="Document Type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="aadhaar_front">Aadhaar Front</SelectItem>
+                    <SelectItem value="aadhaar_back">Aadhaar Back</SelectItem>
+                    <SelectItem value="pan">PAN Card</SelectItem>
+                    <SelectItem value="photo">Photo</SelectItem>
+                    <SelectItem value="address_proof">Address Proof</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
                 <input
                   ref={fileInputRef}
                   type="file"

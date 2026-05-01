@@ -27,8 +27,14 @@ const SCRIPT_PATTERNS = [
 const VALID_PREFIXES = ['kyc', 'loan-docs', 'receipts', 'expenses'] as const;
 export type DocumentPrefix = (typeof VALID_PREFIXES)[number];
 
+/** Valid document types for KYC */
+const VALID_DOC_TYPES = ['aadhaar_front', 'aadhaar_back', 'pan', 'photo', 'address_proof', 'other'] as const;
+export type DocumentType = (typeof VALID_DOC_TYPES)[number];
+
 export interface UploadDocumentDto {
   prefix: DocumentPrefix;
+  customerId?: string;
+  documentType?: DocumentType;
 }
 
 /**
@@ -138,6 +144,23 @@ export class DocumentService {
       },
     });
 
+    // If this is a KYC document for a customer, create the link
+    if (dto.prefix === 'kyc' && dto.customerId && dto.documentType) {
+      if (!VALID_DOC_TYPES.includes(dto.documentType as DocumentType)) {
+        throw new ValidationError(
+          `Invalid document type "${dto.documentType}". Must be one of: ${VALID_DOC_TYPES.join(', ')}`,
+        );
+      }
+
+      await this.prisma.customer_documents.create({
+        data: {
+          customer_id: dto.customerId,
+          document_type: dto.documentType as never,
+          file_id: metadata.id,
+        },
+      });
+    }
+
     return metadata;
   }
 
@@ -181,6 +204,43 @@ export class DocumentService {
       where: { id: fileId },
       data: { is_active: false },
     });
+  }
+
+  /**
+   * Get all documents for a customer.
+   */
+  async getCustomerDocuments(customerId: string) {
+    const docs = await this.prisma.customer_documents.findMany({
+      where: { customer_id: customerId, is_active: true },
+      include: {
+        file: {
+          select: {
+            id: true,
+            original_filename: true,
+            mime_type: true,
+            size_bytes: true,
+            created_at: true,
+          },
+        },
+        verifier: {
+          select: { id: true, full_name: true },
+        },
+      },
+      orderBy: { created_at: 'desc' },
+    });
+
+    return docs.map((doc) => ({
+      id: doc.id,
+      fileId: doc.file_id,
+      document_type: doc.document_type,
+      file_name: doc.file.original_filename,
+      mime_type: doc.file.mime_type,
+      size_bytes: doc.file.size_bytes,
+      is_verified: doc.is_verified,
+      verified_by: doc.verifier?.full_name ?? null,
+      verified_at: doc.verified_at,
+      uploaded_at: doc.file.created_at,
+    }));
   }
 
   private getExtension(mimeType: string): string {
