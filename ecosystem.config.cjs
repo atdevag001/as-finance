@@ -13,6 +13,11 @@ module.exports = {
         JWT_SECRET: 'as_finance_production_secret_key_2024_secure',
         JWT_EXPIRY: '8h',
         REFRESH_TOKEN_EXPIRY: '7d',
+        S3_ENDPOINT: 'http://localhost:9000',
+        S3_REGION: 'us-east-1',
+        S3_ACCESS_KEY: 'minioadmin',
+        S3_SECRET_KEY: 'minioadmin',
+        S3_BUCKET: 'as-finance-docs',
       },
     },
     {
