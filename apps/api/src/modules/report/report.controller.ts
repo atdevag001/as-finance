@@ -1,7 +1,7 @@
-import { Controller, Get, Param, Query, Req } from '@nestjs/common';
+import { Controller, Get, Param, Query, Req, Res, StreamableFile } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import { Request } from 'express';
+import { Request, Response } from 'express';
 import { ReportService, REPORT_TYPES } from './report.service';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 
@@ -70,26 +70,40 @@ export class ReportController {
   }
 
   /**
-   * Export a report in the specified format (PDF, XLSX, CSV).
-   * Currently returns JSON with format metadata (stub).
+   * Export a report in the specified format (PDF or XLSX).
+   * Returns binary file with appropriate Content-Type header.
    */
   @Get(':reportType/export')
   @RequirePermission('report.export')
-  @ApiOperation({ summary: 'Export a report (stub — returns JSON with format metadata)' })
+  @ApiOperation({ summary: 'Export a report as PDF or Excel file' })
   @ApiParam({
     name: 'reportType',
     description: 'Report type identifier',
     enum: [...REPORT_TYPES],
   })
-  @ApiQuery({ name: 'format', required: true, description: 'Export format: pdf, xlsx, csv' })
-  @ApiResponse({ status: 200, description: 'Export metadata and data' })
+  @ApiQuery({ name: 'format', required: true, description: 'Export format: pdf, xlsx' })
+  @ApiResponse({ status: 200, description: 'Binary file download' })
   @ApiResponse({ status: 404, description: 'Unknown report type or format' })
   async exportReport(
     @Param('reportType') reportType: string,
     @Query('format') format: string,
     @Query() query: Record<string, string>,
     @Req() req: AuthenticatedRequest,
-  ) {
-    return this.reportService.exportReport(reportType, format, query, req.user);
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile> {
+    const { buffer, mimeType, filename } = await this.reportService.exportReport(
+      reportType,
+      format,
+      query,
+      req.user,
+    );
+
+    res.set({
+      'Content-Type': mimeType,
+      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Content-Length': buffer.length,
+    });
+
+    return new StreamableFile(buffer);
   }
 }

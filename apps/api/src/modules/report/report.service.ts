@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ReportRepository } from './report.repository';
+import { ReportExportService, ExportData, ExportColumn } from './report-export.service';
 import { NotFoundError } from '../../common/errors';
 
 /**
@@ -64,7 +65,10 @@ export interface ReportUser {
  */
 @Injectable()
 export class ReportService {
-  constructor(private readonly reportRepo: ReportRepository) {}
+  constructor(
+    private readonly reportRepo: ReportRepository,
+    private readonly exportService: ReportExportService,
+  ) {}
 
   /**
    * Generate a report by type with RBAC scope filtering.
@@ -119,37 +123,125 @@ export class ReportService {
   }
 
   /**
-   * Export a report — stub returning JSON with format metadata.
-   * Actual PDF/XLSX/CSV generation deferred to future task.
+   * Export a report as PDF or Excel file.
+   * Returns Buffer with file content and metadata.
    */
   async exportReport(
     reportType: string,
     format: string,
     query: ReportQuery,
     user: ReportUser,
-  ) {
-    const validFormats = ['pdf', 'xlsx', 'csv'];
+  ): Promise<{ buffer: Buffer; mimeType: string; filename: string }> {
+    const validFormats = ['pdf', 'xlsx'];
     if (!validFormats.includes(format)) {
       throw new NotFoundError(`Unsupported export format: ${format}. Supported: ${validFormats.join(', ')}`);
     }
 
     const reportData = await this.generateReport(reportType, query, user);
+    const exportData = this.transformToExportData(reportType, query, reportData);
+
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const filename = `${reportType}-${dateStr}.${format}`;
+
+    if (format === 'xlsx') {
+      const buffer = await this.exportService.generateExcel(exportData);
+      return {
+        buffer,
+        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        filename,
+      };
+    } else {
+      const buffer = await this.exportService.generatePdf(exportData);
+      return {
+        buffer,
+        mimeType: 'application/pdf',
+        filename,
+      };
+    }
+  }
+
+  /**
+   * Transform report response to export-friendly format.
+   */
+  private transformToExportData(
+    reportType: string,
+    query: ReportQuery,
+    reportData: Record<string, unknown>,
+  ): ExportData {
+    const title = this.formatReportTitle(reportType);
+    const filters: Record<string, string> = {};
+
+    if (query.startDate) filters['Start Date'] = query.startDate;
+    if (query.endDate) filters['End Date'] = query.endDate;
+    if (query.status) filters['Status'] = query.status;
+
+    // Extract columns - use explicit columns if provided, else infer from data
+    let columns: ExportColumn[] = [];
+    if (Array.isArray(reportData['columns'])) {
+      columns = (reportData['columns'] as Array<{ key: string; label: string; type?: string }>).map((c) => ({
+        key: c.key,
+        label: c.label,
+        type: c.type as 'currency' | 'date' | 'number' | 'string' | undefined,
+      }));
+    }
+
+    // Extract rows
+    let rows: Record<string, unknown>[] = [];
+    if (Array.isArray(reportData['data'])) {
+      rows = reportData['data'] as Record<string, unknown>[];
+    }
+
+    // If no explicit columns, infer from first row
+    const firstRow = rows[0];
+    if (columns.length === 0 && firstRow) {
+      columns = Object.keys(firstRow).map((key) => ({
+        key,
+        label: this.formatColumnLabel(key),
+        type: this.inferColumnType(key),
+      }));
+    }
 
     return {
       reportType,
-      format,
-      generatedAt: new Date().toISOString(),
-      exportReady: false,
-      message: `Export stub: ${reportType} in ${format.toUpperCase()} format. Actual file generation pending implementation.`,
-      metadata: {
-        format,
-        mimeType: format === 'pdf' ? 'application/pdf'
-          : format === 'xlsx' ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-          : 'text/csv',
-        filename: `${reportType}-${new Date().toISOString().slice(0, 10)}.${format}`,
-      },
-      data: reportData,
+      title,
+      filters,
+      summary: reportData['summary'] as Record<string, unknown> | undefined,
+      columns,
+      rows,
     };
+  }
+
+  private formatReportTitle(reportType: string): string {
+    return reportType
+      .split('-')
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(' ') + ' Report';
+  }
+
+  private formatColumnLabel(key: string): string {
+    return key
+      .replace(/([A-Z])/g, ' $1')
+      .replace(/[_-]/g, ' ')
+      .replace(/paise$/i, '')
+      .replace(/id$/i, ' ID')
+      .trim()
+      .split(' ')
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .join(' ');
+  }
+
+  private inferColumnType(key: string): 'currency' | 'date' | 'number' | 'string' {
+    const lower = key.toLowerCase();
+    if (lower.includes('paise') || lower.includes('amount') || lower.includes('balance')) {
+      return 'currency';
+    }
+    if (lower.includes('date') || lower.includes('at') && !lower.includes('status')) {
+      return 'date';
+    }
+    if (lower.includes('count') || lower.includes('days') || lower.includes('number')) {
+      return 'number';
+    }
+    return 'string';
   }
 
   // ─── RBAC Scope Resolution ───────────────────────────────────────────────

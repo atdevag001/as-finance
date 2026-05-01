@@ -81,13 +81,15 @@ function ReportDetailContent() {
       const params: Record<string, string> = { startDate, endDate, format: exportFormat };
       if (type === 'emi-schedule') params['status'] = status;
       const qs = new URLSearchParams(params).toString();
-      const blob = await apiClient.get<Blob>(`/reports/${type}/export?${qs}`);
+      const blob = await apiClient.getBlob(`/reports/${type}/export?${qs}`);
       const ext = format === 'pdf' ? 'pdf' : 'xlsx';
-      const url = URL.createObjectURL(blob as unknown as Blob);
+      const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = `${type}-report.${ext}`;
+      document.body.appendChild(a);
       a.click();
+      document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch {
       // Export errors are non-critical; user can retry

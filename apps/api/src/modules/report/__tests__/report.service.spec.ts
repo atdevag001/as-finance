@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ReportService, REPORT_TYPES } from '../report.service';
 import { ReportRepository } from '../report.repository';
+import { ReportExportService } from '../report-export.service';
 
 /**
  * Unit tests for ReportService.
@@ -25,14 +26,27 @@ function createMockRepo() {
   };
 }
 
+function createMockExportService() {
+  return {
+    generateExcel: vi.fn().mockResolvedValue(Buffer.from('mock-excel-content')),
+    generatePdf: vi.fn().mockResolvedValue(Buffer.from('mock-pdf-content')),
+  };
+}
+
 describe('ReportService', () => {
   let service: ReportService;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mockRepo: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let mockExportService: any;
 
   beforeEach(() => {
     mockRepo = createMockRepo();
-    service = new ReportService(mockRepo as unknown as ReportRepository);
+    mockExportService = createMockExportService();
+    service = new ReportService(
+      mockRepo as unknown as ReportRepository,
+      mockExportService as unknown as ReportExportService,
+    );
   });
 
   describe('REPORT_TYPES', () => {
@@ -376,30 +390,30 @@ describe('ReportService', () => {
   describe('exportReport', () => {
     const user = { sub: 'u1', role: 'super_admin' };
 
-    it('should return export metadata for valid formats', async () => {
-      for (const format of ['pdf', 'xlsx', 'csv']) {
+    it('should return buffer and metadata for valid formats', async () => {
+      for (const format of ['pdf', 'xlsx']) {
         const result = await service.exportReport('overdue', format, {}, user);
-        expect(result.reportType).toBe('overdue');
-        expect(result.format).toBe(format);
-        expect(result.exportReady).toBe(false);
-        expect(result.metadata.filename).toContain(format);
+        expect(result.buffer).toBeInstanceOf(Buffer);
+        expect(result.buffer.length).toBeGreaterThan(0);
+        expect(result.filename).toContain(format);
       }
     });
 
     it('should set correct MIME types', async () => {
       const pdf = await service.exportReport('overdue', 'pdf', {}, user);
-      expect(pdf.metadata.mimeType).toBe('application/pdf');
+      expect(pdf.mimeType).toBe('application/pdf');
 
       const xlsx = await service.exportReport('overdue', 'xlsx', {}, user);
-      expect(xlsx.metadata.mimeType).toBe('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-
-      const csv = await service.exportReport('overdue', 'csv', {}, user);
-      expect(csv.metadata.mimeType).toBe('text/csv');
+      expect(xlsx.mimeType).toBe('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     });
 
     it('should reject unsupported export formats', async () => {
       await expect(
         service.exportReport('overdue', 'html', {}, user),
+      ).rejects.toThrow('Unsupported export format');
+
+      await expect(
+        service.exportReport('overdue', 'csv', {}, user),
       ).rejects.toThrow('Unsupported export format');
     });
   });

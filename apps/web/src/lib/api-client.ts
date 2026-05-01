@@ -150,6 +150,37 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   return res.json() as Promise<T>;
 }
 
+/**
+ * Fetch a binary file (blob) from the API.
+ * Used for file downloads (PDF, Excel, etc.)
+ */
+async function fetchBlob(path: string): Promise<Blob> {
+  const requestId = generateRequestId();
+  const headers = new Headers();
+  headers.set('x-request-id', requestId);
+
+  const token = getAccessToken();
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'GET',
+    headers,
+    credentials: 'include',
+  });
+
+  if (!res.ok) {
+    const errorBody = (await res.json().catch(() => ({
+      statusCode: res.status,
+      message: res.statusText,
+    }))) as ApiError;
+    throw new ApiClientError(res.status, { ...errorBody, requestId });
+  }
+
+  return res.blob();
+}
+
 export const apiClient = {
   get: <T>(path: string, options?: RequestOptions) =>
     request<T>(path, { ...options, method: 'GET' }),
@@ -165,4 +196,7 @@ export const apiClient = {
 
   delete: <T>(path: string, options?: RequestOptions) =>
     request<T>(path, { ...options, method: 'DELETE' }),
+
+  /** Fetch a binary file (blob) for downloads */
+  getBlob: (path: string) => fetchBlob(path),
 };
