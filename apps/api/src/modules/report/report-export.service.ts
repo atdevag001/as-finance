@@ -28,7 +28,13 @@ export class ReportExportService {
     workbook.creator = 'AS Finance';
     workbook.created = new Date();
 
-    const sheet = workbook.addWorksheet(data.title || 'Report');
+    // Sanitize worksheet name (Excel restrictions: no * ? : \ / [ ], no ' at start/end, max 31 chars)
+    const sheetName = (data.title || 'Report')
+      .replace(/[*?:\\/\[\]<>&"]/g, '')
+      .replace(/^'+|'+$/g, '')
+      .substring(0, 31)
+      .trim() || 'Report';
+    const sheet = workbook.addWorksheet(sheetName);
 
     // Title row
     sheet.mergeCells('A1', `${this.colLetter(data.columns.length)}1`);
@@ -130,7 +136,7 @@ export class ReportExportService {
   async generatePdf(data: ExportData): Promise<Buffer> {
     return new Promise((resolve, reject) => {
       const chunks: Uint8Array[] = [];
-      const doc = new PDFDocument({ margin: 40, size: 'A4', layout: 'landscape' });
+      const doc = new PDFDocument({ margin: 40, size: 'A4', layout: 'landscape', bufferPages: true });
 
       doc.on('data', (chunk: Uint8Array) => chunks.push(chunk));
       doc.on('end', () => resolve(Buffer.concat(chunks)));
