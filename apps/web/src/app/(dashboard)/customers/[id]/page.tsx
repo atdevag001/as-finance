@@ -24,6 +24,7 @@ interface LinkedLoan {
 
 interface Document {
   id: string;
+  fileId: string;
   document_type: string;
   file_name: string;
   uploaded_at: string;
@@ -290,11 +291,11 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
     }
   }
 
-  async function handleViewDocument(docId: string) {
+  async function handleViewDocument(docId: string, fileId: string) {
     setViewingDocId(docId);
     try {
-      const { url } = await apiClient.get<{ url: string }>(`/documents/${docId}/url`);
-      window.open(url, '_blank');
+      const response = await apiClient.get<{ data: { url: string } }>(`/documents/${fileId}/url`);
+      window.open(response.data.url, '_blank');
     } catch (err) {
       showToast({ message: (err as Error).message || 'Failed to get document URL.', variant: 'error' });
     } finally {
@@ -450,7 +451,7 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
                             variant="ghost"
                             size="sm"
                             disabled={viewingDocId === doc.id}
-                            onClick={() => handleViewDocument(doc.id)}
+                            onClick={() => handleViewDocument(doc.id, doc.fileId)}
                           >
                             {viewingDocId === doc.id ? (
                               <LoadingSpinner size="sm" />
