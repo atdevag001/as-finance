@@ -6,6 +6,7 @@ import {
   Param,
   Body,
   Req,
+  Res,
   HttpCode,
   HttpStatus,
   UseInterceptors,
@@ -14,7 +15,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiConsumes } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import { Request } from 'express';
+import { Request, Response } from 'express';
 import { DocumentService, UploadDocumentDto } from './document.service';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 import { JwtPayload } from '../../common/guards/jwt-auth.guard';
@@ -52,6 +53,28 @@ export class DocumentController {
   ) {
     const url = await this.documentService.getSignedUrl(id, req.user.sub);
     return { data: { url } };
+  }
+
+  @Get(':id/download')
+  @RequirePermission('customer.read')
+  @ApiOperation({ summary: 'Download/view a document file (streamed)' })
+  @ApiResponse({ status: 200, description: 'File streamed' })
+  @ApiResponse({ status: 404, description: 'Document not found' })
+  async downloadFile(
+    @Param('id') id: string,
+    @Req() req: Request & { user: JwtPayload },
+    @Res() res: Response,
+  ) {
+    const { stream, metadata } = await this.documentService.getFileStream(id, req.user.sub);
+
+    res.set({
+      'Content-Type': metadata.mime_type,
+      'Content-Disposition': `inline; filename="${metadata.original_filename}"`,
+      'Content-Length': metadata.size_bytes.toString(),
+      'Cache-Control': 'private, max-age=900',
+    });
+
+    stream.pipe(res);
   }
 
   @Delete(':id')

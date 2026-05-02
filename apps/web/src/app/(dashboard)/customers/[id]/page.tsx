@@ -294,10 +294,12 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
   async function handleViewDocument(docId: string, fileId: string) {
     setViewingDocId(docId);
     try {
-      const response = await apiClient.get<{ data: { url: string } }>(`/documents/${fileId}/url`);
-      window.open(response.data.url, '_blank');
+      const blob = await apiClient.getBlob(`/documents/${fileId}/download`);
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
     } catch (err) {
-      showToast({ message: (err as Error).message || 'Failed to get document URL.', variant: 'error' });
+      showToast({ message: (err as Error).message || 'Failed to open document.', variant: 'error' });
     } finally {
       setViewingDocId(null);
     }

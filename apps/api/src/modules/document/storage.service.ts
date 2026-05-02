@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Readable } from 'stream';
 import {
   S3Client,
   PutObjectCommand,
@@ -17,6 +18,7 @@ export interface StorageUploadParams {
 export interface StorageService {
   upload(params: StorageUploadParams): Promise<void>;
   getSignedUrl(bucket: string, key: string, expiresInSeconds: number): Promise<string>;
+  getFileStream(bucket: string, key: string): Promise<Readable>;
   delete(bucket: string, key: string): Promise<void>;
 }
 
@@ -50,6 +52,12 @@ export class S3StorageService implements StorageService {
   async getSignedUrl(bucket: string, key: string, expiresInSeconds: number): Promise<string> {
     const command = new GetObjectCommand({ Bucket: bucket, Key: key });
     return getSignedUrl(this.client, command, { expiresIn: expiresInSeconds });
+  }
+
+  async getFileStream(bucket: string, key: string): Promise<Readable> {
+    const command = new GetObjectCommand({ Bucket: bucket, Key: key });
+    const response = await this.client.send(command);
+    return response.Body as Readable;
   }
 
   async delete(bucket: string, key: string): Promise<void> {

@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Readable } from 'stream';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../../database/prisma.service';
 import { S3StorageService } from './storage.service';
@@ -185,6 +186,38 @@ export class DocumentService {
     );
 
     return signedUrl;
+  }
+
+  /**
+   * Get file stream for direct download/viewing.
+   * Streams file from S3 through the API (no signed URL needed).
+   */
+  async getFileStream(fileId: string, _actorId: string): Promise<{
+    stream: Readable;
+    metadata: {
+      mime_type: string;
+      original_filename: string;
+      size_bytes: number;
+    };
+  }> {
+    const metadata = await this.prisma.file_metadata.findUnique({
+      where: { id: fileId },
+    });
+
+    if (!metadata || !metadata.is_active) {
+      throw new NotFoundError('Document not found');
+    }
+
+    const stream = await this.storage.getFileStream(metadata.bucket, metadata.key);
+
+    return {
+      stream,
+      metadata: {
+        mime_type: metadata.mime_type,
+        original_filename: metadata.original_filename,
+        size_bytes: Number(metadata.size_bytes),
+      },
+    };
   }
 
   /**
