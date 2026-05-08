@@ -74,6 +74,14 @@ export class DocumentController {
       'Cache-Control': 'private, max-age=900',
     });
 
+    stream.on('error', (err) => {
+      if (!res.headersSent) {
+        res.status(500).json({ message: 'Failed to stream file', error: err.message });
+      } else {
+        res.end();
+      }
+    });
+
     stream.pipe(res);
   }
 

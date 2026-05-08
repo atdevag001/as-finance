@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsInt, Min, Max, IsUUID, Length } from 'class-validator';
+import { IsOptional, IsString, IsInt, Min, Max, IsUUID, Matches } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
@@ -36,6 +36,6 @@ export class LoanQueryDto {
   @ApiPropertyOptional({ description: 'Filter by customer Aadhaar last 4 digits' })
   @IsOptional()
   @IsString()
-  @Length(4, 4)
+  @Matches(/^\d{4}$/, { message: 'aadhaarLastFour must be exactly 4 digits' })
   aadhaarLastFour?: string;
 }

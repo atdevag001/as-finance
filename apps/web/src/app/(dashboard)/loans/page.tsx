@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Plus } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 import { useLoans } from '@/hooks/useLoans';
 import { StatusBadge, MoneyDisplay, LoadingSpinner, ErrorMessage, PaginationControls, PermissionGate, MobileCardList, type MobileCardItem } from '@/components/shared';
 import { Button } from '@/components/ui/button';
@@ -60,13 +60,25 @@ export default function LoansPage() {
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <Input
-          placeholder="Aadhaar last 4 digits"
-          value={aadhaar}
-          onChange={(e) => handleAadhaarChange(e.target.value)}
-          maxLength={4}
-          className="w-40"
-        />
+        <div className="relative w-40">
+          <Input
+            placeholder="Aadhaar last 4 digits"
+            value={aadhaar}
+            onChange={(e) => handleAadhaarChange(e.target.value)}
+            maxLength={4}
+            className="pr-8"
+          />
+          {aadhaar && (
+            <button
+              type="button"
+              onClick={() => { setAadhaar(''); setPage(1); }}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              aria-label="Clear Aadhaar filter"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
         <div className="flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Filter by status">
           {STATUS_FILTERS.map((f) => (
             <Button
