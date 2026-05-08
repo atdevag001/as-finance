@@ -18,6 +18,7 @@ export class CollectionController {
   @ApiQuery({ name: 'startDate', required: false })
   @ApiQuery({ name: 'endDate', required: false })
   @ApiQuery({ name: 'loanNumber', required: false })
+  @ApiQuery({ name: 'aadhaarLastFour', required: false, description: 'Filter by customer Aadhaar last 4 digits' })
   @ApiResponse({ status: 200, description: 'List of collections' })
   async listCollections(
     @Query('loanId') loanId?: string,
@@ -26,6 +27,7 @@ export class CollectionController {
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
     @Query('loanNumber') loanNumber?: string,
+    @Query('aadhaarLastFour') aadhaarLastFour?: string,
   ) {
     return this.collectionService.listCollections({
       loanId,
@@ -34,6 +36,7 @@ export class CollectionController {
       startDate,
       endDate,
       loanNumber,
+      aadhaarLastFour,
     });
   }
 

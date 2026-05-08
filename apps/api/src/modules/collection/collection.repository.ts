@@ -301,6 +301,7 @@ export class CollectionRepository {
     startDate?: string;
     endDate?: string;
     loanNumber?: string;
+    aadhaarLastFour?: string;
   }) {
     const where: Record<string, unknown> = {};
 
@@ -316,8 +317,17 @@ export class CollectionRepository {
         (where['payment_date'] as Record<string, unknown>)['lte'] = new Date(params.endDate);
       }
     }
+
+    // Build loan filter for loanNumber and/or aadhaarLastFour
+    const loanFilter: Record<string, unknown> = {};
     if (params?.loanNumber) {
-      where['loan'] = { loan_number: { contains: params.loanNumber, mode: 'insensitive' } };
+      loanFilter['loan_number'] = { contains: params.loanNumber, mode: 'insensitive' };
+    }
+    if (params?.aadhaarLastFour) {
+      loanFilter['customer'] = { aadhaar_last_four: params.aadhaarLastFour };
+    }
+    if (Object.keys(loanFilter).length > 0) {
+      where['loan'] = loanFilter;
     }
 
     const [data, total] = await Promise.all([

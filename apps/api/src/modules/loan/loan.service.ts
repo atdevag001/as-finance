@@ -607,6 +607,7 @@ export class LoanService {
       status: query.status,
       customerId: query.customerId,
       search: query.search,
+      aadhaarLastFour: query.aadhaarLastFour,
     });
   }
 

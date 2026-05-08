@@ -644,6 +644,7 @@ export class CollectionService {
     startDate?: string;
     endDate?: string;
     loanNumber?: string;
+    aadhaarLastFour?: string;
   }) {
     return this.collectionRepository.findAll(params);
   }

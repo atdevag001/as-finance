@@ -60,16 +60,17 @@ interface PaginatedResult<T> {
   total: number;
 }
 
-export function useLoans(params: { page?: number; status?: string; search?: string } = {}) {
-  const { page = 1, status, search } = params;
+export function useLoans(params: { page?: number; status?: string; search?: string; aadhaarLastFour?: string } = {}) {
+  const { page = 1, status, search, aadhaarLastFour } = params;
   const pageSize = 20;
   const skip = (page - 1) * pageSize;
   const query = new URLSearchParams({ skip: String(skip), take: String(pageSize) });
   if (status) query.set('status', status);
   if (search) query.set('search', search);
+  if (aadhaarLastFour) query.set('aadhaarLastFour', aadhaarLastFour);
 
   return useQuery<PaginatedResult<Loan>>({
-    queryKey: ['loans', page, status, search],
+    queryKey: ['loans', page, status, search, aadhaarLastFour],
     queryFn: () => apiClient.get(`/loans?${query.toString()}`),
   });
 }

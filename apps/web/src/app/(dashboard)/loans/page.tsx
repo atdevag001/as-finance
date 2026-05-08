@@ -6,6 +6,7 @@ import { Plus } from 'lucide-react';
 import { useLoans } from '@/hooks/useLoans';
 import { StatusBadge, MoneyDisplay, LoadingSpinner, ErrorMessage, PaginationControls, PermissionGate, MobileCardList, type MobileCardItem } from '@/components/shared';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 const STATUS_FILTERS = [
   { label: 'All', value: '' },
@@ -25,11 +26,24 @@ const STATUS_FILTERS = [
 export default function LoansPage() {
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState('');
-  const { data, isLoading, error } = useLoans({ page, status: status || undefined });
+  const [aadhaar, setAadhaar] = useState('');
+  const { data, isLoading, error } = useLoans({
+    page,
+    status: status || undefined,
+    aadhaarLastFour: aadhaar.length === 4 ? aadhaar : undefined,
+  });
 
   const handleStatusChange = (newStatus: string) => {
     setStatus(newStatus);
     setPage(1);
+  };
+
+  const handleAadhaarChange = (value: string) => {
+    const cleaned = value.replace(/\D/g, '').slice(0, 4);
+    setAadhaar(cleaned);
+    if (cleaned.length === 4 || cleaned.length === 0) {
+      setPage(1);
+    }
   };
 
   return (
@@ -45,17 +59,26 @@ export default function LoansPage() {
         </PermissionGate>
       </div>
 
-      <div className="flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Filter by status">
-        {STATUS_FILTERS.map((f) => (
-          <Button
-            key={f.value}
-            variant={status === f.value ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => handleStatusChange(f.value)}
-          >
-            {f.label}
-          </Button>
-        ))}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <Input
+          placeholder="Aadhaar last 4 digits"
+          value={aadhaar}
+          onChange={(e) => handleAadhaarChange(e.target.value)}
+          maxLength={4}
+          className="w-40"
+        />
+        <div className="flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Filter by status">
+          {STATUS_FILTERS.map((f) => (
+            <Button
+              key={f.value}
+              variant={status === f.value ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => handleStatusChange(f.value)}
+            >
+              {f.label}
+            </Button>
+          ))}
+        </div>
       </div>
 
       {isLoading && (

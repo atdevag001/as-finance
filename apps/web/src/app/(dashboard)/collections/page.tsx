@@ -27,10 +27,12 @@ export default function CollectionsPage() {
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(today);
   const [loanNumber, setLoanNumber] = useState('');
+  const [aadhaar, setAadhaar] = useState('');
   const [appliedFilters, setAppliedFilters] = useState({
     startDate: today,
     endDate: today,
     loanNumber: '',
+    aadhaarLastFour: '',
   });
 
   const { data, isLoading, error } = useCollections({
@@ -38,20 +40,27 @@ export default function CollectionsPage() {
     startDate: appliedFilters.startDate || undefined,
     endDate: appliedFilters.endDate || undefined,
     loanNumber: appliedFilters.loanNumber || undefined,
+    aadhaarLastFour: appliedFilters.aadhaarLastFour || undefined,
   });
   const [reversalCollection, setReversalCollection] = useState<Collection | null>(null);
 
   function applyFilters() {
     setPage(1);
-    setAppliedFilters({ startDate, endDate, loanNumber });
+    setAppliedFilters({
+      startDate,
+      endDate,
+      loanNumber,
+      aadhaarLastFour: aadhaar.length === 4 ? aadhaar : '',
+    });
   }
 
   function clearFilters() {
     setStartDate('');
     setEndDate('');
     setLoanNumber('');
+    setAadhaar('');
     setPage(1);
-    setAppliedFilters({ startDate: '', endDate: '', loanNumber: '' });
+    setAppliedFilters({ startDate: '', endDate: '', loanNumber: '', aadhaarLastFour: '' });
   }
 
   return (
@@ -65,7 +74,7 @@ export default function CollectionsPage() {
 
       {/* Filters */}
       <div className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-end">
-        <div className="flex-1 grid gap-3 sm:grid-cols-4">
+        <div className="flex-1 grid gap-3 sm:grid-cols-5">
           <div className="space-y-1">
             <Label htmlFor="start-date" className="text-xs">Start Date</Label>
             <Input
@@ -84,13 +93,23 @@ export default function CollectionsPage() {
               onChange={(e) => setEndDate(e.target.value)}
             />
           </div>
-          <div className="space-y-1 sm:col-span-2">
+          <div className="space-y-1">
             <Label htmlFor="loan-filter" className="text-xs">Loan Number</Label>
             <Input
               id="loan-filter"
-              placeholder="Search by loan number…"
+              placeholder="Loan number…"
               value={loanNumber}
               onChange={(e) => setLoanNumber(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="aadhaar-filter" className="text-xs">Aadhaar Last 4</Label>
+            <Input
+              id="aadhaar-filter"
+              placeholder="Last 4 digits"
+              value={aadhaar}
+              onChange={(e) => setAadhaar(e.target.value.replace(/\D/g, '').slice(0, 4))}
+              maxLength={4}
             />
           </div>
         </div>

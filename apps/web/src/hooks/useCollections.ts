@@ -47,8 +47,9 @@ export function useCollections(params: {
   startDate?: string;
   endDate?: string;
   loanNumber?: string;
+  aadhaarLastFour?: string;
 } = {}) {
-  const { page = 1, loanId, startDate, endDate, loanNumber } = params;
+  const { page = 1, loanId, startDate, endDate, loanNumber, aadhaarLastFour } = params;
   const pageSize = 20;
   const skip = (page - 1) * pageSize;
   const query = new URLSearchParams({ skip: String(skip), take: String(pageSize) });
@@ -56,9 +57,10 @@ export function useCollections(params: {
   if (startDate) query.set('startDate', startDate);
   if (endDate) query.set('endDate', endDate);
   if (loanNumber) query.set('loanNumber', loanNumber);
+  if (aadhaarLastFour) query.set('aadhaarLastFour', aadhaarLastFour);
 
   return useQuery<PaginatedResult<Collection>>({
-    queryKey: ['collections', page, loanId, startDate, endDate, loanNumber],
+    queryKey: ['collections', page, loanId, startDate, endDate, loanNumber, aadhaarLastFour],
     queryFn: () => apiClient.get(`/collections?${query.toString()}`),
   });
 }

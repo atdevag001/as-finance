@@ -124,6 +124,7 @@ export class LoanRepository {
     status?: string;
     customerId?: string;
     search?: string;
+    aadhaarLastFour?: string;
   }) {
     const where: Record<string, unknown> = {};
 
@@ -135,6 +136,9 @@ export class LoanRepository {
     }
     if (params.search) {
       where['loan_number'] = { contains: params.search, mode: 'insensitive' };
+    }
+    if (params.aadhaarLastFour) {
+      where['customer'] = { aadhaar_last_four: params.aadhaarLastFour };
     }
 
     const [data, total] = await Promise.all([
