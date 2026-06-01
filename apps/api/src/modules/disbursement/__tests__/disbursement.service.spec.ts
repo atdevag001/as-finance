@@ -47,6 +47,13 @@ function createMockRepo() {
     hasSchedule: vi.fn().mockResolvedValue(true),
     hasKycDocuments: vi.fn().mockResolvedValue(true),
     isAlreadyDisbursed: vi.fn().mockResolvedValue(false),
+    // Sprint 2: lockLoanForUpdate is now the first call in executeDisbursement.
+    // Return a locked row shape compatible with the service's expectations.
+    lockLoanForUpdate: vi.fn().mockResolvedValue({
+      id: 'loan-1',
+      status: 'approved',
+      cached_outstanding_paise: null,
+    }),
     findAccountByCode: vi.fn(),
     create: vi.fn(),
     updateLoanStatus: vi.fn(),

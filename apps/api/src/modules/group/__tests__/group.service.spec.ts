@@ -34,6 +34,9 @@ const mockIdempotencyService = {
 
 const mockPrisma = {
   $transaction: vi.fn((fn: (tx: unknown) => Promise<unknown>) => fn({})),
+  group_collections: {
+    findMany: vi.fn().mockResolvedValue([]),
+  },
 };
 
 function createService() {
@@ -511,11 +514,26 @@ describe('GroupService', () => {
 
   describe('findById', () => {
     it('should return group when found', async () => {
-      const group = { id: 'g1', name: 'Test', status: 'active' };
+      const group = {
+        id: 'g1',
+        name: 'Test',
+        meeting_day: 'monday',
+        branch_area: 'area-1',
+        status: 'active',
+        leader: { full_name: 'Leader Name' },
+        members: [],
+      };
       mockGroupRepository.findById.mockResolvedValue(group);
+      mockGroupRepository.getGroupMemberLoans.mockResolvedValue([]);
 
       const result = await service.findById('g1');
-      expect(result).toEqual(group);
+      // Service transforms repository output into a flat frontend shape
+      expect(result.id).toBe('g1');
+      expect(result.name).toBe('Test');
+      expect(result.status).toBe('active');
+      expect(result.leader_name).toBe('Leader Name');
+      expect(result.members).toEqual([]);
+      expect(result.collections).toEqual([]);
     });
 
     it('should throw NotFoundError when group does not exist', async () => {
@@ -529,11 +547,24 @@ describe('GroupService', () => {
 
   describe('findAll', () => {
     it('should delegate to repository with pagination params', async () => {
-      const expected = { data: [{ id: 'g1' }], total: 1 };
-      mockGroupRepository.findAll.mockResolvedValue(expected);
+      mockGroupRepository.findAll.mockResolvedValue({
+        data: [
+          {
+            id: 'g1',
+            name: 'Group 1',
+            meeting_day: 'monday',
+            branch_area: 'area-1',
+            status: 'active',
+            leader: null,
+            members: [],
+          },
+        ],
+        total: 1,
+      });
 
       const result = await service.findAll({ skip: 0, take: 10, status: 'active' });
-      expect(result).toEqual(expected);
+      expect(result.total).toBe(1);
+      expect(result.data).toHaveLength(1);
       expect(mockGroupRepository.findAll).toHaveBeenCalledWith({ skip: 0, take: 10, status: 'active' });
     });
   });

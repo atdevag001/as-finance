@@ -156,7 +156,7 @@ describe('UserService', () => {
       ).rejects.toThrow(ConflictError);
     });
 
-    it('should hash password with bcrypt cost 12', async () => {
+    it('should hash password with configured bcrypt cost', async () => {
       mockRepo.findByUsername.mockResolvedValue(null);
       mockRepo.findByMobile.mockResolvedValue(null);
       (bcrypt.hash as ReturnType<typeof vi.fn>).mockResolvedValue('hashed-pw');
@@ -164,7 +164,8 @@ describe('UserService', () => {
 
       await service.createUser(createDto, mockActorId, UserRole.SUPER_ADMIN);
 
-      expect(bcrypt.hash).toHaveBeenCalledWith('ValidPass1', 12);
+      // Cost is configurable via BCRYPT_COST env (default 12, test env may use lower)
+      expect(bcrypt.hash).toHaveBeenCalledWith('ValidPass1', expect.any(Number));
     });
   });
 

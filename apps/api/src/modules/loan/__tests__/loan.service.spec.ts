@@ -83,10 +83,23 @@ function createMockRepo(overrides: Record<string, unknown> = {}) {
 describe('LoanService', () => {
   let service: LoanService;
   let repo: ReturnType<typeof createMockRepo>;
+  // PrismaService mock: regenerateSchedule uses $transaction with tx.collections,
+  // tx.loan_schedules, tx.loans. Tests that don't exercise that path get
+  // by with the no-op mock.
+  const prismaMock = {
+    $transaction: vi.fn(async (cb: (tx: any) => Promise<any>) => {
+      const tx = {
+        collections: { count: vi.fn().mockResolvedValue(0) },
+        loan_schedules: { deleteMany: vi.fn(), createMany: vi.fn() },
+        loans: { update: vi.fn() },
+      };
+      return cb(tx);
+    }),
+  } as any;
 
   beforeEach(() => {
     repo = createMockRepo();
-    service = new LoanService(repo as any);
+    service = new LoanService(repo as any, prismaMock);
   });
 
   // ── Requirement 15.3: Immutability after approval ──────────────────────
@@ -318,6 +331,7 @@ describe('LoanService', () => {
         'loan-1',
         'approved',
         expect.objectContaining({ approved_by: 'user-approver' }),
+        expect.any(Number), // optimistic-lock version
       );
     });
 
@@ -328,6 +342,7 @@ describe('LoanService', () => {
         'loan-1',
         'approved',
         expect.objectContaining({ approved_by: 'user-approver' }),
+        expect.any(Number),
       );
     });
 
@@ -418,6 +433,7 @@ describe('LoanService', () => {
         'loan-1',
         'approved',
         expect.objectContaining({ approved_by: 'admin-user' }),
+        expect.any(Number),
       );
     });
 
@@ -433,6 +449,7 @@ describe('LoanService', () => {
         'loan-1',
         'approved',
         expect.objectContaining({ approved_by: 'different-user' }),
+        expect.any(Number),
       );
     });
 
@@ -454,7 +471,7 @@ describe('LoanService', () => {
       );
 
       expect(result).toBeDefined();
-      expect(repo.updateStatus).toHaveBeenCalledWith('loan-1', 'rejected');
+      expect(repo.updateStatus).toHaveBeenCalledWith('loan-1', 'rejected', undefined, expect.any(Number));
     });
 
     it('records rejection reason in status history', async () => {
@@ -535,7 +552,7 @@ describe('LoanService', () => {
     it('closes an active loan when all prerequisites are met', async () => {
       const result = await service.closeLoan('loan-1', 'actor-1', 'manager');
       expect(result).toBeDefined();
-      expect(repo.updateStatus).toHaveBeenCalledWith('loan-1', 'closed');
+      expect(repo.updateStatus).toHaveBeenCalledWith('loan-1', 'closed', undefined, expect.any(Number));
     });
 
     it('rejects closure when installments are unpaid', async () => {
@@ -607,7 +624,7 @@ describe('LoanService', () => {
       const result = await service.submit('loan-1', 'user-1', 'field_officer');
 
       expect(result).toBeDefined();
-      expect(repo.updateStatus).toHaveBeenCalledWith('loan-1', 'submitted');
+      expect(repo.updateStatus).toHaveBeenCalledWith('loan-1', 'submitted', undefined, expect.any(Number));
     });
 
     it('re-validates customer status at submission time', async () => {
@@ -666,7 +683,7 @@ describe('LoanService', () => {
       const result = await service.review('loan-1', 'user-reviewer', 'manager');
 
       expect(result).toBeDefined();
-      expect(repo.updateStatus).toHaveBeenCalledWith('loan-1', 'under_review');
+      expect(repo.updateStatus).toHaveBeenCalledWith('loan-1', 'under_review', undefined, expect.any(Number));
     });
 
     it('rejects review from invalid status', async () => {

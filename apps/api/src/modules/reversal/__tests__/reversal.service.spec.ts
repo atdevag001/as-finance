@@ -31,6 +31,12 @@ function createMockPrisma() {
       findMany: vi.fn(),
       create: vi.fn(),
     },
+    // Sprint 2: reversal now looks up paid penalties on each installment to
+    // reverse them. Default = no penalties affected.
+    penalties: {
+      findMany: vi.fn().mockResolvedValue([]),
+      update: vi.fn(),
+    },
     journal_entries: {
       findUnique: vi.fn(),
     },

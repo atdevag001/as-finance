@@ -195,6 +195,10 @@ function createMockPrisma() {
       findMany: vi.fn(),
       create: vi.fn(),
     },
+    penalties: {
+      findMany: vi.fn().mockResolvedValue([]),
+      update: vi.fn(),
+    },
     journal_entries: {
       findUnique: vi.fn(),
     },
