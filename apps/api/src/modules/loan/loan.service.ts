@@ -7,6 +7,7 @@ import { LoanQueryDto } from './dto/loan-query.dto';
 import { BusinessRuleError, NotFoundError } from '../../common/errors';
 import { canBypassMakerChecker } from '../../common/constants/maker-checker';
 import { generateSchedule, type ScheduleParams } from '../schedule/schedule.service';
+import { addMonthsClamped } from '../../common/utils/date.util';
 
 /**
  * Allowed loan status transitions matrix.
@@ -628,19 +629,22 @@ export class LoanService {
    * so we need to subtract 1 period from the desired first EMI date.
    */
   private calculateStartDateFromFirstEmi(firstEmiDate: Date, frequency: string): Date {
-    const startDate = new Date(firstEmiDate);
     switch (frequency) {
       case 'monthly':
-        startDate.setMonth(startDate.getMonth() - 1);
-        break;
-      case 'weekly':
+        return addMonthsClamped(firstEmiDate, -1);
+      case 'weekly': {
+        const startDate = new Date(firstEmiDate);
         startDate.setDate(startDate.getDate() - 7);
-        break;
-      case 'daily':
+        return startDate;
+      }
+      case 'daily': {
+        const startDate = new Date(firstEmiDate);
         startDate.setDate(startDate.getDate() - 1);
-        break;
+        return startDate;
+      }
+      default:
+        return new Date(firstEmiDate);
     }
-    return startDate;
   }
 
   /**

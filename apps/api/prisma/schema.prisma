@@ -854,6 +854,16 @@ model chart_of_accounts {
   @@index([parent_id], name: "idx_coa_parent_id")
 }
 
+/// Closed accounting periods — backdated journal entries are rejected for closed periods.
+model accounting_periods {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  period    String    @unique @db.VarChar(7) // 'YYYY-MM'
+  closed_at DateTime  @db.Timestamptz()
+  closed_by String    @db.Uuid
+
+  @@index([period], name: "idx_accounting_periods_period")
+}
+
 /// Journal entries for double-entry accounting — immutable after creation
 model journal_entries {
   id                 String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid

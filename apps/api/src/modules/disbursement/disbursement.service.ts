@@ -9,6 +9,7 @@ import { IdempotencyService } from '../idempotency/idempotency.service';
 import { LoanService } from '../loan/loan.service';
 import { DisburseDto } from './dto/disburse.dto';
 import { BusinessRuleError, ConflictError, NotFoundError } from '../../common/errors';
+import { addMonthsClamped } from '../../common/utils/date.util';
 import { canBypassMakerChecker } from '../../common/constants/maker-checker';
 
 // Configure Decimal.js: ROUND_HALF_UP for financial calculations
@@ -483,19 +484,22 @@ export class DisbursementService {
    * so we need to subtract 1 period from the desired first EMI date.
    */
   private calculateStartDateFromFirstEmi(firstEmiDate: Date, frequency: string): Date {
-    const startDate = new Date(firstEmiDate);
     switch (frequency) {
       case 'monthly':
-        startDate.setMonth(startDate.getMonth() - 1);
-        break;
-      case 'weekly':
+        return addMonthsClamped(firstEmiDate, -1);
+      case 'weekly': {
+        const startDate = new Date(firstEmiDate);
         startDate.setDate(startDate.getDate() - 7);
-        break;
-      case 'daily':
+        return startDate;
+      }
+      case 'daily': {
+        const startDate = new Date(firstEmiDate);
         startDate.setDate(startDate.getDate() - 1);
-        break;
+        return startDate;
+      }
+      default:
+        return new Date(firstEmiDate);
     }
-    return startDate;
   }
 
   /**

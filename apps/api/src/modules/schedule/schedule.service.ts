@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import Decimal from 'decimal.js';
 import { InterestType, Frequency } from '@as-finance/shared';
+import { addMonthsClamped } from '../../common/utils/date.util';
 
 // Configure Decimal.js globally for this module: ROUND_HALF_UP
 Decimal.set({ rounding: Decimal.ROUND_HALF_UP });
@@ -106,17 +107,22 @@ export function generateDueDates(
 ): Date[] {
   const dates: Date[] = [];
   for (let i = 1; i <= count; i++) {
-    const d = new Date(startDate);
+    let d: Date;
     switch (frequency) {
       case Frequency.MONTHLY:
-        d.setMonth(d.getMonth() + i);
+        // Clamp month-end overflow: Mar 31 + 1mo → Apr 30 (not May 1)
+        d = addMonthsClamped(startDate, i);
         break;
       case Frequency.WEEKLY:
+        d = new Date(startDate);
         d.setDate(d.getDate() + i * 7);
         break;
       case Frequency.DAILY:
+        d = new Date(startDate);
         d.setDate(d.getDate() + i);
         break;
+      default:
+        d = new Date(startDate);
     }
     dates.push(d);
   }

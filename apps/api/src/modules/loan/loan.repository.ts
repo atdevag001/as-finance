@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { ConflictError } from '../../common/errors';
 
+type TxClient = Parameters<Parameters<PrismaService['$transaction']>[0]>[0];
+
 const LOAN_SELECT = {
   id: true,
   loan_number: true,
@@ -103,6 +105,18 @@ export interface CreateLoanData {
 @Injectable()
 export class LoanRepository {
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Acquire a row-level FOR UPDATE lock on the loans row. Must be the first
+   * statement of any loan-lifecycle transaction (approve, close, regenerate).
+   * Mirrors collection.repository.ts, penalty.repository.ts, foreclosure.repository.ts.
+   */
+  async lockLoanForUpdate(loanId: string, tx: TxClient) {
+    const rows = await tx.$queryRaw<
+      { id: string; status: string; version: number; cached_outstanding_paise: bigint | null }[]
+    >`SELECT id, status, version, cached_outstanding_paise FROM loans WHERE id = ${loanId}::uuid FOR UPDATE`;
+    return rows[0] ?? null;
+  }
 
   async create(data: CreateLoanData) {
     return this.prisma['loans'].create({
