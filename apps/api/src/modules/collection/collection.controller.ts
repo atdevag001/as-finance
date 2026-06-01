@@ -1,7 +1,8 @@
 import { Controller, Post, Get, Body, Query, Req, HttpCode, HttpStatus } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { CollectionService } from './collection.service';
 import { PostCollectionDto } from './dto/post-collection.dto';
+import { CollectionQueryDto } from './dto/collection-query.dto';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 
 @ApiTags('collections')
@@ -12,31 +13,16 @@ export class CollectionController {
   @Get()
   @RequirePermission('collection.read')
   @ApiOperation({ summary: 'List collections with pagination and filters' })
-  @ApiQuery({ name: 'loanId', required: false })
-  @ApiQuery({ name: 'skip', required: false })
-  @ApiQuery({ name: 'take', required: false })
-  @ApiQuery({ name: 'startDate', required: false })
-  @ApiQuery({ name: 'endDate', required: false })
-  @ApiQuery({ name: 'loanNumber', required: false })
-  @ApiQuery({ name: 'aadhaarLastFour', required: false, description: 'Filter by customer Aadhaar last 4 digits' })
   @ApiResponse({ status: 200, description: 'List of collections' })
-  async listCollections(
-    @Query('loanId') loanId?: string,
-    @Query('skip') skip?: string,
-    @Query('take') take?: string,
-    @Query('startDate') startDate?: string,
-    @Query('endDate') endDate?: string,
-    @Query('loanNumber') loanNumber?: string,
-    @Query('aadhaarLastFour') aadhaarLastFour?: string,
-  ) {
+  async listCollections(@Query() query: CollectionQueryDto) {
     return this.collectionService.listCollections({
-      loanId,
-      skip: skip ? parseInt(skip, 10) : 0,
-      take: take ? parseInt(take, 10) : 20,
-      startDate,
-      endDate,
-      loanNumber,
-      aadhaarLastFour,
+      loanId: query.loanId,
+      skip: query.skip ?? 0,
+      take: query.take ?? 20,
+      startDate: query.startDate,
+      endDate: query.endDate,
+      loanNumber: query.loanNumber,
+      aadhaarLastFour: query.aadhaarLastFour,
     });
   }
 

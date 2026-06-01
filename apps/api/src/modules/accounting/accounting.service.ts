@@ -35,7 +35,10 @@ interface AccountBalance {
 export class AccountingService {
   private readonly logger = new Logger(AccountingService.name);
 
-  constructor(private readonly accountingRepository: AccountingRepository) {}
+  constructor(
+    private readonly accountingRepository: AccountingRepository,
+    private readonly prisma: PrismaService,
+  ) {}
 
   /**
    * Create a journal entry with balance validation.
@@ -47,6 +50,21 @@ export class AccountingService {
    * is written within the same transaction as the finance-affecting operation.
    */
   async createJournalEntry(dto: CreateJournalEntryDto, tx?: TxClient) {
+    // Reject entries dated into a closed accounting period
+    const entryDate = new Date(dto.date);
+    const period = `${entryDate.getUTCFullYear()}-${String(entryDate.getUTCMonth() + 1).padStart(2, '0')}`;
+    const client = tx ?? this.prisma;
+    const closed = await (client as TxClient).accounting_periods.findUnique({
+      where: { period },
+      select: { closed_at: true },
+    });
+    if (closed) {
+      throw new BusinessRuleError(
+        `Cannot post journal entry for closed accounting period ${period}`,
+        'PERIOD_CLOSED',
+      );
+    }
+
     // Validate: every line must have non-negative amounts
     for (const line of dto.lines) {
       if (line.debitPaise < 0 || line.creditPaise < 0) {
