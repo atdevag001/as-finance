@@ -31,6 +31,9 @@ const CHART_OF_ACCOUNTS = [
   { code: '5002', name: 'Rent Expense', category: 'expense' as const },
   { code: '5003', name: 'Travel Expense', category: 'expense' as const },
   { code: '5004', name: 'Office Expense', category: 'expense' as const },
+  { code: '5005', name: 'Utilities Expense', category: 'expense' as const },
+  { code: '5006', name: 'Maintenance Expense', category: 'expense' as const },
+  { code: '5007', name: 'Foreclosure Discount Expense', category: 'expense' as const },
   { code: '5099', name: 'Other Expense', category: 'expense' as const },
   { code: '3001', name: "Owner's Equity", category: 'equity' as const },
 ];

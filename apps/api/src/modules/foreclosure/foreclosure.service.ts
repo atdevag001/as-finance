@@ -382,13 +382,19 @@ export class ForeclosureService {
 
     // Step 4: Look up accounts for journal entries
     const cashAccountCode = dto.paymentMode === 'cash' ? '1001' : '1002';
-    const [cashAccount, loansReceivableAccount, interestIncomeAccount, penaltyIncomeAccount] =
-      await Promise.all([
-        this.foreclosureRepository.findAccountByCode(cashAccountCode, tx),
-        this.foreclosureRepository.findAccountByCode('1100', tx),
-        this.foreclosureRepository.findAccountByCode('4001', tx),
-        this.foreclosureRepository.findAccountByCode('4003', tx),
-      ]);
+    const [
+      cashAccount,
+      loansReceivableAccount,
+      interestIncomeAccount,
+      penaltyIncomeAccount,
+      discountExpenseAccount,
+    ] = await Promise.all([
+      this.foreclosureRepository.findAccountByCode(cashAccountCode, tx),
+      this.foreclosureRepository.findAccountByCode('1100', tx),
+      this.foreclosureRepository.findAccountByCode('4001', tx),
+      this.foreclosureRepository.findAccountByCode('4003', tx),
+      this.foreclosureRepository.findAccountByCode('5007', tx),
+    ]);
 
     if (!cashAccount || !loansReceivableAccount || !interestIncomeAccount || !penaltyIncomeAccount) {
       throw new BusinessRuleError(
@@ -404,6 +410,7 @@ export class ForeclosureService {
       loansReceivableAccount.id,
       interestIncomeAccount.id,
       penaltyIncomeAccount.id,
+      discountExpenseAccount?.id,
     );
 
     // Create journal entry
@@ -724,25 +731,34 @@ export class ForeclosureService {
     loansReceivableAccountId: string,
     interestIncomeAccountId: string,
     penaltyIncomeAccountId: string,
+    discountExpenseAccountId?: string,
   ) {
     const lines: { accountId: string; debitPaise: number; creditPaise: number }[] = [];
 
-    // DR Cash/Bank for total settlement amount
+    // DR Cash/Bank for total settlement amount received from customer
     lines.push({
       accountId: cashAccountId,
       debitPaise: settlement.settlementAmountPaise,
       creditPaise: 0,
     });
 
-    // Compute credit amounts — rebate reduces principal component
-    const principalCredit = Math.max(
-      0,
-      settlement.outstandingPrincipalPaise - settlement.rebatePaise,
-    );
-    const interestCredit = settlement.accruedInterestPaise;
-    const penaltyCredit = settlement.pendingPenaltiesPaise;
+    // DR Foreclosure Discount Expense for the rebate (P&L hit, not absorbed
+    // into Loans Receivable — that previously left Receivable understated)
+    if (settlement.rebatePaise > 0 && discountExpenseAccountId) {
+      lines.push({
+        accountId: discountExpenseAccountId,
+        debitPaise: settlement.rebatePaise,
+        creditPaise: 0,
+      });
+    }
 
-    // CR Loans Receivable for principal component (minus rebate)
+    // CR Loans Receivable for the FULL outstanding principal (clears the asset).
+    // Falls back to principal-minus-rebate if the discount expense account is
+    // not seeded — preserves balance, but Receivable will be understated; log a
+    // warning when this happens.
+    const principalCredit = discountExpenseAccountId
+      ? settlement.outstandingPrincipalPaise
+      : Math.max(0, settlement.outstandingPrincipalPaise - settlement.rebatePaise);
     if (principalCredit > 0) {
       lines.push({
         accountId: loansReceivableAccountId,
@@ -751,21 +767,19 @@ export class ForeclosureService {
       });
     }
 
-    // CR Interest Income for interest component
-    if (interestCredit > 0) {
+    if (settlement.accruedInterestPaise > 0) {
       lines.push({
         accountId: interestIncomeAccountId,
         debitPaise: 0,
-        creditPaise: interestCredit,
+        creditPaise: settlement.accruedInterestPaise,
       });
     }
 
-    // CR Penalty Income for penalty component
-    if (penaltyCredit > 0) {
+    if (settlement.pendingPenaltiesPaise > 0) {
       lines.push({
         accountId: penaltyIncomeAccountId,
         debitPaise: 0,
-        creditPaise: penaltyCredit,
+        creditPaise: settlement.pendingPenaltiesPaise,
       });
     }
 
