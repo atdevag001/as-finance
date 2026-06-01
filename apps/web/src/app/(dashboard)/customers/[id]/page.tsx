@@ -296,10 +296,34 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
     try {
       const blob = await apiClient.getBlob(`/documents/${fileId}/download`);
       const url = URL.createObjectURL(blob);
-      window.open(url, '_blank');
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      const win = window.open(url, '_blank');
+      // Revoke once the popup has had time to load the URL. Most browsers buffer
+      // the blob on open() but spec is fuzzy; 5s is enough for the initial fetch
+      // and short enough to avoid memory leaks on rapid views.
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      if (!win) {
+        // Popup blocked — surface the URL fallback
+        showToast({
+          message: 'Popup blocked. Please allow popups for this site to view documents.',
+          variant: 'error',
+        });
+      }
     } catch (err) {
-      showToast({ message: (err as Error).message || 'Failed to open document.', variant: 'error' });
+      // Distinguish 403 SCOPE_VIOLATION (auth) from network / 404 errors
+      const apiErr = err as { statusCode?: number; body?: { code?: string; message?: string } };
+      if (apiErr?.statusCode === 403 || apiErr?.body?.code === 'SCOPE_VIOLATION') {
+        showToast({
+          message: 'You do not have permission to view this document.',
+          variant: 'error',
+        });
+      } else if (apiErr?.statusCode === 404) {
+        showToast({ message: 'Document no longer exists.', variant: 'error' });
+      } else {
+        showToast({
+          message: (err as Error).message || 'Failed to open document.',
+          variant: 'error',
+        });
+      }
     } finally {
       setViewingDocId(null);
     }

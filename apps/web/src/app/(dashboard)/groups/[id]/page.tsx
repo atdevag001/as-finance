@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { todayIST } from '@/lib/date-utils';
 
 export default function GroupDetailPage({ params }: { params: { id: string } }) {
   const { id } = params;
@@ -133,7 +134,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } }) 
       await postGroupCollection.mutateAsync({
         groupId: id,
         totalAmountPaise,
-        collectionDate: new Date().toISOString().slice(0, 10),
+        collectionDate: todayIST(),
         paymentMode: 'cash',
         idempotencyKey: crypto.randomUUID(),
         memberBreakdown,

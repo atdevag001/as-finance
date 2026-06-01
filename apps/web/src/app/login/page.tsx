@@ -38,14 +38,34 @@ function LoginForm() {
     setServerError(null);
     try {
       await login(values.username, values.password);
-      const redirectPath = searchParams.get('redirect');
-      router.replace(redirectPath || '/');
+      // Validate redirect: only allow same-origin relative paths starting with '/'.
+      // Reject absolute URLs, protocol-relative (//host), and any control chars
+      // — prevents open-redirect attacks where an attacker crafts ?redirect=//evil.com.
+      const rawRedirect = searchParams.get('redirect');
+      const safe =
+        rawRedirect &&
+        rawRedirect.startsWith('/') &&
+        !rawRedirect.startsWith('//') &&
+        !/[\r\n\t]/.test(rawRedirect)
+          ? rawRedirect
+          : '/';
+      router.replace(safe);
     } catch (err) {
       if (err instanceof ApiClientError) {
-        if (err.statusCode === 423) {
-          setServerError('Account is locked. Please try again later.');
-        } else if (err.statusCode === 401) {
+        const code = (err.body as { code?: string })?.code;
+        if (code === 'ACCOUNT_LOCKED' || err.statusCode === 423) {
+          setServerError(
+            err.body.message ||
+              'Account is locked due to too many failed attempts. Try again in 30 minutes.',
+          );
+        } else if (code === 'INVALID_CREDENTIALS' || err.statusCode === 401) {
           setServerError('Invalid username or password.');
+        } else if (code === 'ACCOUNT_INACTIVE') {
+          setServerError('This account is inactive. Contact your administrator.');
+        } else if (code === 'REFRESH_TOKEN_REPLAY') {
+          setServerError(
+            'Your session was terminated for security. Please log in again.',
+          );
         } else {
           setServerError(err.body.message || 'Login failed. Please try again.');
         }

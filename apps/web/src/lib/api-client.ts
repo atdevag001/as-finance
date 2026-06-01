@@ -11,27 +11,18 @@ let accessToken: string | null = null;
 let refreshPromise: Promise<string | null> | null = null;
 
 /**
- * Read access_token from document.cookie (client-side only).
- * Used to initialize accessToken from cookie on page load for pre-authenticated sessions.
+ * SECURITY: We no longer read access_token from document.cookie. The token
+ * is stored ONLY in an HttpOnly cookie (set by the API) and an optional
+ * in-memory copy held in this module (set by AuthProvider after /auth/login
+ * + /auth/refresh). The browser auto-sends the HttpOnly cookie via
+ * `credentials: 'include'` — the in-memory copy is only used for the
+ * Authorization: Bearer header during the transitional period.
  */
-function getTokenFromCookie(): string | null {
-  if (typeof document === 'undefined') return null;
-  const match = document.cookie.match(/(?:^|;\s*)access_token=([^;]*)/);
-  return match?.[1] ?? null;
-}
-
 export function setAccessToken(token: string | null) {
   accessToken = token;
 }
 
 export function getAccessToken(): string | null {
-  // If in-memory token is null, try to read from cookie (handles pre-authenticated E2E tests)
-  if (!accessToken) {
-    const cookieToken = getTokenFromCookie();
-    if (cookieToken) {
-      accessToken = cookieToken;
-    }
-  }
   return accessToken;
 }
 
@@ -83,6 +74,14 @@ async function ensureValidToken(): Promise<string | null> {
 
 export interface ApiError {
   statusCode: number;
+  /**
+   * Domain-specific error code from the API's GlobalExceptionFilter.
+   * Examples: 'INVALID_CREDENTIALS', 'ACCOUNT_LOCKED', 'PASSWORD_REUSE',
+   * 'SCOPE_VIOLATION', 'REFRESH_TOKEN_REPLAY', 'CONFLICT_OPTIMISTIC_LOCK',
+   * 'ALREADY_DISBURSED', 'PERIOD_CLOSED', 'COLLECTIONS_EXIST', etc.
+   * Use this for branching UI messages instead of statusCode alone.
+   */
+  code?: string;
   message: string;
   error?: string;
   requestId?: string;

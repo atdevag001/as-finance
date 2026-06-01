@@ -14,16 +14,17 @@ import { useRouter, usePathname } from 'next/navigation';
 import { apiClient, setAccessToken, getAccessToken } from '@/lib/api-client';
 import { useToastSafe } from './toast-provider';
 
-/** Set access token as a cookie so Next.js middleware can read it for route gating. */
-function setTokenCookie(token: string | null) {
-  if (typeof document === 'undefined') return;
-  // Only use Secure flag when on HTTPS to allow development over HTTP
-  const isSecure = typeof window !== 'undefined' && window.location.protocol === 'https:';
-  if (token) {
-    document.cookie = `access_token=${token}; path=/; SameSite=Strict${isSecure ? '; Secure' : ''}`;
-  } else {
-    document.cookie = 'access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-  }
+/**
+ * SECURITY: We no longer write access_token to document.cookie. The API sets
+ * it as HttpOnly+Secure+SameSite=Strict on /auth/login and /auth/refresh; the
+ * browser auto-sends it via `credentials: 'include'`. Next.js middleware reads
+ * the HttpOnly cookie server-side from the request — JS does not need access.
+ *
+ * Removing the JS write closes XSS exfiltration. The previous setTokenCookie()
+ * is removed; callers below now no-op the cookie management.
+ */
+function setTokenCookie(_token: string | null) {
+  // intentionally empty — HttpOnly cookie is managed by the API
 }
 
 /** Parse JWT and get expiry timestamp (in ms) */

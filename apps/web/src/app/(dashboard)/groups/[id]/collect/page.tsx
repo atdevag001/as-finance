@@ -10,6 +10,7 @@ import { MoneyDisplay, LoadingSpinner, ErrorMessage } from '@/components/shared'
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { todayIST } from '@/lib/date-utils';
 
 interface GroupMember { id: string; customer_name: string; loan_id?: string; loan_number?: string; outstanding_paise?: number; }
 interface GroupDetail { id: string; name: string; members: GroupMember[]; }
@@ -48,7 +49,7 @@ export default function GroupCollectPage({ params }: { params: Promise<{ id: str
     const totalAmountPaise = memberBreakdown.reduce((sum, item) => sum + item.amountPaise, 0);
     mutation.mutate({
       totalAmountPaise,
-      collectionDate: new Date().toISOString().slice(0, 10),
+      collectionDate: todayIST(),
       paymentMode: 'cash',
       memberBreakdown,
       idempotencyKey: crypto.randomUUID(),
