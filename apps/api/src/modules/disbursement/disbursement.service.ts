@@ -8,7 +8,7 @@ import { AuditService } from '../audit/audit.service';
 import { IdempotencyService } from '../idempotency/idempotency.service';
 import { LoanService } from '../loan/loan.service';
 import { DisburseDto } from './dto/disburse.dto';
-import { BusinessRuleError, NotFoundError } from '../../common/errors';
+import { BusinessRuleError, ConflictError, NotFoundError } from '../../common/errors';
 import { canBypassMakerChecker } from '../../common/constants/maker-checker';
 
 // Configure Decimal.js: ROUND_HALF_UP for financial calculations
@@ -73,11 +73,23 @@ export class DisbursementService {
     await this.verifyPrerequisites(dto.loanId);
 
     // 3. Execute atomic disbursement transaction
-    const result = await this.prisma.$transaction(async (tx) => {
-      return this.executeDisbursement(tx, dto, actorId, actorRole);
-    });
-
-    return { statusCode: 201, data: result };
+    try {
+      const result = await this.prisma.$transaction(async (tx) => {
+        return this.executeDisbursement(tx, dto, actorId, actorRole);
+      });
+      return { statusCode: 201, data: result };
+    } catch (err: unknown) {
+      // Prisma P2002 = unique constraint violation. With @@unique on loan_id,
+      // a concurrent disburse loses the race and lands here. Map to 409 Conflict.
+      const e = err as { code?: string; meta?: { target?: string[] } };
+      if (e?.code === 'P2002') {
+        throw new ConflictError(
+          'Loan has already been disbursed',
+          'ALREADY_DISBURSED',
+        );
+      }
+      throw err;
+    }
   }
 
   /**
@@ -138,6 +150,21 @@ export class DisbursementService {
     actorId: string,
     actorRole: string,
   ) {
+    // Acquire row lock on the loan first — serializes concurrent disbursements
+    const locked = await this.disbursementRepository.lockLoanForUpdate(dto.loanId, tx);
+    if (!locked) {
+      throw new NotFoundError(`Loan not found: ${dto.loanId}`);
+    }
+
+    // Re-check inside the transaction (now visible under FOR UPDATE)
+    const alreadyDisbursed = await this.disbursementRepository.isAlreadyDisbursed(dto.loanId, tx);
+    if (alreadyDisbursed) {
+      throw new ConflictError(
+        'Loan has already been disbursed',
+        'ALREADY_DISBURSED',
+      );
+    }
+
     // Re-fetch loan within transaction for consistency
     const loan = await this.disbursementRepository.getLoanForDisbursement(dto.loanId, tx);
     if (!loan) {

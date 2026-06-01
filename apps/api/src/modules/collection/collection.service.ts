@@ -164,7 +164,7 @@ export class CollectionService {
     const penaltyStates: PenaltyState[] = pendingPenalties.map((p) => ({
       penaltyId: p.id,
       amountPaise: Number(p.amount_paise),
-      paidPaise: 0, // Unpaid penalties (we only fetched is_paid=false)
+      paidPaise: Number(p.paid_paise), // Real partial-paid amount; was hard-coded 0n (bug)
     }));
 
     const allocationResult = allocate({
@@ -231,6 +231,20 @@ export class CollectionService {
     // ── Step g: Create allocation records ──
     const allocationRecords = this.buildAllocationRecords(collection.id, allocationResult);
     await this.collectionRepository.createAllocations(allocationRecords, tx);
+
+    // ── Step g2: Persist penalty payments (fixes is_paid bug) ──
+    // Group allocations by penaltyId and increment penalties.paid_paise;
+    // flip is_paid=true when fully paid. Mirrored in ReversalService on reversal.
+    const penaltyTotals = new Map<string, bigint>();
+    for (const line of allocationResult.allocations) {
+      if (line.component === 'penalty' && line.penaltyId) {
+        const prev = penaltyTotals.get(line.penaltyId) ?? 0n;
+        penaltyTotals.set(line.penaltyId, prev + BigInt(line.amountPaise));
+      }
+    }
+    for (const [penaltyId, allocPaise] of penaltyTotals) {
+      await this.collectionRepository.applyPenaltyPayment(penaltyId, allocPaise, tx);
+    }
 
     // ── Step h: Update installment paid amounts and statuses ──
     await this.updateInstallments(loan.schedules, allocationResult, tx);

@@ -29,10 +29,12 @@ export class AuthController {
 
   @Post('login')
   @SetMetadata(IS_PUBLIC_KEY, true)
+  @Throttle({ login: { ttl: 60_000, limit: process.env['NODE_ENV'] === 'test' ? 1000 : 5 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Authenticate user and issue tokens' })
   @ApiResponse({ status: 200, description: 'Login successful' })
   @ApiResponse({ status: 403, description: 'Invalid credentials or account locked' })
+  @ApiResponse({ status: 429, description: 'Too many login attempts' })
   async login(
     @Body() dto: LoginDto,
     @Res({ passthrough: true }) res: Response,

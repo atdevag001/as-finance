@@ -38,6 +38,17 @@ export class AuthService {
       throw new AuthorizationError('Invalid credentials', 'INVALID_CREDENTIALS');
     }
 
+    // Lockout check BEFORE bcrypt — prevents timing-side-channel and credential stuffing
+    if (user.locked_until && user.locked_until > new Date()) {
+      const minutes = Math.ceil(
+        (user.locked_until.getTime() - Date.now()) / 60_000,
+      );
+      throw new AuthorizationError(
+        `Account locked due to too many failed login attempts. Try again in ${minutes} minute(s).`,
+        'ACCOUNT_LOCKED',
+      );
+    }
+
     // Compare password
     const passwordValid = await bcrypt.compare(dto.password, user.password_hash);
 
@@ -241,7 +252,29 @@ export class AuthService {
   }
 
   private async handleFailedLogin(userId: string): Promise<void> {
+    // Atomically increment failed counter
+    const updated = await this.prisma['users'].update({
+      where: { id: userId },
+      data: { failed_login_attempts: { increment: 1 } },
+      select: { failed_login_attempts: true },
+    });
+
     await this.logAuditEvent(userId, undefined, 'login_failed', 'users', userId);
+
+    // Lock the account after 5 consecutive failed attempts
+    if (updated.failed_login_attempts >= 5) {
+      const lockedUntil = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
+      await this.prisma['users'].update({
+        where: { id: userId },
+        data: { locked_until: lockedUntil },
+      });
+      await this.logAuditEvent(userId, undefined, 'account_locked', 'users', userId);
+      this.logger.warn({
+        msg: 'Account locked after 5 failed login attempts',
+        userId,
+        lockedUntil: lockedUntil.toISOString(),
+      });
+    }
   }
 
   private async logAuditEvent(

@@ -108,7 +108,8 @@ export class CollectionRepository {
   }
 
   /**
-   * Get pending (unpaid, unwaived) penalties for a loan, ordered oldest first.
+   * Get pending (unpaid, unwaived) penalties for a loan, ordered by oldest
+   * penalty_period (then created_at as tiebreaker).
    */
   async getPendingPenalties(loanId: string, tx: TxClient) {
     return tx.penalties.findMany({
@@ -120,10 +121,43 @@ export class CollectionRepository {
       select: {
         id: true,
         amount_paise: true,
+        paid_paise: true,
         installment_id: true,
         penalty_period: true,
       },
-      orderBy: { created_at: 'asc' },
+      orderBy: [{ penalty_period: 'asc' }, { created_at: 'asc' }],
+    });
+  }
+
+  /**
+   * Apply a partial or full payment to a penalty.
+   * Increments paid_paise and flips is_paid when paid_paise >= amount_paise.
+   */
+  async applyPenaltyPayment(penaltyId: string, allocPaise: bigint, tx: TxClient) {
+    const updated = await tx.penalties.update({
+      where: { id: penaltyId },
+      data: { paid_paise: { increment: allocPaise } },
+      select: { paid_paise: true, amount_paise: true },
+    });
+    if (updated.paid_paise >= updated.amount_paise) {
+      await tx.penalties.update({
+        where: { id: penaltyId },
+        data: { is_paid: true },
+      });
+    }
+  }
+
+  /**
+   * Reverse a penalty payment (used on collection reversal).
+   * Decrements paid_paise and clears is_paid.
+   */
+  async reversePenaltyPayment(penaltyId: string, allocPaise: bigint, tx: TxClient) {
+    await tx.penalties.update({
+      where: { id: penaltyId },
+      data: {
+        paid_paise: { decrement: allocPaise },
+        is_paid: false,
+      },
     });
   }
 
@@ -250,23 +284,6 @@ export class CollectionRepository {
         status: 'pending' as never,
       },
     });
-  }
-
-  /**
-   * Get sum of all penalty paid amounts for a specific penalty.
-   * Used to compute how much has already been paid toward a penalty.
-   */
-  async getPenaltyPaidTotal(penaltyId: string, tx: TxClient): Promise<bigint> {
-    // Penalties track their own paid status; we use the penalty_paid_paise
-    // on installments. For simplicity, we read the penalty's is_paid flag.
-    const penalty = await tx.penalties.findUnique({
-      where: { id: penaltyId },
-      select: { amount_paise: true, is_paid: true },
-    });
-    if (!penalty) return 0n;
-    // If already paid, return full amount; otherwise 0
-    // The actual paid tracking is done via installment penalty_paid_paise
-    return 0n;
   }
 
   /**

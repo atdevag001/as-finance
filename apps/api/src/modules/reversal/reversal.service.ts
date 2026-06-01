@@ -144,6 +144,37 @@ export class ReversalService {
       });
     }
 
+    // ── Step c2: Reverse penalty payments ──
+    // For each original allocation that paid penalty on an installment, find the
+    // penalty(ies) on that installment and reverse paid_paise / clear is_paid.
+    for (const alloc of originalAllocations) {
+      const penaltyPaise = BigInt(alloc.penalty_paise);
+      if (penaltyPaise <= 0n) continue;
+
+      const paidPenalties = await tx.penalties.findMany({
+        where: {
+          installment_id: alloc.installment_id,
+          paid_paise: { gt: 0n },
+        },
+        orderBy: [{ penalty_period: 'desc' }, { created_at: 'desc' }],
+        select: { id: true, paid_paise: true },
+      });
+
+      let remaining = penaltyPaise;
+      for (const p of paidPenalties) {
+        if (remaining <= 0n) break;
+        const dec = remaining < p.paid_paise ? remaining : p.paid_paise;
+        await tx.penalties.update({
+          where: { id: p.id },
+          data: {
+            paid_paise: { decrement: dec },
+            is_paid: false,
+          },
+        });
+        remaining -= dec;
+      }
+    }
+
     // ── Step d: Restore installment paid amounts and statuses ──
     await this.restoreInstallments(originalAllocations, loan.schedules, tx);
 

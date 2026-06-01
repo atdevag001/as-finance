@@ -527,6 +527,7 @@ model loans {
   @@index([created_by], name: "idx_loans_created_by")
   @@index([dpd], name: "idx_loans_dpd")
   @@index([overdue_bucket], name: "idx_loans_overdue_bucket")
+  @@index([created_at(sort: Desc)], name: "idx_loans_created_at")
 }
 
 /// Approval workflow entries for loans
@@ -595,7 +596,7 @@ model loan_schedules {
 /// Disbursement records (one per loan, idempotent)
 model disbursements {
   id               String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  loan_id          String      @db.Uuid
+  loan_id          String      @unique @db.Uuid
   amount_paise     BigInt
   mode             PaymentMode
   reference_number String?     @db.VarChar(100)
@@ -603,13 +604,12 @@ model disbursements {
   disbursed_at     DateTime    @db.Timestamptz()
   journal_entry_id String      @db.Uuid
   idempotency_key  String      @unique @db.VarChar(255)
+  version          Int         @default(1)
   created_at       DateTime    @default(now()) @db.Timestamptz()
 
   loan              loans           @relation(fields: [loan_id], references: [id])
   disbursed_by_user users           @relation(fields: [disbursed_by], references: [id])
   journal_entry     journal_entries @relation(fields: [journal_entry_id], references: [id])
-
-  @@index([loan_id], name: "idx_disbursements_loan_id")
 }
 
 /// Collection (payment) records — append-only, reversals are separate records
@@ -627,6 +627,7 @@ model collections {
   journal_entry_id       String           @db.Uuid
   receipt_id             String?          @db.Uuid
   idempotency_key        String           @unique @db.VarChar(255)
+  version                Int              @default(1)
   created_at             DateTime         @default(now()) @db.Timestamptz()
 
   loan                    loans                    @relation(fields: [loan_id], references: [id])
@@ -705,6 +706,7 @@ model penalties {
   loan_id             String   @db.Uuid
   installment_id      String   @db.Uuid
   amount_paise        BigInt
+  paid_paise          BigInt   @default(0)
   penalty_period      String   @db.VarChar(20)
   calculation_details Json
   is_paid             Boolean  @default(false)
@@ -713,6 +715,7 @@ model penalties {
   waiver_approved_by  String?  @db.Uuid
   waived_reason       String?
   journal_entry_id    String   @db.Uuid
+  version             Int      @default(1)
   created_at          DateTime @default(now()) @db.Timestamptz()
 
   loan            loans           @relation(fields: [loan_id], references: [id])

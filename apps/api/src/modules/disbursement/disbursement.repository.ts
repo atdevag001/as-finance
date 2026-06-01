@@ -78,12 +78,25 @@ export class DisbursementRepository {
 
   /**
    * Check if a loan has already been disbursed.
+   * Pass `tx` to run inside the disbursement transaction (visibility-correct under FOR UPDATE).
    */
-  async isAlreadyDisbursed(loanId: string): Promise<boolean> {
-    const count = await this.prisma.disbursements.count({
+  async isAlreadyDisbursed(loanId: string, tx?: TxClient): Promise<boolean> {
+    const client = tx ?? this.prisma;
+    const count = await (client as TxClient).disbursements.count({
       where: { loan_id: loanId },
     });
     return count > 0;
+  }
+
+  /**
+   * Acquire a row-level FOR UPDATE lock on the loans row. Must be called as the
+   * first statement of executeDisbursement inside a $transaction.
+   */
+  async lockLoanForUpdate(loanId: string, tx: TxClient) {
+    const rows = await tx.$queryRaw<
+      { id: string; status: string; cached_outstanding_paise: bigint | null }[]
+    >`SELECT id, status, cached_outstanding_paise FROM loans WHERE id = ${loanId}::uuid FOR UPDATE`;
+    return rows[0] ?? null;
   }
 
   /**
