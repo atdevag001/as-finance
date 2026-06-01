@@ -131,6 +131,11 @@ export class AccountingService {
       tx,
     );
 
+    // Auto-write cash_transactions row when this JE touches a cash GL account.
+    // Cash accounts (codes 1001 cash-in-hand, 1002 bank) mirror to the cashbook
+    // so daily summaries stay consistent with GL.
+    await this.maybeWriteCashTransaction(dto, entry.id, tx);
+
     this.logger.log({
       msg: 'Journal entry created',
       entryId: entry.id,
@@ -140,6 +145,73 @@ export class AccountingService {
     });
 
     return entry;
+  }
+
+  /**
+   * Insert a cash_transactions row when a JE touches a cash GL account.
+   * - DR cash account → inflow (e.g., collection from customer)
+   * - CR cash account → outflow (e.g., disbursement to customer)
+   */
+  private async maybeWriteCashTransaction(
+    dto: CreateJournalEntryDto,
+    entryId: string,
+    tx?: TxClient,
+  ): Promise<void> {
+    const client = tx ?? this.prisma;
+    const cashAccounts = await (client as TxClient).chart_of_accounts.findMany({
+      where: { code: { in: ['1001', '1002'] } },
+      select: { id: true, code: true },
+    });
+    if (cashAccounts.length === 0) return;
+
+    const cashIds = new Set(cashAccounts.map((a) => a.id));
+
+    let netDebit = 0n;
+    let netCredit = 0n;
+    for (const line of dto.lines) {
+      if (cashIds.has(line.accountId)) {
+        netDebit += BigInt(line.debitPaise);
+        netCredit += BigInt(line.creditPaise);
+      }
+    }
+    if (netDebit === 0n && netCredit === 0n) return;
+
+    // Category from source type
+    const categoryMap: Record<string, string> = {
+      COLLECTION: 'collection',
+      DISBURSEMENT: 'disbursement',
+      EXPENSE: 'expense',
+      REVERSAL: 'collection',
+    };
+    const category = categoryMap[dto.sourceType] ?? 'collection';
+
+    if (netDebit > netCredit) {
+      await (client as TxClient).cash_transactions.create({
+        data: {
+          transaction_date: new Date(dto.date),
+          type: 'inflow' as never,
+          category: category as never,
+          amount_paise: netDebit - netCredit,
+          description: dto.description,
+          source_type: 'journal_entry',
+          source_id: entryId,
+          recorded_by: dto.createdBy!,
+        },
+      });
+    } else if (netCredit > netDebit) {
+      await (client as TxClient).cash_transactions.create({
+        data: {
+          transaction_date: new Date(dto.date),
+          type: 'outflow' as never,
+          category: category as never,
+          amount_paise: netCredit - netDebit,
+          description: dto.description,
+          source_type: 'journal_entry',
+          source_id: entryId,
+          recorded_by: dto.createdBy!,
+        },
+      });
+    }
   }
 
   /** Get all chart of accounts entries. */

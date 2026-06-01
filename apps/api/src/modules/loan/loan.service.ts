@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { PrismaService } from '../../database/prisma.service';
 import { LoanRepository } from './loan.repository';
 import { CreateLoanDto } from './dto/create-loan.dto';
 import { ApproveLoanDto } from './dto/approve-loan.dto';
@@ -41,7 +42,10 @@ const IMMUTABLE_AFTER = new Set([
 
 @Injectable()
 export class LoanService {
-  constructor(private readonly loanRepository: LoanRepository) {}
+  constructor(
+    private readonly loanRepository: LoanRepository,
+    private readonly prisma: PrismaService,
+  ) {}
 
   /**
    * Validate that a status transition is allowed.
@@ -227,7 +231,12 @@ export class LoanService {
       }
     }
 
-    const updated = await this.loanRepository.updateStatus(loanId, 'submitted');
+    const updated = await this.loanRepository.updateStatus(
+      loanId,
+      'submitted',
+      undefined,
+      loan.version,
+    );
 
     await this.loanRepository.createStatusHistory({
       loan_id: loanId,
@@ -266,7 +275,12 @@ export class LoanService {
 
     this.validateTransition(loan.status, 'under_review');
 
-    const updated = await this.loanRepository.updateStatus(loanId, 'under_review');
+    const updated = await this.loanRepository.updateStatus(
+      loanId,
+      'under_review',
+      undefined,
+      loan.version,
+    );
 
     await this.loanRepository.createStatusHistory({
       loan_id: loanId,
@@ -318,9 +332,12 @@ export class LoanService {
       );
     }
 
-    const updated = await this.loanRepository.updateStatus(loanId, 'approved', {
-      approved_by: actorId,
-    });
+    const updated = await this.loanRepository.updateStatus(
+      loanId,
+      'approved',
+      { approved_by: actorId },
+      loan.version,
+    );
 
     // Generate and persist the EMI schedule
     if (loan.product_version) {
@@ -404,7 +421,12 @@ export class LoanService {
 
     this.validateTransition(loan.status, 'rejected');
 
-    const updated = await this.loanRepository.updateStatus(loanId, 'rejected');
+    const updated = await this.loanRepository.updateStatus(
+      loanId,
+      'rejected',
+      undefined,
+      loan.version,
+    );
 
     await this.loanRepository.createStatusHistory({
       loan_id: loanId,
@@ -555,8 +577,14 @@ export class LoanService {
       );
     }
 
-    // Update loan status to closed
-    const updated = await this.loanRepository.updateStatus(loanId, 'closed');
+    // Update loan status to closed (with optimistic lock — fails if concurrent
+    // reversal/collection bumped the version while we were checking prerequisites)
+    const updated = await this.loanRepository.updateStatus(
+      loanId,
+      'closed',
+      undefined,
+      loan.version,
+    );
 
     // Record status history
     await this.loanRepository.createStatusHistory({
@@ -738,19 +766,55 @@ export class LoanService {
     const oldSchedule = loan.schedules || [];
     const oldFirstDueDate = oldSchedule.length > 0 ? oldSchedule[0]?.due_date : null;
 
-    // Delete old schedule and create new one
-    await this.loanRepository.deleteScheduleInstallments(loanId);
-    await this.loanRepository.createScheduleInstallments(loanId, schedule);
-
-    // Update loan with new totals and dates
+    // Delete old schedule, create new one, and update loan totals atomically.
+    // A mid-flight failure here previously left a loan with no schedule.
     const firstDueDate = schedule[0]?.dueDate;
     const lastDueDate = schedule[schedule.length - 1]?.dueDate;
 
-    await this.loanRepository.updateLoanScheduleDates(loanId, {
-      first_due_date: firstDueDate,
-      last_due_date: lastDueDate,
-      total_interest_paise: totalInterestPaise,
-      total_payable_paise: totalPayablePaise,
+    await this.prisma.$transaction(async (tx) => {
+      const locked = await this.loanRepository.lockLoanForUpdate(loanId, tx);
+      if (!locked) {
+        throw new NotFoundError(`Loan not found: ${loanId}`);
+      }
+      // Re-check that no collections appeared while we were computing the new schedule
+      const collectionsCount = await tx.collections.count({
+        where: { loan_id: loanId, status: 'posted' as never },
+      });
+      if (collectionsCount > 0) {
+        throw new BusinessRuleError(
+          'Cannot regenerate schedule after payments have been collected',
+          'COLLECTIONS_EXIST',
+        );
+      }
+
+      await tx.loan_schedules.deleteMany({ where: { loan_id: loanId } });
+      if (schedule.length > 0) {
+        await tx.loan_schedules.createMany({
+          data: schedule.map((inst) => ({
+            loan_id: loanId,
+            installment_number: inst.installmentNumber,
+            due_date: inst.dueDate,
+            principal_paise: inst.principalPaise,
+            interest_paise: inst.interestPaise,
+            total_paise: inst.totalPaise,
+            principal_paid_paise: 0n,
+            interest_paid_paise: 0n,
+            penalty_paid_paise: 0n,
+            status: 'pending' as never,
+          })),
+        });
+      }
+
+      await tx.loans.update({
+        where: { id: loanId },
+        data: {
+          first_due_date: firstDueDate,
+          last_due_date: lastDueDate,
+          total_interest_paise: totalInterestPaise,
+          total_payable_paise: totalPayablePaise,
+          version: { increment: 1 },
+        },
+      });
     });
 
     // Record audit log

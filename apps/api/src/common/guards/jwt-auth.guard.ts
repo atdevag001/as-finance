@@ -14,6 +14,7 @@ export const IS_PUBLIC_KEY = 'isPublic';
 export interface JwtPayload {
   sub: string;
   role: string;
+  tv?: number; // token_version — bumped on password change to invalidate old tokens
   iat: number;
   exp: number;
 }
@@ -22,7 +23,7 @@ export interface JwtPayload {
 // TTL keeps the window of admitted-but-deactivated tokens short.
 const USER_CACHE = new Map<
   string,
-  { role: string; is_active: boolean; expiresAt: number }
+  { role: string; is_active: boolean; token_version: number; expiresAt: number }
 >();
 const USER_CACHE_TTL_MS = 60_000; // 60 seconds
 
@@ -72,11 +73,17 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException('Invalid or expired token');
     }
 
-    // Re-check user against DB (cached) — rejects deactivated users
-    // even if their JWT hasn't expired yet.
+    // Re-check user against DB (cached) — rejects deactivated users,
+    // role-changed users, and password-revoked tokens (token_version mismatch).
     const fresh = await this.getUserFreshness(payload.sub);
     if (!fresh.is_active) {
       throw new UnauthorizedException('User account is inactive');
+    }
+    if (
+      typeof payload.tv === 'number' &&
+      payload.tv !== fresh.token_version
+    ) {
+      throw new UnauthorizedException('Token revoked by password change');
     }
     // Trust the DB role over the JWT claim (handles role changes mid-session)
     payload.role = fresh.role;
@@ -87,14 +94,18 @@ export class JwtAuthGuard implements CanActivate {
 
   private async getUserFreshness(
     userId: string,
-  ): Promise<{ role: string; is_active: boolean }> {
+  ): Promise<{ role: string; is_active: boolean; token_version: number }> {
     const cached = USER_CACHE.get(userId);
     if (cached && cached.expiresAt > Date.now()) {
-      return { role: cached.role, is_active: cached.is_active };
+      return {
+        role: cached.role,
+        is_active: cached.is_active,
+        token_version: cached.token_version,
+      };
     }
     const user = await this.prisma['users'].findUnique({
       where: { id: userId },
-      select: { role: true, is_active: true },
+      select: { role: true, is_active: true, token_version: true },
     });
     if (!user) {
       throw new UnauthorizedException('User not found');
@@ -102,9 +113,14 @@ export class JwtAuthGuard implements CanActivate {
     USER_CACHE.set(userId, {
       role: user.role,
       is_active: user.is_active,
+      token_version: user.token_version,
       expiresAt: Date.now() + USER_CACHE_TTL_MS,
     });
-    return { role: user.role, is_active: user.is_active };
+    return {
+      role: user.role,
+      is_active: user.is_active,
+      token_version: user.token_version,
+    };
   }
 
   private extractToken(request: Request): string | undefined {

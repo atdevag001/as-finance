@@ -67,7 +67,7 @@ export class AuthService {
       },
     });
 
-    const accessToken = this.issueAccessToken(user.id, user.role);
+    const accessToken = this.issueAccessToken(user.id, user.role, user.token_version);
     const refreshToken = await this.createRefreshToken(user.id);
 
     await this.logAuditEvent(user.id, user.role, 'login_success', 'users', user.id);
@@ -132,6 +132,7 @@ export class AuthService {
     const accessToken = this.issueAccessToken(
       matchedToken.user.id,
       matchedToken.user.role,
+      matchedToken.user.token_version,
     );
     const newRefreshToken = await this.createRefreshToken(matchedToken.user.id);
 
@@ -180,11 +181,15 @@ export class AuthService {
     // Hash new password with bcrypt cost 12+
     const newPasswordHash = await bcrypt.hash(dto.newPassword, BCRYPT_COST);
 
-    // Update password and revoke all refresh tokens (invalidate all sessions)
+    // Update password, bump token_version (invalidates all outstanding access tokens),
+    // and revoke all refresh tokens — fully kills existing sessions.
     await this.prisma['$transaction']([
       this.prisma['users'].update({
         where: { id: userId },
-        data: { password_hash: newPasswordHash },
+        data: {
+          password_hash: newPasswordHash,
+          token_version: { increment: 1 },
+        },
       }),
       this.prisma['refresh_tokens'].updateMany({
         where: { user_id: userId, is_revoked: false },
@@ -203,7 +208,7 @@ export class AuthService {
 
   // ─── Private Helpers ─────────────────────────────────────────────────────
 
-  private issueAccessToken(userId: string, role: string): string {
+  private issueAccessToken(userId: string, role: string, tokenVersion: number): string {
     const secret = process.env['JWT_SECRET'];
     if (!secret) {
       throw new Error('JWT_SECRET is not configured');
@@ -212,7 +217,7 @@ export class AuthService {
     const expiry = process.env['JWT_EXPIRY'] || '15m';
 
     return jwt.sign(
-      { sub: userId, role } as jwt.JwtPayload,
+      { sub: userId, role, tv: tokenVersion } as jwt.JwtPayload,
       secret as jwt.Secret,
       {
         expiresIn: expiry,
