@@ -19,7 +19,19 @@ import { IS_PUBLIC_KEY, JwtAuthGuard, JwtPayload } from '../../common/guards/jwt
 import { AuthorizationError } from '../../common/errors';
 
 const REFRESH_COOKIE_NAME = 'refresh_token';
+const ACCESS_COOKIE_NAME = 'access_token';
 const REFRESH_COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const ACCESS_COOKIE_MAX_AGE_MS = 15 * 60 * 1000; // 15 minutes
+
+function accessCookieOptions() {
+  return {
+    httpOnly: true,
+    secure: process.env['NODE_ENV'] === 'production',
+    sameSite: 'strict' as const,
+    maxAge: ACCESS_COOKIE_MAX_AGE_MS,
+    path: '/',
+  };
+}
 
 @ApiTags('auth')
 @Controller('auth')
@@ -41,7 +53,10 @@ export class AuthController {
   ) {
     const result = await this.authService.login(dto);
 
-    // Set refresh token as httpOnly secure SameSite=Strict cookie
+    // Access token: HttpOnly cookie (XSS-resistant); JwtAuthGuard reads it
+    res.cookie(ACCESS_COOKIE_NAME, result.accessToken, accessCookieOptions());
+
+    // Refresh token: HttpOnly cookie (already)
     const refreshToken = (result as unknown as { refreshToken: string }).refreshToken;
     res.cookie(REFRESH_COOKIE_NAME, refreshToken, {
       httpOnly: true,
@@ -51,6 +66,7 @@ export class AuthController {
       path: '/',
     });
 
+    // accessToken returned in body for transitional clients using Authorization: Bearer
     return {
       accessToken: result.accessToken,
       user: result.user,
@@ -78,7 +94,10 @@ export class AuthController {
 
     const result = await this.authService.refreshToken(currentRefreshToken);
 
-    // Set new rotated refresh token cookie
+    // Rotate access cookie
+    res.cookie(ACCESS_COOKIE_NAME, result.accessToken, accessCookieOptions());
+
+    // Rotate refresh cookie
     res.cookie(REFRESH_COOKIE_NAME, result.refreshToken, {
       httpOnly: true,
       secure: process.env['NODE_ENV'] === 'production',
@@ -101,7 +120,8 @@ export class AuthController {
   ) {
     await this.authService.logout(req.user.sub);
 
-    // Clear refresh token cookie
+    // Clear both cookies
+    res.clearCookie(ACCESS_COOKIE_NAME, accessCookieOptions());
     res.clearCookie(REFRESH_COOKIE_NAME, {
       httpOnly: true,
       secure: process.env['NODE_ENV'] === 'production',

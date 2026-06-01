@@ -6,6 +6,7 @@ import { CustomThrottlerGuard } from './common/guards/throttler.guard';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
 import { DatabaseModule } from './database/database.module';
+import { CryptoModule } from './modules/crypto/crypto.module';
 import { HealthModule } from './modules/health/health.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UserModule } from './modules/user/user.module';
@@ -45,6 +46,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
       },
     ]),
     DatabaseModule,
+    CryptoModule,
     HealthModule,
     AuthModule,
     UserModule,

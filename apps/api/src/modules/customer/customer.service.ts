@@ -6,19 +6,12 @@ import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { CreateFamilyMemberDto } from './dto/create-family-member.dto';
 import { CreateGuarantorDto } from './dto/create-guarantor.dto';
 import { CustomerQueryDto } from './dto/customer-query.dto';
+import { EncryptionService } from '../crypto/encryption.service';
 import {
   BusinessRuleError,
   NotFoundError,
   ValidationError,
 } from '../../common/errors';
-
-/**
- * Placeholder encryption: prefixes with 'enc_'.
- * In production, replace with a real encryption service.
- */
-function encryptField(value: string): string {
-  return `enc_${value}`;
-}
 
 /** Extract last 4 characters from a string. */
 function lastFour(value: string): string {
@@ -39,7 +32,10 @@ const UNRESTRICTED_ROLES: readonly string[] = [
 export class CustomerService {
   private readonly logger = new Logger(CustomerService.name);
 
-  constructor(private readonly customerRepository: CustomerRepository) {}
+  constructor(
+    private readonly customerRepository: CustomerRepository,
+    private readonly crypto: EncryptionService,
+  ) {}
 
   async create(dto: CreateCustomerDto, actorId: string, actorRole: string) {
     // Validate Aadhaar format (already validated by DTO, but defense in depth)
@@ -73,8 +69,8 @@ export class CustomerService {
     }
 
     // Encrypt sensitive fields
-    const aadhaarEncrypted = encryptField(dto.aadhaarNumber);
-    const panEncrypted = dto.panNumber ? encryptField(dto.panNumber) : undefined;
+    const aadhaarEncrypted = this.crypto.encrypt(dto.aadhaarNumber);
+    const panEncrypted = dto.panNumber ? this.crypto.encrypt(dto.panNumber) : undefined;
     const panLastFour = dto.panNumber ? lastFour(dto.panNumber) : undefined;
 
     const customer = await this.customerRepository.create({
@@ -174,7 +170,7 @@ export class CustomerService {
     if (dto.mobile !== undefined) updateData.mobile = dto.mobile;
     if (dto.alternateMobile !== undefined) updateData.alternate_mobile = dto.alternateMobile;
     if (dto.panNumber !== undefined) {
-      updateData.pan_number_encrypted = encryptField(dto.panNumber);
+      updateData.pan_number_encrypted = this.crypto.encrypt(dto.panNumber);
       updateData.pan_last_four = lastFour(dto.panNumber);
     }
     if (dto.dob !== undefined) updateData.dob = new Date(dto.dob);
@@ -299,7 +295,7 @@ export class CustomerService {
       name: dto.name,
       relationship: dto.relationship,
       mobile: dto.mobile,
-      aadhaar_number_encrypted: encryptField(dto.aadhaarNumber),
+      aadhaar_number_encrypted: this.crypto.encrypt(dto.aadhaarNumber),
       aadhaar_last_four: lastFour(dto.aadhaarNumber),
       address: dto.address,
       photo_file_id: dto.photoFileId,

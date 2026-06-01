@@ -51,7 +51,7 @@ export class DocumentController {
     @Param('id') id: string,
     @Req() req: Request & { user: JwtPayload },
   ) {
-    const url = await this.documentService.getSignedUrl(id, req.user.sub);
+    const url = await this.documentService.getSignedUrl(id, req.user.sub, req.user.role);
     return { data: { url } };
   }
 
@@ -65,7 +65,7 @@ export class DocumentController {
     @Req() req: Request & { user: JwtPayload },
     @Res() res: Response,
   ) {
-    const { stream, metadata } = await this.documentService.getFileStream(id, req.user.sub);
+    const { stream, metadata } = await this.documentService.getFileStream(id, req.user.sub, req.user.role);
 
     res.set({
       'Content-Type': metadata.mime_type,
@@ -95,6 +95,6 @@ export class DocumentController {
     @Param('id') id: string,
     @Req() req: Request & { user: JwtPayload },
   ) {
-    await this.documentService.softDelete(id, req.user.sub);
+    await this.documentService.softDelete(id, req.user.sub, req.user.role);
   }
 }

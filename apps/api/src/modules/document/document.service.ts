@@ -1,9 +1,24 @@
 import { Injectable } from '@nestjs/common';
 import { Readable } from 'stream';
 import { randomUUID } from 'crypto';
+import { UserRole } from '@as-finance/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { S3StorageService } from './storage.service';
-import { ValidationError, NotFoundError } from '../../common/errors';
+import {
+  AuthorizationError,
+  NotFoundError,
+  ValidationError,
+} from '../../common/errors';
+
+/** Roles that can see all documents (not scope-restricted). */
+const UNRESTRICTED_ROLES: readonly string[] = [
+  UserRole.SUPER_ADMIN,
+  UserRole.MANAGER,
+  UserRole.ACCOUNTANT,
+  UserRole.OFFICE_STAFF,
+  UserRole.VIEWER_AUDITOR,
+  UserRole.COLLECTION_OFFICER,
+];
 
 /** Maximum file size: 5 MB */
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
@@ -167,32 +182,23 @@ export class DocumentService {
 
   /**
    * Generate a signed URL for a document with 15-minute expiry.
-   * Validates the document exists and is active.
+   * Validates the document exists, is active, and the actor can access it.
    */
-  async getSignedUrl(fileId: string, _actorId: string): Promise<string> {
-    const metadata = await this.prisma.file_metadata.findUnique({
-      where: { id: fileId },
-    });
+  async getSignedUrl(fileId: string, actorId: string, actorRole: string): Promise<string> {
+    const metadata = await this.loadMetadataWithScope(fileId, actorId, actorRole);
 
-    if (!metadata || !metadata.is_active) {
-      throw new NotFoundError('Document not found');
-    }
-
-    // 15-minute expiry (900 seconds)
-    const signedUrl = await this.storage.getSignedUrl(
-      metadata.bucket,
-      metadata.key,
-      900,
-    );
-
-    return signedUrl;
+    return this.storage.getSignedUrl(metadata.bucket, metadata.key, 900);
   }
 
   /**
    * Get file stream for direct download/viewing.
-   * Streams file from S3 through the API (no signed URL needed).
+   * Enforces per-customer scope authorization (field officers see only assigned docs).
    */
-  async getFileStream(fileId: string, _actorId: string): Promise<{
+  async getFileStream(
+    fileId: string,
+    actorId: string,
+    actorRole: string,
+  ): Promise<{
     stream: Readable;
     metadata: {
       mime_type: string;
@@ -200,13 +206,7 @@ export class DocumentService {
       size_bytes: number;
     };
   }> {
-    const metadata = await this.prisma.file_metadata.findUnique({
-      where: { id: fileId },
-    });
-
-    if (!metadata || !metadata.is_active) {
-      throw new NotFoundError('Document not found');
-    }
+    const metadata = await this.loadMetadataWithScope(fileId, actorId, actorRole);
 
     const stream = await this.storage.getFileStream(metadata.bucket, metadata.key);
 
@@ -222,21 +222,70 @@ export class DocumentService {
 
   /**
    * Soft delete a document by setting is_active=false.
-   * The file is retained in S3 for compliance.
+   * The file is retained in S3 for compliance. Enforces actor scope.
    */
-  async softDelete(fileId: string, _actorId: string): Promise<void> {
-    const metadata = await this.prisma.file_metadata.findUnique({
-      where: { id: fileId },
+  async softDelete(fileId: string, actorId: string, actorRole: string): Promise<void> {
+    const metadata = await this.loadMetadataWithScope(fileId, actorId, actorRole);
+
+    await this.prisma.file_metadata.update({
+      where: { id: metadata.id },
+      data: { is_active: false },
     });
 
-    if (!metadata) {
+    // Also soft-delete linked customer_documents rows so they don't orphan in the UI
+    await this.prisma.customer_documents.updateMany({
+      where: { file_id: metadata.id },
+      data: { is_active: false },
+    });
+  }
+
+  /**
+   * Load file metadata and enforce per-customer scope authorization.
+   * For KYC files, restricted roles (field_officer) must be the customer's assigned officer.
+   * For non-KYC files (loan-docs/receipts/expenses), allow if the actor has any access
+   *   to the document's owning entity (treated as unrestricted for now; refine in follow-up).
+   */
+  private async loadMetadataWithScope(
+    fileId: string,
+    actorId: string,
+    actorRole: string,
+  ) {
+    const metadata = await this.prisma.file_metadata.findUnique({
+      where: { id: fileId },
+      include: {
+        customer_documents: {
+          select: {
+            customer: { select: { id: true, assigned_officer_id: true } },
+          },
+        },
+      },
+    });
+
+    if (!metadata || !metadata.is_active) {
       throw new NotFoundError('Document not found');
     }
 
-    await this.prisma.file_metadata.update({
-      where: { id: fileId },
-      data: { is_active: false },
-    });
+    if (UNRESTRICTED_ROLES.includes(actorRole)) {
+      return metadata;
+    }
+
+    // KYC documents are linked via customer_documents — enforce per-customer scope
+    const kycLink = metadata.customer_documents[0];
+    if (kycLink) {
+      if (kycLink.customer.assigned_officer_id !== actorId) {
+        throw new AuthorizationError(
+          'You can only access documents for customers assigned to you',
+          'SCOPE_VIOLATION',
+        );
+      }
+      return metadata;
+    }
+
+    // Non-KYC: deny by default for restricted roles until per-loan scope is wired
+    throw new AuthorizationError(
+      'You do not have permission to access this document',
+      'SCOPE_VIOLATION',
+    );
   }
 
   /**
