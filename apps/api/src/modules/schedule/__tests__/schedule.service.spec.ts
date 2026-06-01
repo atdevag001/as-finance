@@ -541,14 +541,20 @@ describe('Schedule Service — Unit Tests', () => {
       expect(dates).toHaveLength(0);
     });
 
-    it('monthly dates handle month-end rollover', () => {
+    it('monthly dates handle month-end rollover (clamps to last day of target month)', () => {
       // Starting Jan 31 — Feb doesn't have 31 days
       const start = new Date(2024, 0, 31);
       const dates = generateDueDates(start, 3, Frequency.MONTHLY);
       expect(dates).toHaveLength(3);
-      // Feb 31 → rolls to Mar 2 (2024 is leap year, Feb has 29 days)
-      // This is JavaScript Date behavior
-      expect(dates[0]!.getMonth()).toBe(2); // March (rolled from Feb)
+      // Post-fix: Jan 31 + 1mo → Feb 29 (2024 leap year), NOT Mar 2 as
+      // raw setMonth would produce. addMonthsClamped pins the day to the
+      // last valid day of the target month.
+      expect(dates[0]!.getMonth()).toBe(1); // February
+      expect(dates[0]!.getDate()).toBe(29);
+      expect(dates[1]!.getMonth()).toBe(2); // March
+      expect(dates[1]!.getDate()).toBe(31);
+      expect(dates[2]!.getMonth()).toBe(3); // April
+      expect(dates[2]!.getDate()).toBe(30);
     });
   });
 
