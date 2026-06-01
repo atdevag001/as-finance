@@ -50,9 +50,13 @@ export class AccountingService {
    * is written within the same transaction as the finance-affecting operation.
    */
   async createJournalEntry(dto: CreateJournalEntryDto, tx?: TxClient) {
-    // Reject entries dated into a closed accounting period
+    // Reject entries dated into a closed accounting period.
+    // Derive YYYY-MM in IST (business calendar) — NOT UTC.
+    // UTC May 31 23:59 in IST → June 1 05:29 — we want the IST month.
     const entryDate = new Date(dto.date);
-    const period = `${entryDate.getUTCFullYear()}-${String(entryDate.getUTCMonth() + 1).padStart(2, '0')}`;
+    const istMs = entryDate.getTime() + (5 * 60 + 30) * 60 * 1000;
+    const istDate = new Date(istMs);
+    const period = `${istDate.getUTCFullYear()}-${String(istDate.getUTCMonth() + 1).padStart(2, '0')}`;
     const client = tx ?? this.prisma;
     const closed = await (client as TxClient).accounting_periods.findUnique({
       where: { period },
@@ -162,21 +166,31 @@ export class AccountingService {
       where: { code: { in: ['1001', '1002'] } },
       select: { id: true, code: true },
     });
-    if (cashAccounts.length === 0) return;
+    if (cashAccounts.length === 0) {
+      // Cash accounts missing from chart_of_accounts — likely a seeding gap.
+      // Log loudly so reconciliation issues surface immediately.
+      this.logger.warn({
+        msg: 'cash_transactions auto-write skipped: cash accounts (1001/1002) not in chart_of_accounts',
+        sourceType: dto.sourceType,
+        sourceId: dto.sourceId,
+      });
+      return;
+    }
 
     const cashIds = new Set(cashAccounts.map((a) => a.id));
 
     let netDebit = 0n;
     let netCredit = 0n;
+    let cashLinesSeen = 0;
     for (const line of dto.lines) {
       if (cashIds.has(line.accountId)) {
+        cashLinesSeen += 1;
         netDebit += BigInt(line.debitPaise);
         netCredit += BigInt(line.creditPaise);
       }
     }
-    if (netDebit === 0n && netCredit === 0n) return;
+    if (cashLinesSeen === 0) return;
 
-    // Category from source type
     const categoryMap: Record<string, string> = {
       COLLECTION: 'collection',
       DISBURSEMENT: 'disbursement',
@@ -185,32 +199,34 @@ export class AccountingService {
     };
     const category = categoryMap[dto.sourceType] ?? 'collection';
 
+    const baseData = {
+      transaction_date: new Date(dto.date),
+      category: category as never,
+      description: dto.description,
+      source_type: 'journal_entry',
+      source_id: entryId,
+      recorded_by: dto.createdBy!,
+    };
+
     if (netDebit > netCredit) {
       await (client as TxClient).cash_transactions.create({
-        data: {
-          transaction_date: new Date(dto.date),
-          type: 'inflow' as never,
-          category: category as never,
-          amount_paise: netDebit - netCredit,
-          description: dto.description,
-          source_type: 'journal_entry',
-          source_id: entryId,
-          recorded_by: dto.createdBy!,
-        },
+        data: { ...baseData, type: 'inflow' as never, amount_paise: netDebit - netCredit },
       });
     } else if (netCredit > netDebit) {
       await (client as TxClient).cash_transactions.create({
-        data: {
-          transaction_date: new Date(dto.date),
-          type: 'outflow' as never,
-          category: category as never,
-          amount_paise: netCredit - netDebit,
-          description: dto.description,
-          source_type: 'journal_entry',
-          source_id: entryId,
-          recorded_by: dto.createdBy!,
-        },
+        data: { ...baseData, type: 'outflow' as never, amount_paise: netCredit - netDebit },
       });
+    } else {
+      // Internal transfer (e.g. cash → bank): netDebit == netCredit > 0.
+      // Record both legs so the cashbook reflects the movement.
+      if (netDebit > 0n) {
+        await (client as TxClient).cash_transactions.create({
+          data: { ...baseData, type: 'inflow' as never, amount_paise: netDebit, description: `${dto.description} (transfer in)` },
+        });
+        await (client as TxClient).cash_transactions.create({
+          data: { ...baseData, type: 'outflow' as never, amount_paise: netCredit, description: `${dto.description} (transfer out)` },
+        });
+      }
     }
   }
 

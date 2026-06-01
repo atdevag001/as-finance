@@ -101,8 +101,19 @@ function createMockReceiptService() {
 }
 
 function createMockPrisma() {
+  // Tx client mock used by the auto-status-transition path inside the
+  // collection transaction (Sprint 4 added loans.update + loan_status_history.create).
+  // Also penalties.update is invoked when penalty payments are persisted —
+  // but in unit tests, no penalty allocations are produced, so the mock is silent.
+  const txMock = {
+    loans: { update: vi.fn() },
+    loan_status_history: { create: vi.fn() },
+    penalties: { update: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
+    $executeRaw: vi.fn().mockResolvedValue(1),
+  };
   return {
-    $transaction: vi.fn((fn: (tx: unknown) => Promise<unknown>) => fn({})),
+    $transaction: vi.fn((fn: (tx: unknown) => Promise<unknown>) => fn(txMock)),
+    _tx: txMock,
   };
 }
 

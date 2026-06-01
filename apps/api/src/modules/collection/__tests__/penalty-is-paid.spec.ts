@@ -11,65 +11,41 @@ type TxClient = Parameters<typeof CollectionRepository.prototype.applyPenaltyPay
  * on every subsequent collection, leading to double/triple-charging and
  * preventing loan closure.
  *
- * Post-fix: applyPenaltyPayment increments paid_paise and flips is_paid
- * when paid_paise >= amount_paise. reversePenaltyPayment undoes both on
- * collection reversal.
+ * Post-fix: applyPenaltyPayment uses a single atomic SQL UPDATE that
+ * increments paid_paise AND conditionally flips is_paid in one statement
+ * (no two-step race). reversePenaltyPayment undoes both on collection reversal.
  */
 
-function makeMockTx(updates: Array<Record<string, unknown>> = []) {
-  return {
-    penalties: {
-      update: vi.fn((args: { where: { id: string }; data: Record<string, unknown> }) => {
-        updates.push({ id: args.where.id, ...args.data });
-        // After increment, simulate updated paid_paise — full amount per call here
-        return Promise.resolve({
-          paid_paise: 100n,
-          amount_paise: 100n,
-        });
-      }),
-    },
-  } as unknown as TxClient;
-}
-
-describe('CollectionRepository.applyPenaltyPayment', () => {
-  it('increments paid_paise and flips is_paid when fully paid', async () => {
-    const updates: Array<Record<string, unknown>> = [];
-    const tx = makeMockTx(updates);
+describe('CollectionRepository.applyPenaltyPayment (single atomic UPDATE)', () => {
+  it('issues one atomic UPDATE that increments + conditionally flips is_paid', async () => {
+    const executeRawSpy = vi.fn().mockResolvedValue(1);
+    const tx = { $executeRaw: executeRawSpy } as unknown as TxClient;
     const repo = new CollectionRepository({} as never);
 
     await repo.applyPenaltyPayment('pen-1', 100n, tx);
 
-    // First call: increment paid_paise
-    expect(updates[0]).toMatchObject({
-      id: 'pen-1',
-      paid_paise: { increment: 100n },
-    });
-    // Second call: set is_paid (because paid_paise >= amount_paise)
-    expect(updates[1]).toMatchObject({
-      id: 'pen-1',
-      is_paid: true,
-    });
+    // Exactly one raw UPDATE call (atomic; no two-step window)
+    expect(executeRawSpy).toHaveBeenCalledOnce();
+    // The query string includes UPDATE penalties + the conditional is_paid set
+    const sqlParts = executeRawSpy.mock.calls[0]![0] as TemplateStringsArray;
+    const sql = Array.from(sqlParts).join('');
+    expect(sql).toMatch(/UPDATE penalties/);
+    expect(sql).toMatch(/is_paid/);
+    expect(sql).toMatch(/paid_paise \+/);
+    expect(sql).toMatch(/amount_paise/);
   });
 
-  it('does NOT flip is_paid on partial payment', async () => {
-    const updates: Array<Record<string, unknown>> = [];
-    const tx = {
-      penalties: {
-        update: vi.fn((args: { where: { id: string }; data: Record<string, unknown> }) => {
-          updates.push({ id: args.where.id, ...args.data });
-          // paid_paise (50) < amount_paise (100) → still unpaid
-          return Promise.resolve({ paid_paise: 50n, amount_paise: 100n });
-        }),
-      },
-    } as unknown as TxClient;
+  it('passes the alloc amount and penaltyId as parameters (no string concat injection)', async () => {
+    const executeRawSpy = vi.fn().mockResolvedValue(1);
+    const tx = { $executeRaw: executeRawSpy } as unknown as TxClient;
     const repo = new CollectionRepository({} as never);
 
-    await repo.applyPenaltyPayment('pen-1', 50n, tx);
+    await repo.applyPenaltyPayment('pen-42', 75n, tx);
 
-    // Only one update call: increment. No is_paid=true call.
-    expect(updates).toHaveLength(1);
-    expect(updates[0]).toMatchObject({ paid_paise: { increment: 50n } });
-    expect(updates.find((u) => u['is_paid'] === true)).toBeUndefined();
+    // tagged-template arguments after the template strings array carry the values
+    const args = executeRawSpy.mock.calls[0]!;
+    expect(args).toContain(75n);
+    expect(args).toContain('pen-42');
   });
 });
 

@@ -151,12 +151,17 @@ export class ReversalService {
       const penaltyPaise = BigInt(alloc.penalty_paise);
       if (penaltyPaise <= 0n) continue;
 
+      // Reverse penalties in the SAME order forward allocation used (oldest
+      // penalty_period first). Reversal removes the most-recently-applied
+      // increment, but if the original allocation paid 1st → 2nd → 3rd, the
+      // reversal must clear in the same ASC order — otherwise partial-paid
+      // penalties end up with the wrong `is_paid` state.
       const paidPenalties = await tx.penalties.findMany({
         where: {
           installment_id: alloc.installment_id,
           paid_paise: { gt: 0n },
         },
-        orderBy: [{ penalty_period: 'desc' }, { created_at: 'desc' }],
+        orderBy: [{ penalty_period: 'asc' }, { created_at: 'asc' }],
         select: { id: true, paid_paise: true },
       });
 

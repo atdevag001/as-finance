@@ -130,21 +130,21 @@ export class CollectionRepository {
   }
 
   /**
-   * Apply a partial or full payment to a penalty.
-   * Increments paid_paise and flips is_paid when paid_paise >= amount_paise.
+   * Apply a partial or full payment to a penalty in a single atomic SQL UPDATE.
+   * Increments paid_paise and conditionally flips is_paid in the same statement,
+   * so there is no window between the two states. Caller MUST hold the
+   * lockLoanForUpdate row lock on the loan for serialization across collections.
    */
   async applyPenaltyPayment(penaltyId: string, allocPaise: bigint, tx: TxClient) {
-    const updated = await tx.penalties.update({
-      where: { id: penaltyId },
-      data: { paid_paise: { increment: allocPaise } },
-      select: { paid_paise: true, amount_paise: true },
-    });
-    if (updated.paid_paise >= updated.amount_paise) {
-      await tx.penalties.update({
-        where: { id: penaltyId },
-        data: { is_paid: true },
-      });
-    }
+    // Single UPDATE: paid_paise becomes paid_paise + alloc; is_paid flips when
+    // the new total reaches/exceeds amount_paise. Raw query for atomic
+    // conditional column update — Prisma's update() can't express this.
+    await tx.$executeRaw`
+      UPDATE penalties
+         SET paid_paise = paid_paise + ${allocPaise}::bigint,
+             is_paid = (paid_paise + ${allocPaise}::bigint >= amount_paise)
+       WHERE id = ${penaltyId}::uuid
+    `;
   }
 
   /**

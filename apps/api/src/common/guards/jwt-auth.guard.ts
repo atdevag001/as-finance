@@ -19,13 +19,25 @@ export interface JwtPayload {
   exp: number;
 }
 
-// Small in-memory cache to avoid per-request DB hit for user freshness check.
+// In-memory cache to avoid per-request DB hit for user freshness check.
 // TTL keeps the window of admitted-but-deactivated tokens short.
-const USER_CACHE = new Map<
-  string,
-  { role: string; is_active: boolean; token_version: number; expiresAt: number }
->();
+// Hard size cap prevents memory leak — evicts oldest entries (FIFO) when full.
+type UserCacheEntry = { role: string; is_active: boolean; token_version: number; expiresAt: number };
+const USER_CACHE = new Map<string, UserCacheEntry>();
 const USER_CACHE_TTL_MS = 60_000; // 60 seconds
+const USER_CACHE_MAX_SIZE = 10_000;
+
+function evictOldestIfFull() {
+  if (USER_CACHE.size < USER_CACHE_MAX_SIZE) return;
+  // Map preserves insertion order; first key is oldest. Drop ~10% to amortize.
+  const dropCount = Math.max(1, Math.floor(USER_CACHE_MAX_SIZE * 0.1));
+  let dropped = 0;
+  for (const key of USER_CACHE.keys()) {
+    if (dropped >= dropCount) break;
+    USER_CACHE.delete(key);
+    dropped += 1;
+  }
+}
 
 /**
  * Extracts and verifies the JWT from the access_token cookie OR
@@ -110,6 +122,7 @@ export class JwtAuthGuard implements CanActivate {
     if (!user) {
       throw new UnauthorizedException('User not found');
     }
+    evictOldestIfFull();
     USER_CACHE.set(userId, {
       role: user.role,
       is_active: user.is_active,

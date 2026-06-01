@@ -431,6 +431,7 @@ describe('ForeclosureService', () => {
           '1100': { id: 'acc-lr', code: '1100', name: 'Loans Receivable', category: 'asset' },
           '4001': { id: 'acc-ii', code: '4001', name: 'Interest Income', category: 'income' },
           '4003': { id: 'acc-pi', code: '4003', name: 'Penalty Income', category: 'income' },
+          '5007': { id: 'acc-discount', code: '5007', name: 'Foreclosure Discount Expense', category: 'expense' },
         };
         return Promise.resolve(accts[code] ?? null);
       });
@@ -731,6 +732,7 @@ describe('ForeclosureService', () => {
           '1100': { id: 'acc-lr', code: '1100', name: 'Loans Receivable', category: 'asset' },
           '4001': { id: 'acc-ii', code: '4001', name: 'Interest Income', category: 'income' },
           '4003': { id: 'acc-pi', code: '4003', name: 'Penalty Income', category: 'income' },
+          '5007': { id: 'acc-discount', code: '5007', name: 'Foreclosure Discount Expense', category: 'expense' },
         };
         return Promise.resolve(accts[code] ?? null);
       });
@@ -825,7 +827,7 @@ describe('ForeclosureService', () => {
       expect(piLine.creditPaise).toBe(2000);
     });
 
-    it('absorbs rebate from principal component in journal lines', async () => {
+    it('books rebate as Discount Expense + credits full principal (not principal − rebate)', async () => {
       mockForeclosureRepo.findById.mockResolvedValue({
         id: 'fc-1', loan_id: 'loan-1', status: 'quote',
         requested_by: 'user-1',
@@ -848,6 +850,7 @@ describe('ForeclosureService', () => {
           '1100': { id: 'acc-lr', code: '1100', name: 'Loans Receivable', category: 'asset' },
           '4001': { id: 'acc-ii', code: '4001', name: 'Interest Income', category: 'income' },
           '4003': { id: 'acc-pi', code: '4003', name: 'Penalty Income', category: 'income' },
+          '5007': { id: 'acc-discount', code: '5007', name: 'Foreclosure Discount Expense', category: 'expense' },
         };
         return Promise.resolve(accts[code] ?? null);
       });
@@ -862,8 +865,11 @@ describe('ForeclosureService', () => {
       );
       const journalCall = mockAccountingService.createJournalEntry.mock.calls[0][0];
       const lrLine = journalCall.lines.find((l: any) => l.accountId === 'acc-lr');
-      // Principal credit = 80000 - 10000 rebate = 70000
-      expect(lrLine.creditPaise).toBe(70000);
+      // POST-FIX: credit FULL outstanding principal (80000), book rebate as Discount Expense
+      expect(lrLine.creditPaise).toBe(80000);
+      const discountLine = journalCall.lines.find((l: any) => l.accountId === 'acc-discount');
+      expect(discountLine).toBeDefined();
+      expect(discountLine.debitPaise).toBe(10000);
     });
   });
 

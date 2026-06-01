@@ -264,16 +264,15 @@ export class CollectionService {
     );
 
     // ── Step i2: Auto-transition loan status based on new state ──
-    // - active → overdue if any pending installment is past due
-    // - overdue → active if no pending installments are past due
-    // - active/overdue → closed if outstanding == 0 AND all installments paid
-    //   (only when loan was active/overdue; respects terminal-status invariants)
+    // Past-due check uses SYSTEM time (today), NOT user-supplied paymentDate.
+    // Otherwise a back-dated or future-dated paymentDate could falsely flip
+    // status: e.g. paymentDate=2030 makes all installments look "settled".
     const newStatus = this.computeAutoTransitionStatus(
       lockedLoan.status,
       newOutstanding,
       loan.schedules,
       allocationResult,
-      paymentDate,
+      new Date(),
     );
     if (newStatus && newStatus !== lockedLoan.status) {
       await tx.loans.update({

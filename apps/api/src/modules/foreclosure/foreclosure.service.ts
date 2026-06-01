@@ -403,6 +403,16 @@ export class ForeclosureService {
       );
     }
 
+    // Hard-require Foreclosure Discount Expense (5007) when a rebate is applied.
+    // Falling back to absorbing rebate into the principal credit understates
+    // Loans Receivable and overstates net profit — silent accounting error.
+    if (settlementResult.rebatePaise > 0 && !discountExpenseAccount) {
+      throw new BusinessRuleError(
+        'Foreclosure Discount Expense (code 5007) not seeded in chart_of_accounts; cannot post rebate.',
+        'ACCOUNTS_NOT_CONFIGURED',
+      );
+    }
+
     // Build journal entry lines for settlement
     const journalLines = this.buildSettlementJournalLines(
       settlementResult,

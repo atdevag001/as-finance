@@ -12,21 +12,12 @@ import {
   NotFoundError,
   ValidationError,
 } from '../../common/errors';
+import { UNRESTRICTED_ROLES } from '../../common/constants/roles';
 
 /** Extract last 4 characters from a string. */
 function lastFour(value: string): string {
   return value.slice(-4);
 }
-
-/** Roles that can see all customers (not scope-restricted). */
-const UNRESTRICTED_ROLES: readonly string[] = [
-  UserRole.SUPER_ADMIN,
-  UserRole.MANAGER,
-  UserRole.ACCOUNTANT,
-  UserRole.OFFICE_STAFF,
-  UserRole.VIEWER_AUDITOR,
-  UserRole.COLLECTION_OFFICER,
-];
 
 @Injectable()
 export class CustomerService {

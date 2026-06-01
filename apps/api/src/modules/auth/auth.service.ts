@@ -11,6 +11,7 @@ import { AuthorizationError, BusinessRuleError, UnauthorizedError } from '../../
 const BCRYPT_COST = process.env['BCRYPT_COST'] ? parseInt(process.env['BCRYPT_COST'], 10) : 12;
 const REFRESH_TOKEN_DAYS = 7;
 const PASSWORD_HISTORY_DEPTH = 5;
+const PASSWORD_HISTORY_RETAIN = 10; // keep last N hashes per user (prune older)
 
 export interface LoginResult {
   accessToken: string;
@@ -265,6 +266,10 @@ export class AuthService {
       }),
     ]);
 
+    // Prune history beyond PASSWORD_HISTORY_RETAIN to prevent unbounded growth.
+    // Fire-and-forget — pruning isn't part of the auth-critical path.
+    void this.pruneOldPasswordHistory(userId);
+
     await this.logAuditEvent(
       userId,
       user.role,
@@ -272,6 +277,24 @@ export class AuthService {
       'users',
       userId,
     );
+  }
+
+  private async pruneOldPasswordHistory(userId: string): Promise<void> {
+    try {
+      const recent = await this.prisma['password_history'].findMany({
+        where: { user_id: userId },
+        orderBy: { created_at: 'desc' },
+        take: PASSWORD_HISTORY_RETAIN,
+        select: { id: true },
+      });
+      if (recent.length < PASSWORD_HISTORY_RETAIN) return;
+      const keepIds = recent.map((r) => r.id);
+      await this.prisma['password_history'].deleteMany({
+        where: { user_id: userId, id: { notIn: keepIds } },
+      });
+    } catch (err) {
+      this.logger.warn({ msg: 'password_history pruning failed', userId, err });
+    }
   }
 
   // ─── Private Helpers ─────────────────────────────────────────────────────

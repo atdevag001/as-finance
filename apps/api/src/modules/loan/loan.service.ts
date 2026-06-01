@@ -9,6 +9,7 @@ import { BusinessRuleError, NotFoundError } from '../../common/errors';
 import { canBypassMakerChecker } from '../../common/constants/maker-checker';
 import { generateSchedule, type ScheduleParams } from '../schedule/schedule.service';
 import { addMonthsClamped } from '../../common/utils/date.util';
+import { UNRESTRICTED_ROLES } from '../../common/constants/roles';
 
 /**
  * Allowed loan status transitions matrix.
@@ -40,15 +41,8 @@ const IMMUTABLE_AFTER = new Set([
   'closed',
 ]);
 
-/** Roles that bypass per-officer scope filtering on loan reads. */
-const UNRESTRICTED_LOAN_ROLES: readonly string[] = [
-  'super_admin',
-  'manager',
-  'accountant',
-  'office_staff',
-  'viewer_auditor',
-  'collection_officer',
-];
+// Use shared UNRESTRICTED_ROLES — single source of truth across services
+const UNRESTRICTED_LOAN_ROLES = UNRESTRICTED_ROLES;
 
 @Injectable()
 export class LoanService {
@@ -813,6 +807,20 @@ export class LoanService {
         throw new BusinessRuleError(
           'Cannot regenerate schedule after payments have been collected',
           'COLLECTIONS_EXIST',
+        );
+      }
+
+      // Pre-check: collection_allocations link to installment_id via FK. Even
+      // reversed collections leave allocation rows. Deleting schedules without
+      // deleting allocations first would FK-violate. Friendly error if any
+      // exist (should be empty given the collections check above, but defensive).
+      const allocationCount = await tx.collection_allocations.count({
+        where: { installment: { loan_id: loanId } },
+      });
+      if (allocationCount > 0) {
+        throw new BusinessRuleError(
+          `Cannot regenerate schedule: ${allocationCount} historical collection allocation(s) still reference this loan's installments`,
+          'ALLOCATIONS_EXIST',
         );
       }
 

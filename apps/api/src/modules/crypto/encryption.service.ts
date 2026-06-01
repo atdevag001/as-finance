@@ -22,10 +22,18 @@ export class EncryptionService {
 
   constructor() {
     const keyB64 = process.env['ENCRYPTION_KEY'];
+    const nodeEnv = process.env['NODE_ENV'];
     if (!keyB64) {
-      // Allow boot in non-production for unit tests; fail fast otherwise
-      if (process.env['NODE_ENV'] === 'production') {
-        throw new Error('ENCRYPTION_KEY env required in production');
+      // SAFE gating: anything except known-safe envs MUST have a real key.
+      // Previously: only NODE_ENV === 'production' fell through. If NODE_ENV
+      // was undefined/empty (e.g. forgotten in CI/staging), the insecure dev
+      // key would silently activate.
+      const isSafeEnv = nodeEnv === 'development' || nodeEnv === 'test';
+      if (!isSafeEnv) {
+        throw new Error(
+          `ENCRYPTION_KEY env required when NODE_ENV=${nodeEnv ?? '<unset>'}. ` +
+            `Insecure dev key only allowed for NODE_ENV in {development, test}.`,
+        );
       }
       // Deterministic dev/test key — NEVER use in production
       this.key = Buffer.alloc(KEY_LEN, 0x42);
