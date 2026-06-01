@@ -5,7 +5,7 @@ import * as crypto from 'crypto';
 import { PrismaService } from '../../database/prisma.service';
 import { LoginDto } from './dto/login.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
-import { AuthorizationError } from '../../common/errors';
+import { AuthorizationError, UnauthorizedError } from '../../common/errors';
 
 // Use lower bcrypt cost in test/dev for faster hashing (still secure enough for tests)
 const BCRYPT_COST = process.env['BCRYPT_COST'] ? parseInt(process.env['BCRYPT_COST'], 10) : 12;
@@ -35,7 +35,7 @@ export class AuthService {
     });
 
     if (!user || !user.is_active) {
-      throw new AuthorizationError('Invalid credentials', 'INVALID_CREDENTIALS');
+      throw new UnauthorizedError('Invalid credentials', 'INVALID_CREDENTIALS');
     }
 
     // Lockout check BEFORE bcrypt — prevents timing-side-channel and credential stuffing
@@ -54,7 +54,7 @@ export class AuthService {
 
     if (!passwordValid) {
       await this.handleFailedLogin(user.id);
-      throw new AuthorizationError('Invalid credentials', 'INVALID_CREDENTIALS');
+      throw new UnauthorizedError('Invalid credentials', 'INVALID_CREDENTIALS');
     }
 
     // Reset failed attempts on successful login
@@ -85,47 +85,73 @@ export class AuthService {
   }
 
   async refreshToken(currentRefreshToken: string): Promise<RefreshResult> {
-    // Extract selector (first 32 hex chars = 16 bytes) for O(1) lookup
     const selector = currentRefreshToken.slice(0, 32);
     const validator = currentRefreshToken.slice(32);
 
-    // Find token by selector (indexed lookup)
+    // Look up by selector regardless of is_revoked — we need to detect replay
+    // of revoked tokens (which signals token theft) and revoke the whole family.
     const token = await this.prisma['refresh_tokens'].findFirst({
       where: {
         token_selector: selector,
-        is_revoked: false,
         expires_at: { gt: new Date() },
       },
       include: { user: true },
     });
 
     if (!token) {
-      throw new AuthorizationError(
+      throw new UnauthorizedError(
         'Invalid or expired refresh token',
         'INVALID_REFRESH_TOKEN',
       );
     }
 
-    // Verify the validator portion against the hash
+    // Verify the validator portion against the hash before any side effect
     const isValid = await bcrypt.compare(validator, token.token_hash);
     if (!isValid) {
-      throw new AuthorizationError(
+      throw new UnauthorizedError(
         'Invalid or expired refresh token',
         'INVALID_REFRESH_TOKEN',
+      );
+    }
+
+    // REPLAY DETECTION: a revoked token presented again means someone has
+    // a stolen copy. Revoke the entire family + bump token_version to kill
+    // any access tokens already issued in this chain.
+    if (token.is_revoked) {
+      await this.revokeFamily(token.family_id, 'replay_detected');
+      await this.prisma['users'].update({
+        where: { id: token.user_id },
+        data: { token_version: { increment: 1 } },
+      });
+      await this.logAuditEvent(
+        token.user_id,
+        token.user.role,
+        'refresh_token_replay_detected',
+        'refresh_tokens',
+        token.id,
+      );
+      throw new UnauthorizedError(
+        'Refresh token replay detected. All sessions revoked.',
+        'REFRESH_TOKEN_REPLAY',
       );
     }
 
     const matchedToken = token;
 
     if (!matchedToken.user.is_active) {
-      throw new AuthorizationError('Account is inactive', 'ACCOUNT_INACTIVE');
+      throw new UnauthorizedError('Account is inactive', 'ACCOUNT_INACTIVE');
     }
 
-    // Revoke old refresh token (rotation) - skip in test environment for reusable storage state
+    // Revoke old refresh token (rotation). SKIP_TOKEN_ROTATION=true is for
+    // dev/test storage-state reuse only — env validation forbids it in prod.
     if (process.env['SKIP_TOKEN_ROTATION'] !== 'true') {
       await this.prisma['refresh_tokens'].update({
         where: { id: matchedToken.id },
-        data: { is_revoked: true },
+        data: {
+          is_revoked: true,
+          revoked_at: new Date(),
+          revoked_reason: 'rotated',
+        },
       });
     }
 
@@ -134,7 +160,11 @@ export class AuthService {
       matchedToken.user.role,
       matchedToken.user.token_version,
     );
-    const newRefreshToken = await this.createRefreshToken(matchedToken.user.id);
+    const newRefreshToken = await this.createRefreshToken(
+      matchedToken.user.id,
+      matchedToken.family_id,
+      matchedToken.id,
+    );
 
     return {
       accessToken,
@@ -229,7 +259,11 @@ export class AuthService {
     );
   }
 
-  private async createRefreshToken(userId: string): Promise<string> {
+  private async createRefreshToken(
+    userId: string,
+    familyId?: string,
+    parentId?: string,
+  ): Promise<string> {
     // Generate 64 bytes: first 16 for selector (stored plaintext), remaining 48 for validator (hashed)
     const selectorBytes = crypto.randomBytes(16);
     const validatorBytes = crypto.randomBytes(48);
@@ -250,10 +284,30 @@ export class AuthService {
         token_selector: selector,
         token_hash: validatorHash,
         expires_at: expiresAt,
+        // Initial login: omit (DB default generates a new family_id, parent_id NULL)
+        // Rotation: pass through the existing familyId + the parent rotated from
+        ...(familyId ? { family_id: familyId } : {}),
+        ...(parentId ? { parent_id: parentId } : {}),
       },
     });
 
     return rawToken;
+  }
+
+  /**
+   * Revoke every non-revoked token in a refresh-token family at once.
+   * Called when token replay is detected — all chains derived from a stolen
+   * token get killed simultaneously.
+   */
+  private async revokeFamily(familyId: string, reason: string): Promise<void> {
+    await this.prisma['refresh_tokens'].updateMany({
+      where: { family_id: familyId, is_revoked: false },
+      data: {
+        is_revoked: true,
+        revoked_at: new Date(),
+        revoked_reason: reason,
+      },
+    });
   }
 
   private async handleFailedLogin(userId: string): Promise<void> {

@@ -37,6 +37,25 @@ export class CustomerService {
     private readonly crypto: EncryptionService,
   ) {}
 
+  /**
+   * Enforce per-customer scope for restricted roles (field_officer).
+   * Throws SCOPE_VIOLATION when actor cannot access the given customer.
+   */
+  private assertScope(
+    customer: { assigned_officer_id: string | null },
+    actorId?: string,
+    actorRole?: string,
+  ): void {
+    if (!actorId || !actorRole) return;
+    if (UNRESTRICTED_ROLES.includes(actorRole as UserRole)) return;
+    if (customer.assigned_officer_id !== actorId) {
+      throw new BusinessRuleError(
+        'You can only modify customers assigned to you',
+        'SCOPE_VIOLATION',
+      );
+    }
+  }
+
   async create(dto: CreateCustomerDto, actorId: string, actorRole: string) {
     // Validate Aadhaar format (already validated by DTO, but defense in depth)
     if (!/^\d{12}$/.test(dto.aadhaarNumber)) {
@@ -275,11 +294,17 @@ export class CustomerService {
     return updated;
   }
 
-  async addFamilyMember(customerId: string, dto: CreateFamilyMemberDto) {
+  async addFamilyMember(
+    customerId: string,
+    dto: CreateFamilyMemberDto,
+    actorId?: string,
+    actorRole?: string,
+  ) {
     const customer = await this.customerRepository.findById(customerId);
     if (!customer) {
       throw new NotFoundError('Customer not found', 'CUSTOMER_NOT_FOUND');
     }
+    this.assertScope(customer, actorId, actorRole);
 
     return this.customerRepository.createFamilyMember({
       customer_id: customerId,
@@ -291,11 +316,17 @@ export class CustomerService {
     });
   }
 
-  async addGuarantor(customerId: string, dto: CreateGuarantorDto) {
+  async addGuarantor(
+    customerId: string,
+    dto: CreateGuarantorDto,
+    actorId?: string,
+    actorRole?: string,
+  ) {
     const customer = await this.customerRepository.findById(customerId);
     if (!customer) {
       throw new NotFoundError('Customer not found', 'CUSTOMER_NOT_FOUND');
     }
+    this.assertScope(customer, actorId, actorRole);
 
     // Validate Aadhaar format
     if (!/^\d{12}$/.test(dto.aadhaarNumber)) {

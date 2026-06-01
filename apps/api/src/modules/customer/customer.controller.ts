@@ -113,8 +113,9 @@ export class CustomerController {
   async addFamilyMember(
     @Param('id') customerId: string,
     @Body() dto: CreateFamilyMemberDto,
+    @Req() req: Request & { user: JwtPayload },
   ) {
-    return this.customerService.addFamilyMember(customerId, dto);
+    return this.customerService.addFamilyMember(customerId, dto, req.user.sub, req.user.role);
   }
 
   @Post(':id/guarantors')
@@ -125,8 +126,9 @@ export class CustomerController {
   async addGuarantor(
     @Param('id') customerId: string,
     @Body() dto: CreateGuarantorDto,
+    @Req() req: Request & { user: JwtPayload },
   ) {
-    return this.customerService.addGuarantor(customerId, dto);
+    return this.customerService.addGuarantor(customerId, dto, req.user.sub, req.user.role);
   }
 
   @Get(':id/documents')
