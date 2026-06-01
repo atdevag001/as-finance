@@ -144,7 +144,12 @@ function createServiceWithCapture() {
     getJournalLinesUpTo: vi.fn().mockResolvedValue([]),
   } as unknown as AccountingRepository;
 
-  const service = new AccountingService(repo);
+  const prismaMock = {
+    accounting_periods: { findUnique: vi.fn().mockResolvedValue(null) },
+    chart_of_accounts: { findMany: vi.fn().mockResolvedValue([]) },
+    cash_transactions: { create: vi.fn() },
+  } as any;
+  const service = new AccountingService(repo, prismaMock);
   return { service, repo, entries };
 }
 

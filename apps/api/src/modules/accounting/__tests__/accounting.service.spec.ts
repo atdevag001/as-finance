@@ -59,7 +59,15 @@ describe('AccountingService', () => {
       getJournalLinesUpTo: vi.fn().mockResolvedValue([]),
     } as unknown as AccountingRepository;
 
-    service = new AccountingService(repo);
+    // PrismaService mock for the period-close lookup + cash-tx auto-write.
+    // In these tests we want neither feature to trigger: no closed period,
+    // no cash accounts → maybeWriteCashTransaction is a no-op.
+    const prismaMock = {
+      accounting_periods: { findUnique: vi.fn().mockResolvedValue(null) },
+      chart_of_accounts: { findMany: vi.fn().mockResolvedValue([]) },
+      cash_transactions: { create: vi.fn() },
+    } as any;
+    service = new AccountingService(repo, prismaMock);
   });
 
   // --- Requirement 21.1 & 21.2: createJournalEntry balanced / unbalanced ---
@@ -144,7 +152,17 @@ describe('AccountingService', () => {
 
     it('should pass transaction client to repository', async () => {
       const dto = makeDto();
-      const fakeTx = { journal_entries: { create: vi.fn() } };
+      // tx client needs the surface that AccountingService probes:
+      //  - accounting_periods.findUnique (period close check)
+      //  - chart_of_accounts.findMany   (cash auto-write probe)
+      //  - cash_transactions.create     (cash auto-write)
+      //  - journal_entries.create       (consumed by repository.createJournalEntry)
+      const fakeTx = {
+        accounting_periods: { findUnique: vi.fn().mockResolvedValue(null) },
+        chart_of_accounts: { findMany: vi.fn().mockResolvedValue([]) },
+        cash_transactions: { create: vi.fn() },
+        journal_entries: { create: vi.fn() },
+      };
       await service.createJournalEntry(dto, fakeTx as never);
       expect(repo.createJournalEntry).toHaveBeenCalledWith(expect.any(Object), fakeTx);
     });

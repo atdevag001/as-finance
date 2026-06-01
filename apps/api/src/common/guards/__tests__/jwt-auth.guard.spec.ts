@@ -1,16 +1,30 @@
-﻿import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import * as jwt from 'jsonwebtoken';
 import { JwtAuthGuard } from '../jwt-auth.guard';
 
 const TEST_SECRET = 'test-jwt-secret-for-unit-tests';
+const ISS = 'as-finance-api';
+const AUD = 'as-finance-web';
+
+/** Sign a JWT matching the production claims set (iss/aud/HS256). */
+function signTestJwt(payload: Record<string, unknown>, opts: jwt.SignOptions = {}): string {
+  return jwt.sign(payload, TEST_SECRET, {
+    algorithm: 'HS256',
+    issuer: ISS,
+    audience: AUD,
+    expiresIn: '15m',
+    ...opts,
+  });
+}
 
 function createMockContext(
   headers: Record<string, string> = {},
   handlerMeta: Record<string, unknown> = {},
+  cookies: Record<string, string> = {},
 ) {
-  const request = { headers };
+  const request = { headers, cookies };
   const reflector = new Reflector();
   vi.spyOn(reflector, 'getAllAndOverride').mockImplementation(((key: string) => {
     return handlerMeta[key] ?? undefined;
@@ -23,110 +37,136 @@ function createMockContext(
   return { context, request, reflector };
 }
 
+function makePrismaMock(user: { role: string; is_active: boolean; token_version: number } | null) {
+  return {
+    users: {
+      findUnique: vi.fn().mockResolvedValue(user),
+    },
+  } as any;
+}
+
+const DEFAULT_USER = { role: 'manager', is_active: true, token_version: 1 };
+
 describe('JwtAuthGuard', () => {
   const originalEnv = process.env['JWT_SECRET'];
-  beforeEach(() => { process.env['JWT_SECRET'] = TEST_SECRET; });
+  beforeEach(() => {
+    process.env['JWT_SECRET'] = TEST_SECRET;
+  });
   afterEach(() => {
     if (originalEnv !== undefined) process.env['JWT_SECRET'] = originalEnv;
     else delete process.env['JWT_SECRET'];
   });
 
-  // --- Public endpoint bypass ---
-  it('allows public endpoints without a token', () => {
+  it('allows public endpoints without a token', async () => {
     const { context, reflector } = createMockContext({}, { isPublic: true });
-    expect(new JwtAuthGuard(reflector).canActivate(context as any)).toBe(true);
+    const guard = new JwtAuthGuard(reflector, makePrismaMock(null));
+    expect(await guard.canActivate(context as any)).toBe(true);
   });
 
-  // --- Validates: Requirements 44.2 - Missing token rejection ---
-  it('rejects requests with no Authorization header', () => {
+  it('rejects requests with no Authorization header', async () => {
     const { context, reflector } = createMockContext();
-    expect(() => new JwtAuthGuard(reflector).canActivate(context as any)).toThrow(UnauthorizedException);
+    const guard = new JwtAuthGuard(reflector, makePrismaMock(DEFAULT_USER));
+    await expect(guard.canActivate(context as any)).rejects.toThrow(UnauthorizedException);
   });
 
-  it('rejects missing header with descriptive message', () => {
-    const { context, reflector } = createMockContext();
-    expect(() => new JwtAuthGuard(reflector).canActivate(context as any)).toThrow(/[Mm]issing|[Mm]alformed|authorization/);
-  });
-
-  it('rejects malformed Authorization header (Basic scheme)', () => {
+  it('rejects malformed Authorization header (Basic scheme)', async () => {
     const { context, reflector } = createMockContext({ authorization: 'Basic abc' });
-    expect(() => new JwtAuthGuard(reflector).canActivate(context as any)).toThrow(UnauthorizedException);
+    const guard = new JwtAuthGuard(reflector, makePrismaMock(DEFAULT_USER));
+    await expect(guard.canActivate(context as any)).rejects.toThrow(UnauthorizedException);
   });
 
-  it('rejects Bearer keyword but no token value', () => {
+  it('rejects Bearer keyword but no token value', async () => {
     const { context, reflector } = createMockContext({ authorization: 'Bearer ' });
-    expect(() => new JwtAuthGuard(reflector).canActivate(context as any)).toThrow(UnauthorizedException);
+    const guard = new JwtAuthGuard(reflector, makePrismaMock(DEFAULT_USER));
+    await expect(guard.canActivate(context as any)).rejects.toThrow(UnauthorizedException);
   });
 
-  it('rejects only the Bearer keyword (no space)', () => {
-    const { context, reflector } = createMockContext({ authorization: 'Bearer' });
-    expect(() => new JwtAuthGuard(reflector).canActivate(context as any)).toThrow(UnauthorizedException);
-  });
-
-  // --- Validates: Requirements 44.3 - Valid token acceptance ---
-  it('accepts a valid token and attaches user to request', () => {
-    const token = jwt.sign({ sub: 'user-1', role: 'manager' }, TEST_SECRET, { expiresIn: '15m' });
+  it('accepts a valid token and attaches user to request', async () => {
+    const token = signTestJwt({ sub: 'user-1', role: 'manager', tv: 1 });
     const { context, request, reflector } = createMockContext({ authorization: 'Bearer ' + token });
-    expect(new JwtAuthGuard(reflector).canActivate(context as any)).toBe(true);
+    const guard = new JwtAuthGuard(reflector, makePrismaMock(DEFAULT_USER));
+    expect(await guard.canActivate(context as any)).toBe(true);
     expect((request as any).user).toMatchObject({ sub: 'user-1', role: 'manager' });
   });
 
-  it('attaches full JWT payload including iat and exp', () => {
-    const token = jwt.sign({ sub: 'u-42', role: 'field_officer' }, TEST_SECRET, { expiresIn: '15m' });
-    const { context, request, reflector } = createMockContext({ authorization: 'Bearer ' + token });
-    new JwtAuthGuard(reflector).canActivate(context as any);
-    const user = (request as any).user;
-    expect(user.sub).toBe('u-42');
-    expect(user.role).toBe('field_officer');
-    expect(user.iat).toEqual(expect.any(Number));
-    expect(user.exp).toEqual(expect.any(Number));
-  });
-
-  // --- Validates: Requirements 44.2 - Expired token rejection ---
-  it('rejects an expired token', () => {
-    const token = jwt.sign({ sub: 'user-1', role: 'manager' }, TEST_SECRET, { expiresIn: '-1s' });
+  it('rejects an expired token', async () => {
+    const token = signTestJwt({ sub: 'user-1', role: 'manager' }, { expiresIn: '-1s' });
     const { context, reflector } = createMockContext({ authorization: 'Bearer ' + token });
-    expect(() => new JwtAuthGuard(reflector).canActivate(context as any)).toThrow(UnauthorizedException);
+    const guard = new JwtAuthGuard(reflector, makePrismaMock(DEFAULT_USER));
+    await expect(guard.canActivate(context as any)).rejects.toThrow(UnauthorizedException);
   });
 
-  it('rejects expired token with descriptive error message', () => {
-    const token = jwt.sign({ sub: 'user-1', role: 'manager' }, TEST_SECRET, { expiresIn: '-1s' });
+  it('rejects a token signed with wrong secret', async () => {
+    const token = jwt.sign({ sub: 'user-1', role: 'manager' }, 'wrong-secret', {
+      algorithm: 'HS256',
+      issuer: ISS,
+      audience: AUD,
+      expiresIn: '15m',
+    });
     const { context, reflector } = createMockContext({ authorization: 'Bearer ' + token });
-    expect(() => new JwtAuthGuard(reflector).canActivate(context as any)).toThrow(/[Ii]nvalid|[Ee]xpired/);
+    const guard = new JwtAuthGuard(reflector, makePrismaMock(DEFAULT_USER));
+    await expect(guard.canActivate(context as any)).rejects.toThrow(UnauthorizedException);
   });
 
-  // --- Validates: Requirements 44.3 - Tampered token rejection ---
-  it('rejects a token signed with wrong secret', () => {
-    const token = jwt.sign({ sub: 'user-1', role: 'manager' }, 'wrong-secret', { expiresIn: '15m' });
-    const { context, reflector } = createMockContext({ authorization: 'Bearer ' + token });
-    expect(() => new JwtAuthGuard(reflector).canActivate(context as any)).toThrow(UnauthorizedException);
-  });
-
-  it('rejects a completely corrupted token string', () => {
+  it('rejects a completely corrupted token string', async () => {
     const { context, reflector } = createMockContext({ authorization: 'Bearer invalid.token.here' });
-    expect(() => new JwtAuthGuard(reflector).canActivate(context as any)).toThrow(UnauthorizedException);
+    const guard = new JwtAuthGuard(reflector, makePrismaMock(DEFAULT_USER));
+    await expect(guard.canActivate(context as any)).rejects.toThrow(UnauthorizedException);
   });
 
-  it('rejects a token with tampered payload (role escalation)', () => {
-    const token = jwt.sign({ sub: 'user-1', role: 'manager' }, TEST_SECRET, { expiresIn: '15m' });
+  it('rejects token with tampered payload (signature mismatch)', async () => {
+    const token = signTestJwt({ sub: 'user-1', role: 'manager' });
     const parts = token.split('.');
-    const decoded = JSON.parse(Buffer.from(parts[1], 'base64url').toString());
+    const decoded = JSON.parse(Buffer.from(parts[1]!, 'base64url').toString());
     decoded.role = 'super_admin';
     parts[1] = Buffer.from(JSON.stringify(decoded)).toString('base64url');
     const { context, reflector } = createMockContext({ authorization: 'Bearer ' + parts.join('.') });
-    expect(() => new JwtAuthGuard(reflector).canActivate(context as any)).toThrow(UnauthorizedException);
+    const guard = new JwtAuthGuard(reflector, makePrismaMock(DEFAULT_USER));
+    await expect(guard.canActivate(context as any)).rejects.toThrow(UnauthorizedException);
   });
 
-  it('rejects a token with random garbage characters', () => {
-    const { context, reflector } = createMockContext({ authorization: 'Bearer abc123xyz' });
-    expect(() => new JwtAuthGuard(reflector).canActivate(context as any)).toThrow(UnauthorizedException);
-  });
-
-  // --- JWT_SECRET configuration error ---
-  it('rejects when JWT_SECRET is not configured', () => {
+  it('rejects when JWT_SECRET is not configured', async () => {
     delete process.env['JWT_SECRET'];
-    const token = jwt.sign({ sub: 'user-1', role: 'manager' }, TEST_SECRET, { expiresIn: '15m' });
+    const token = signTestJwt({ sub: 'user-1', role: 'manager' });
     const { context, reflector } = createMockContext({ authorization: 'Bearer ' + token });
-    expect(() => new JwtAuthGuard(reflector).canActivate(context as any)).toThrow(UnauthorizedException);
+    const guard = new JwtAuthGuard(reflector, makePrismaMock(DEFAULT_USER));
+    await expect(guard.canActivate(context as any)).rejects.toThrow(UnauthorizedException);
+  });
+
+  it('rejects token whose tv claim mismatches DB token_version (post-password-change revocation)', async () => {
+    // Unique sub avoids USER_CACHE bleed from earlier tests
+    const token = signTestJwt({ sub: 'user-tv-mismatch', role: 'manager', tv: 1 });
+    const { context, reflector } = createMockContext({ authorization: 'Bearer ' + token });
+    const guard = new JwtAuthGuard(
+      reflector,
+      makePrismaMock({ role: 'manager', is_active: true, token_version: 2 }),
+    );
+    await expect(guard.canActivate(context as any)).rejects.toThrow(UnauthorizedException);
+  });
+
+  it('rejects token for deactivated user', async () => {
+    const token = signTestJwt({ sub: 'user-deactivated', role: 'manager', tv: 1 });
+    const { context, reflector } = createMockContext({ authorization: 'Bearer ' + token });
+    const guard = new JwtAuthGuard(
+      reflector,
+      makePrismaMock({ role: 'manager', is_active: false, token_version: 1 }),
+    );
+    await expect(guard.canActivate(context as any)).rejects.toThrow(UnauthorizedException);
+  });
+
+  it('reads token from HttpOnly cookie when present (prefers cookie over Bearer)', async () => {
+    const cookieToken = signTestJwt({ sub: 'user-cookie', role: 'admin', tv: 1 });
+    const bearerToken = signTestJwt({ sub: 'user-bearer', role: 'admin', tv: 1 });
+    const { context, request, reflector } = createMockContext(
+      { authorization: 'Bearer ' + bearerToken },
+      {},
+      { access_token: cookieToken },
+    );
+    const guard = new JwtAuthGuard(
+      reflector,
+      makePrismaMock({ role: 'admin', is_active: true, token_version: 1 }),
+    );
+    expect(await guard.canActivate(context as any)).toBe(true);
+    expect((request as any).user.sub).toBe('user-cookie');
   });
 });

@@ -82,6 +82,14 @@ export class DocumentController {
       }
     });
 
+    // Tear down the S3 stream if the client disconnects mid-download
+    // (otherwise the upstream connection stays open until S3 times out).
+    req.on('close', () => {
+      if (!res.writableEnded) {
+        stream.destroy();
+      }
+    });
+
     stream.pipe(res);
   }
 

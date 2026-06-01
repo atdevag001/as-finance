@@ -77,11 +77,17 @@ const validCreateDto = {
 describe('CustomerService', () => {
   let service: CustomerService;
   let mockRepo: ReturnType<typeof createMockRepository>;
+  // Deterministic crypto mock — tests assert "encrypted:<plaintext>" prefix
+  // instead of literal AES output (which is non-deterministic per random IV).
+  const mockCrypto = {
+    encrypt: vi.fn((value: string) => `encrypted:${value}`),
+    decrypt: vi.fn((value: string) => value.replace(/^encrypted:/, '')),
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockRepo = createMockRepository();
-    service = new CustomerService(mockRepo as never);
+    service = new CustomerService(mockRepo as never, mockCrypto as never);
   });
 
   describe('create', () => {
@@ -104,7 +110,7 @@ describe('CustomerService', () => {
         expect.objectContaining({
           full_name: 'Rajesh Kumar',
           mobile: '9876543210',
-          aadhaar_number_encrypted: 'enc_123456781234',
+          aadhaar_number_encrypted: 'encrypted:123456781234',
           aadhaar_last_four: '1234',
           gender: 'male',
           created_by: mockActorId,
@@ -122,7 +128,7 @@ describe('CustomerService', () => {
 
       expect(mockRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          aadhaar_number_encrypted: 'enc_123456781234',
+          aadhaar_number_encrypted: 'encrypted:123456781234',
           aadhaar_last_four: '1234',
         }),
       );
@@ -139,7 +145,7 @@ describe('CustomerService', () => {
 
       expect(mockRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          pan_number_encrypted: 'enc_ABCDE1234F',
+          pan_number_encrypted: 'encrypted:ABCDE1234F',
           pan_last_four: '234F',
         }),
       );
@@ -731,7 +737,7 @@ describe('CustomerService', () => {
       expect(result.name).toBe('Mohan Lal');
       expect(mockRepo.createGuarantor).toHaveBeenCalledWith(
         expect.objectContaining({
-          aadhaar_number_encrypted: 'enc_567890125678',
+          aadhaar_number_encrypted: 'encrypted:567890125678',
           aadhaar_last_four: '5678',
         }),
       );

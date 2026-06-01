@@ -5,10 +5,21 @@ import { envSchema, validateEnv } from '../env.validation.js';
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
 
-/** Minimal valid env for reuse across tests */
+/** Minimal valid env for reuse across tests. JWT_SECRET is dev-grade (16+
+ *  chars); tests that force NODE_ENV=production extend with productionExtras. */
 const validEnv = {
   DATABASE_URL: 'postgresql://user:pass@localhost:5432/db',
   JWT_SECRET: 'a-very-secure-secret-key-here',
+};
+
+/** Additional env vars required when NODE_ENV=production (per Sprint 0 refinements). */
+const productionExtras = {
+  JWT_SECRET:
+    'a-very-secure-secret-key-here-with-at-least-sixty-four-characters!!',
+  ENCRYPTION_KEY: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+  S3_ENDPOINT: 'http://s3.local',
+  S3_ACCESS_KEY: 'real-key',
+  S3_SECRET_KEY: 'real-secret',
 };
 
 /* ------------------------------------------------------------------ */
@@ -161,7 +172,13 @@ describe('envSchema', () => {
   it.each(['development', 'test', 'staging', 'production'] as const)(
     'accepts NODE_ENV=%s',
     (env) => {
-      const result = envSchema.safeParse({ ...validEnv, NODE_ENV: env });
+      // Production has additional refinements (JWT length, S3 creds, ENCRYPTION_KEY).
+      // Tests against other envs use the minimal validEnv.
+      const input =
+        env === 'production'
+          ? { ...validEnv, ...productionExtras, NODE_ENV: env }
+          : { ...validEnv, NODE_ENV: env };
+      const result = envSchema.safeParse(input);
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.data.NODE_ENV).toBe(env);
