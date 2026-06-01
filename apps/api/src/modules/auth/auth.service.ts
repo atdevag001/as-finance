@@ -5,11 +5,12 @@ import * as crypto from 'crypto';
 import { PrismaService } from '../../database/prisma.service';
 import { LoginDto } from './dto/login.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
-import { AuthorizationError, UnauthorizedError } from '../../common/errors';
+import { AuthorizationError, BusinessRuleError, UnauthorizedError } from '../../common/errors';
 
 // Use lower bcrypt cost in test/dev for faster hashing (still secure enough for tests)
 const BCRYPT_COST = process.env['BCRYPT_COST'] ? parseInt(process.env['BCRYPT_COST'], 10) : 12;
 const REFRESH_TOKEN_DAYS = 7;
+const PASSWORD_HISTORY_DEPTH = 5;
 
 export interface LoginResult {
   accessToken: string;
@@ -208,12 +209,49 @@ export class AuthService {
       );
     }
 
+    // Reject re-use of current password
+    if (dto.newPassword === dto.currentPassword) {
+      throw new BusinessRuleError(
+        'New password must differ from the current password',
+        'PASSWORD_REUSE',
+      );
+    }
+
+    // Check against the last N historical passwords (audit: no password history)
+    const history = await this.prisma['password_history'].findMany({
+      where: { user_id: userId },
+      orderBy: { created_at: 'desc' },
+      take: PASSWORD_HISTORY_DEPTH,
+      select: { password_hash: true },
+    });
+    for (const h of history) {
+      if (await bcrypt.compare(dto.newPassword, h.password_hash)) {
+        throw new BusinessRuleError(
+          `New password matches one of your last ${PASSWORD_HISTORY_DEPTH} passwords. Choose a different one.`,
+          'PASSWORD_REUSE',
+        );
+      }
+    }
+    // Current password is also reuse — check it too
+    if (await bcrypt.compare(dto.newPassword, user.password_hash)) {
+      throw new BusinessRuleError(
+        'New password must differ from the current password',
+        'PASSWORD_REUSE',
+      );
+    }
+
     // Hash new password with bcrypt cost 12+
     const newPasswordHash = await bcrypt.hash(dto.newPassword, BCRYPT_COST);
 
-    // Update password, bump token_version (invalidates all outstanding access tokens),
-    // and revoke all refresh tokens — fully kills existing sessions.
+    // Update password, archive the OLD hash into history, bump token_version,
+    // and revoke all refresh tokens — atomic.
     await this.prisma['$transaction']([
+      this.prisma['password_history'].create({
+        data: {
+          user_id: userId,
+          password_hash: user.password_hash,
+        },
+      }),
       this.prisma['users'].update({
         where: { id: userId },
         data: {

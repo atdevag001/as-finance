@@ -50,10 +50,15 @@ function createMockPrisma() {
     },
     refresh_tokens: {
       create: vi.fn(),
-      findFirst: vi.fn(), // replaces findMany — Sprint 2 changed to single-row lookup
+      findFirst: vi.fn(),
       findMany: vi.fn(),
       update: vi.fn(),
       updateMany: vi.fn(),
+    },
+    // Sprint password-history: changePassword now reads + appends history
+    password_history: {
+      findMany: vi.fn().mockResolvedValue([]),
+      create: vi.fn(),
     },
     audit_logs: {
       create: vi.fn(),
@@ -487,9 +492,14 @@ describe('AuthService', () => {
     /** Validates: Requirements 17.11 */
     it('should change password and revoke all sessions', async () => {
       mockPrisma.users.findUnique.mockResolvedValue(mockUser);
-      (bcrypt.compare as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+      // First bcrypt.compare = current-password check (must be true).
+      // Subsequent compares are reuse-check against history + current — return
+      // false so the new password is accepted.
+      (bcrypt.compare as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(true)
+        .mockResolvedValue(false);
       (bcrypt.hash as ReturnType<typeof vi.fn>).mockResolvedValue('new-hashed-password');
-      mockPrisma.$transaction.mockResolvedValue([{}, {}]);
+      mockPrisma.$transaction.mockResolvedValue([{}, {}, {}]);
       mockPrisma.audit_logs.create.mockResolvedValue({});
 
       await service.changePassword(mockUserId, {
@@ -534,9 +544,11 @@ describe('AuthService', () => {
     /** Validates: Requirements 17.13 */
     it('should create audit log on password change', async () => {
       mockPrisma.users.findUnique.mockResolvedValue(mockUser);
-      (bcrypt.compare as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+      (bcrypt.compare as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(true)  // current-password verification
+        .mockResolvedValue(false);    // reuse checks all return false
       (bcrypt.hash as ReturnType<typeof vi.fn>).mockResolvedValue('new-hashed-password');
-      mockPrisma.$transaction.mockResolvedValue([{}, {}]);
+      mockPrisma.$transaction.mockResolvedValue([{}, {}, {}]);
       mockPrisma.audit_logs.create.mockResolvedValue({});
 
       await service.changePassword(mockUserId, {
