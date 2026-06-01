@@ -96,6 +96,19 @@ export class UserService {
       throw new NotFoundError('User not found', 'USER_NOT_FOUND');
     }
 
+    // Rank check: prevent privilege escalation across hierarchy.
+    // Managers cannot edit super_admin records at all (privilege escalation
+    // surface from audit). Only super_admin can edit super_admin.
+    if (
+      user.role === UserRole.SUPER_ADMIN &&
+      actorRole !== UserRole.SUPER_ADMIN
+    ) {
+      throw new AuthorizationError(
+        'Only super_admin can modify super_admin accounts',
+        'INSUFFICIENT_PRIVILEGE',
+      );
+    }
+
     // If role change is requested, validate hierarchy
     if (dto.role && dto.role !== user.role) {
       // Prevent self-escalation

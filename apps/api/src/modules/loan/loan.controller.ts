@@ -45,8 +45,11 @@ export class LoanController {
   @Get()
   @RequirePermission('loan.read')
   @ApiOperation({ summary: 'List loans with pagination and filters' })
-  async findAll(@Query() query: LoanQueryDto) {
-    return this.loanService.findAll(query);
+  async findAll(
+    @Query() query: LoanQueryDto,
+    @Req() req: Request & { user: JwtPayload },
+  ) {
+    return this.loanService.findAll(query, req.user.sub, req.user.role);
   }
 
   @Get(':id')
@@ -54,8 +57,11 @@ export class LoanController {
   @ApiOperation({ summary: 'Get loan by ID with full details' })
   @ApiResponse({ status: 200, description: 'Loan found' })
   @ApiResponse({ status: 404, description: 'Loan not found' })
-  async findById(@Param('id') id: string) {
-    return this.loanService.findById(id);
+  async findById(
+    @Param('id') id: string,
+    @Req() req: Request & { user: JwtPayload },
+  ) {
+    return this.loanService.findById(id, req.user.sub, req.user.role);
   }
 
   @Post(':id/submit')

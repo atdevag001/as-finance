@@ -33,7 +33,13 @@ const LOAN_SELECT = {
 const LOAN_DETAIL_SELECT = {
   ...LOAN_SELECT,
   customer: {
-    select: { id: true, full_name: true, mobile: true, status: true },
+    select: {
+      id: true,
+      full_name: true,
+      mobile: true,
+      status: true,
+      assigned_officer_id: true,
+    },
   },
   product_version: {
     select: {
@@ -139,6 +145,7 @@ export class LoanRepository {
     customerId?: string;
     search?: string;
     aadhaarLastFour?: string;
+    assignedOfficerId?: string;
   }) {
     const where: Record<string, unknown> = {};
 
@@ -151,8 +158,16 @@ export class LoanRepository {
     if (params.search) {
       where['loan_number'] = { contains: params.search, mode: 'insensitive' };
     }
+    // Merge aadhaarLastFour and assignedOfficerId into customer filter
+    const customerFilter: Record<string, unknown> = {};
     if (params.aadhaarLastFour) {
-      where['customer'] = { aadhaar_last_four: params.aadhaarLastFour };
+      customerFilter['aadhaar_last_four'] = params.aadhaarLastFour;
+    }
+    if (params.assignedOfficerId) {
+      customerFilter['assigned_officer_id'] = params.assignedOfficerId;
+    }
+    if (Object.keys(customerFilter).length > 0) {
+      where['customer'] = customerFilter;
     }
 
     const [data, total] = await Promise.all([

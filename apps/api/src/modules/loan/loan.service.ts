@@ -40,6 +40,16 @@ const IMMUTABLE_AFTER = new Set([
   'closed',
 ]);
 
+/** Roles that bypass per-officer scope filtering on loan reads. */
+const UNRESTRICTED_LOAN_ROLES: readonly string[] = [
+  'super_admin',
+  'manager',
+  'accountant',
+  'office_staff',
+  'viewer_auditor',
+  'collection_officer',
+];
+
 @Injectable()
 export class LoanService {
   constructor(
@@ -617,19 +627,37 @@ export class LoanService {
 
   /**
    * Get a loan by ID with full details.
+   * Enforces per-customer scope: restricted roles (field_officer) must be the
+   * customer's assigned officer.
    */
-  async findById(id: string) {
+  async findById(id: string, actorId?: string, actorRole?: string) {
     const loan = await this.loanRepository.findById(id);
     if (!loan) {
       throw new NotFoundError(`Loan not found: ${id}`);
+    }
+    if (
+      actorId &&
+      actorRole &&
+      !UNRESTRICTED_LOAN_ROLES.includes(actorRole) &&
+      loan.customer?.assigned_officer_id !== actorId
+    ) {
+      throw new BusinessRuleError(
+        'You can only access loans for customers assigned to you',
+        'SCOPE_VIOLATION',
+      );
     }
     return loan;
   }
 
   /**
    * List loans with pagination and filters.
+   * Restricted roles (field_officer) get scoped to their assigned customers.
    */
-  async findAll(query: LoanQueryDto) {
+  async findAll(query: LoanQueryDto, actorId?: string, actorRole?: string) {
+    const scopedToOfficer =
+      actorId && actorRole && !UNRESTRICTED_LOAN_ROLES.includes(actorRole)
+        ? actorId
+        : undefined;
     return this.loanRepository.findAll({
       skip: query.skip,
       take: query.take,
@@ -637,6 +665,7 @@ export class LoanService {
       customerId: query.customerId,
       search: query.search,
       aadhaarLastFour: query.aadhaarLastFour,
+      assignedOfficerId: scopedToOfficer,
     });
   }
 
