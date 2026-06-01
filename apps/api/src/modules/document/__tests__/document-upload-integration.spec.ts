@@ -27,6 +27,10 @@ function createMockPrisma() {
       update: vi.fn(),
       findMany: vi.fn().mockResolvedValue([]),
     },
+    customer_documents: {
+      create: vi.fn(),
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+    },
   };
 }
 
@@ -225,7 +229,7 @@ describe('Document Upload Integration (S3 Mock)', () => {
         is_active: true,
       });
 
-      const url = await service.getSignedUrl('file-1', actorId);
+      const url = await service.getSignedUrl('file-1', actorId, 'super_admin');
 
       expect(url).toContain('signed-url');
       expect(mockStorage.getSignedUrl).toHaveBeenCalledWith('test-bucket', 'kyc/file.jpg', 900);
@@ -237,7 +241,7 @@ describe('Document Upload Integration (S3 Mock)', () => {
         is_active: false,
       });
 
-      await expect(service.getSignedUrl('file-1', actorId)).rejects.toThrow(NotFoundError);
+      await expect(service.getSignedUrl('file-1', actorId, 'super_admin')).rejects.toThrow(NotFoundError);
     });
   });
 
@@ -249,7 +253,7 @@ describe('Document Upload Integration (S3 Mock)', () => {
       });
       mockPrisma.file_metadata.update.mockResolvedValue({});
 
-      await service.softDelete('file-1', actorId);
+      await service.softDelete('file-1', actorId, 'super_admin');
 
       expect(mockPrisma.file_metadata.update).toHaveBeenCalledWith({
         where: { id: 'file-1' },
@@ -262,7 +266,7 @@ describe('Document Upload Integration (S3 Mock)', () => {
     it('rejects soft delete for non-existent document', async () => {
       mockPrisma.file_metadata.findUnique.mockResolvedValue(null);
 
-      await expect(service.softDelete('nonexistent', actorId)).rejects.toThrow(NotFoundError);
+      await expect(service.softDelete('nonexistent', actorId, 'super_admin')).rejects.toThrow(NotFoundError);
     });
   });
 });

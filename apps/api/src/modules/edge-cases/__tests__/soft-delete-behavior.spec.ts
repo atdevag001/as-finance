@@ -27,6 +27,10 @@ function createMockPrisma() {
       update: vi.fn(),
       count: vi.fn(),
     },
+    customer_documents: {
+      create: vi.fn(),
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+    },
   };
 }
 
@@ -93,7 +97,7 @@ describe('Soft Delete Behavior (Req 76)', () => {
         buildFileMetadata({ is_active: false }),
       );
 
-      await expect(service.getSignedUrl('file-1', 'actor-1')).rejects.toThrow(
+      await expect(service.getSignedUrl('file-1', 'actor-1', 'super_admin')).rejects.toThrow(
         NotFoundError,
       );
     });
@@ -120,7 +124,7 @@ describe('Soft Delete Behavior (Req 76)', () => {
         buildFileMetadata({ is_active: false }),
       );
 
-      await service.softDelete('file-1', 'actor-1');
+      await service.softDelete('file-1', 'actor-1', 'super_admin');
 
       expect(prisma.file_metadata.update).toHaveBeenCalledWith({
         where: { id: 'file-1' },
@@ -136,7 +140,7 @@ describe('Soft Delete Behavior (Req 76)', () => {
         buildFileMetadata({ is_active: false }),
       );
 
-      await service.softDelete('file-1', 'actor-1');
+      await service.softDelete('file-1', 'actor-1', 'super_admin');
 
       expect(storage.delete).not.toHaveBeenCalled();
     });

@@ -25,8 +25,15 @@ function createMockPrisma() {
       findUnique: vi.fn(),
       update: vi.fn(),
     },
+    customer_documents: {
+      create: vi.fn(),
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+    },
   };
 }
+
+// Unrestricted role bypasses scope check in loadMetadataWithScope; safe default for tests.
+const mockActorRole = 'super_admin';
 
 function createMockStorage() {
   return {
@@ -283,7 +290,7 @@ describe('DocumentService', () => {
         is_active: true,
       });
 
-      const url = await service.getSignedUrl(mockFileId, mockActorId);
+      const url = await service.getSignedUrl(mockFileId, mockActorId, mockActorRole);
 
       expect(url).toBe('https://s3.example.com/signed-url');
       expect(mockStorage.getSignedUrl).toHaveBeenCalledWith(
@@ -297,7 +304,7 @@ describe('DocumentService', () => {
       mockPrisma.file_metadata.findUnique.mockResolvedValue(null);
 
       await expect(
-        service.getSignedUrl(mockFileId, mockActorId),
+        service.getSignedUrl(mockFileId, mockActorId, mockActorRole),
       ).rejects.toThrow(NotFoundError);
     });
 
@@ -308,7 +315,7 @@ describe('DocumentService', () => {
       });
 
       await expect(
-        service.getSignedUrl(mockFileId, mockActorId),
+        service.getSignedUrl(mockFileId, mockActorId, mockActorRole),
       ).rejects.toThrow(NotFoundError);
     });
 
@@ -320,7 +327,7 @@ describe('DocumentService', () => {
         is_active: true,
       });
 
-      await service.getSignedUrl(mockFileId, mockActorId);
+      await service.getSignedUrl(mockFileId, mockActorId, mockActorRole);
 
       expect(mockStorage.getSignedUrl).toHaveBeenCalledWith(
         'test-bucket',
@@ -338,7 +345,7 @@ describe('DocumentService', () => {
       });
       mockPrisma.file_metadata.update.mockResolvedValue({});
 
-      await service.softDelete(mockFileId, mockActorId);
+      await service.softDelete(mockFileId, mockActorId, mockActorRole);
 
       expect(mockPrisma.file_metadata.update).toHaveBeenCalledWith({
         where: { id: mockFileId },
@@ -353,7 +360,7 @@ describe('DocumentService', () => {
       });
       mockPrisma.file_metadata.update.mockResolvedValue({});
 
-      await service.softDelete(mockFileId, mockActorId);
+      await service.softDelete(mockFileId, mockActorId, mockActorRole);
 
       expect(mockStorage.delete).not.toHaveBeenCalled();
     });
@@ -362,7 +369,7 @@ describe('DocumentService', () => {
       mockPrisma.file_metadata.findUnique.mockResolvedValue(null);
 
       await expect(
-        service.softDelete(mockFileId, mockActorId),
+        service.softDelete(mockFileId, mockActorId, mockActorRole),
       ).rejects.toThrow(NotFoundError);
     });
   });
