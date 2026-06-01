@@ -263,6 +263,34 @@ export class CollectionService {
       tx,
     );
 
+    // ── Step i2: Auto-transition loan status based on new state ──
+    // - active → overdue if any pending installment is past due
+    // - overdue → active if no pending installments are past due
+    // - active/overdue → closed if outstanding == 0 AND all installments paid
+    //   (only when loan was active/overdue; respects terminal-status invariants)
+    const newStatus = this.computeAutoTransitionStatus(
+      lockedLoan.status,
+      newOutstanding,
+      loan.schedules,
+      allocationResult,
+      paymentDate,
+    );
+    if (newStatus && newStatus !== lockedLoan.status) {
+      await tx.loans.update({
+        where: { id: dto.loanId },
+        data: { status: newStatus as never, version: { increment: 1 } },
+      });
+      await tx.loan_status_history.create({
+        data: {
+          loan_id: dto.loanId,
+          from_status: lockedLoan.status as never,
+          to_status: newStatus as never,
+          changed_by: actorId,
+          reason: `Auto-transition on collection ${collection.id}`,
+        },
+      });
+    }
+
     // ── Step j: Generate receipt ──
     const officerName = await this.collectionRepository.getOfficerName(actorId, tx);
 
@@ -586,6 +614,64 @@ export class CollectionService {
    * DPD = calendar days since the earliest unpaid installment due date.
    * If all installments are paid, DPD = 0.
    */
+  /**
+   * Compute the loan's new status after a collection.
+   * - Returns 'closed' if outstanding is fully cleared and all installments paid
+   * - Returns 'overdue' if any future installment is past due after this payment
+   * - Returns 'active' if was 'overdue' and now caught up
+   * - Returns null if status should not auto-change
+   * Only auto-transitions from active/overdue. Other states (closed, defaulted,
+   * foreclosed, draft) are left alone.
+   */
+  private computeAutoTransitionStatus(
+    currentStatus: string,
+    newOutstanding: number,
+    schedules: {
+      id: string;
+      due_date: Date;
+      principal_paise: bigint;
+      interest_paise: bigint;
+      principal_paid_paise: bigint;
+      interest_paid_paise: bigint;
+    }[],
+    allocationResult: AllocationResult,
+    paymentDate: Date,
+  ): string | null {
+    if (!['active', 'overdue'].includes(currentStatus)) return null;
+
+    // Apply this collection's allocations to compute per-installment paid state
+    const additions = new Map<string, { principal: number; interest: number }>();
+    for (const line of allocationResult.allocations) {
+      if (!line.installmentId) continue;
+      const e = additions.get(line.installmentId) ?? { principal: 0, interest: 0 };
+      if (line.component === 'principal') e.principal += line.amountPaise;
+      if (line.component === 'interest') e.interest += line.amountPaise;
+      additions.set(line.installmentId, e);
+    }
+
+    let anyUnpaid = false;
+    let anyPastDue = false;
+    for (const s of schedules) {
+      const add = additions.get(s.id) ?? { principal: 0, interest: 0 };
+      const principalPaid = Number(s.principal_paid_paise) + add.principal;
+      const interestPaid = Number(s.interest_paid_paise) + add.interest;
+      const fullyPaid =
+        principalPaid >= Number(s.principal_paise) &&
+        interestPaid >= Number(s.interest_paise);
+      if (!fullyPaid) {
+        anyUnpaid = true;
+        if (s.due_date < paymentDate) anyPastDue = true;
+      }
+    }
+
+    // Fully closed: all paid AND outstanding zero (within 1 paisa tolerance)
+    if (!anyUnpaid && Math.abs(newOutstanding) <= 1) return 'closed';
+
+    if (anyPastDue) return 'overdue';
+    if (currentStatus === 'overdue' && !anyPastDue) return 'active';
+    return null;
+  }
+
   private computeDpdAndBucket(
     schedules: {
       id: string;

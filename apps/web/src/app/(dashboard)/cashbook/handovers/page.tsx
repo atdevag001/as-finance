@@ -12,6 +12,7 @@ import { hasPermission } from '@/lib/permissions';
 import { useHandovers, useCreateHandover, useVerifyHandover } from '@/hooks/useCashbook';
 import { useToast } from '@/providers/toast-provider';
 import { useUsers } from '@/hooks/useUsers';
+import { todayIST } from '@/lib/date-utils';
 
 export default function HandoversPage() {
   const { user } = useAuth();
@@ -33,7 +34,7 @@ function HandoversContent() {
 
   const [amountRupees, setAmountRupees] = useState('');
   const [receivingOfficerId, setReceivingOfficerId] = useState('');
-  const [handoverDate, setHandoverDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [handoverDate, setHandoverDate] = useState(() => todayIST());
   const [formError, setFormError] = useState('');
 
   const totalAmountPaise = Math.round(parseFloat(amountRupees || '0') * 100);
@@ -62,7 +63,7 @@ function HandoversContent() {
       showToast({ message: 'Handover initiated.' });
       setAmountRupees('');
       setReceivingOfficerId('');
-      setHandoverDate(new Date().toISOString().split('T')[0]);
+      setHandoverDate(todayIST());
     } catch (err) {
       setFormError((err as Error).message);
     }

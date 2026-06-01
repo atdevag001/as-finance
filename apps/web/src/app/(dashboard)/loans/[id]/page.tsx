@@ -10,6 +10,7 @@ import { usePenalties, useWaivePenalty, getPenaltyStatus, type Penalty } from '@
 import { useUsers } from '@/hooks/useUsers';
 import { useGenerateForeclosureQuote, useExecuteForeclosure, usePendingForeclosure, type ForeclosureQuote } from '@/hooks/useForeclosures';
 import { useToast } from '@/providers/toast-provider';
+import { todayIST } from '@/lib/date-utils';
 import {
   StatusBadge,
   MoneyDisplay,
@@ -761,7 +762,7 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
             value={approveFirstEmiDate}
             onChange={(e) => setApproveFirstEmiDate(e.target.value)}
             disabled={isActionInProgress}
-            min={new Date().toISOString().split('T')[0]}
+            min={todayIST()}
             className="min-h-[44px] text-base"
           />
           <p className="text-xs text-muted-foreground">
@@ -879,7 +880,7 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
                   value={disburseFirstEmiDate}
                   onChange={(e) => setDisburseFirstEmiDate(e.target.value)}
                   disabled={isActionInProgress}
-                  min={new Date().toISOString().split('T')[0]}
+                  min={todayIST()}
                   className="min-h-[44px] text-base"
                 />
                 <p className="text-xs text-muted-foreground">
@@ -1060,7 +1061,7 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
             value={regenerateFirstEmiDate}
             onChange={(e) => setRegenerateFirstEmiDate(e.target.value)}
             disabled={isActionInProgress}
-            min={new Date().toISOString().split('T')[0]}
+            min={todayIST()}
             className="min-h-[44px] text-base"
           />
           {loan.disbursement_date && (
