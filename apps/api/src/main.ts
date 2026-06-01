@@ -21,6 +21,9 @@ async function bootstrap() {
     bufferLogs: true,
   });
 
+  // Trust the first proxy hop (nginx) so per-IP throttling sees the real client IP
+  app.getHttpAdapter().getInstance().set('trust proxy', 1);
+
   // Structured logging via pino
   app.useLogger(app.get(Logger));
 

@@ -43,7 +43,11 @@ export class JwtAuthGuard implements CanActivate {
     }
 
     try {
-      const payload = jwt.verify(token, secret) as JwtPayload;
+      const payload = jwt.verify(token, secret, {
+        algorithms: ['HS256'],
+        issuer: 'as-finance-api',
+        audience: 'as-finance-web',
+      }) as JwtPayload;
       (request as Request & { user: JwtPayload }).user = payload;
       return true;
     } catch {
@@ -52,6 +56,11 @@ export class JwtAuthGuard implements CanActivate {
   }
 
   private extractToken(request: Request): string | undefined {
+    // Prefer HttpOnly cookie when present
+    const cookieToken = (request as Request & { cookies?: Record<string, string> })
+      .cookies?.['access_token'];
+    if (cookieToken) return cookieToken;
+
     const authHeader = request.headers.authorization;
     if (!authHeader) return undefined;
 

@@ -1,8 +1,10 @@
-import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { CustomThrottlerGuard } from './common/guards/throttler.guard';
+import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
+import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
 import { DatabaseModule } from './database/database.module';
 import { HealthModule } from './modules/health/health.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -30,13 +32,16 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
 
 @Module({
   imports: [
-    // Rate limiting: increased for E2E testing (1000 req/min per user)
-    // In production, consider reducing to 100 req/min
     ThrottlerModule.forRoot([
       {
         name: 'default',
         ttl: 60_000,
         limit: process.env['NODE_ENV'] === 'test' ? 10000 : 1000,
+      },
+      {
+        name: 'login',
+        ttl: 60_000,
+        limit: process.env['NODE_ENV'] === 'test' ? 1000 : 5,
       },
     ]),
     DatabaseModule,
@@ -81,6 +86,17 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
             'body.newPassword',
             'body.aadhaarNumber',
             'body.panNumber',
+            'body.mobile',
+            'body.address',
+            'body.dob',
+            'body.income',
+            'body.monthlyIncomePaise',
+            'body.guarantor',
+            'body.familyMembers',
+            'body.dependents',
+            'body.referenceContact',
+            'body.permanentAddress',
+            'body.currentAddress',
           ],
           censor: '[REDACTED]',
         },
@@ -88,10 +104,12 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
     }),
   ],
   providers: [
-    {
-      provide: APP_GUARD,
-      useClass: CustomThrottlerGuard,
-    },
+    { provide: APP_FILTER, useClass: GlobalExceptionFilter },
+    { provide: APP_GUARD, useClass: CustomThrottlerGuard },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(RequestIdMiddleware).forRoutes('*');
+  }
+}

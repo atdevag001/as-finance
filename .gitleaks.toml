@@ -1,0 +1,49 @@
+title = "gitleaks config for AS-Finance"
+
+[allowlist]
+description = "Allow placeholder values and example files"
+regexes = [
+  '''REPLACE_ME''',
+  '''your-?secret''',
+  '''example\.com''',
+]
+paths = [
+  '''\.env\.example$''',
+  '''\.env\.production\.example$''',
+  '''.*\.spec\.ts$''',
+  '''.*\.test\.ts$''',
+  '''node_modules/''',
+  '''dist/''',
+  '''\.next/''',
+]
+
+[[rules]]
+id = "as-finance-old-jwt-secret"
+description = "Known-leaked JWT_SECRET from prior commits"
+regex = '''as_finance_production_secret_key_2024_secure'''
+tags = ["leaked-secret", "must-rotate"]
+
+[[rules]]
+id = "minio-default-credentials"
+description = "MinIO default admin credentials"
+regex = '''minioadmin'''
+tags = ["default-creds"]
+[rules.allowlist]
+paths = ['''docker-compose.*\.ya?ml$''']
+
+[[rules]]
+id = "generic-base64-secret"
+description = "Likely base64-encoded secret >= 40 chars"
+regex = '''(?i)(secret|password|key|token)\s*[:=]\s*["']?[A-Za-z0-9+/]{40,}={0,2}["']?'''
+tags = ["secret"]
+
+[[rules]]
+id = "postgres-url-with-password"
+description = "Postgres URL with embedded password"
+regex = '''postgres(ql)?://[^:\s]+:[^@\s]{8,}@'''
+tags = ["db-credential"]
+[rules.allowlist]
+regexes = [
+  '''postgres(ql)?://[^:]+:asfinance_dev@''',
+  '''postgres(ql)?://USER:PASSWORD@''',
+]

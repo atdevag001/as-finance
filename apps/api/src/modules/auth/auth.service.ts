@@ -203,7 +203,13 @@ export class AuthService {
     return jwt.sign(
       { sub: userId, role } as jwt.JwtPayload,
       secret as jwt.Secret,
-      { expiresIn: expiry } as jwt.SignOptions,
+      {
+        expiresIn: expiry,
+        algorithm: 'HS256',
+        issuer: 'as-finance-api',
+        audience: 'as-finance-web',
+        jwtid: crypto.randomUUID(),
+      } as jwt.SignOptions,
     );
   }
 
