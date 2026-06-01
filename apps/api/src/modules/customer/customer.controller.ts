@@ -57,8 +57,11 @@ export class CustomerController {
   @ApiOperation({ summary: 'Get customer by ID' })
   @ApiResponse({ status: 200, description: 'Customer found' })
   @ApiResponse({ status: 404, description: 'Customer not found' })
-  async findById(@Param('id') id: string) {
-    return this.customerService.findById(id);
+  async findById(
+    @Param('id') id: string,
+    @Req() req: Request & { user: JwtPayload },
+  ) {
+    return this.customerService.findById(id, req.user.sub, req.user.role);
   }
 
   @Patch(':id')

@@ -190,7 +190,10 @@ export class ReversalService {
         date: new Date().toISOString(),
         description: `Reversal of collection ${original.id} for loan ${loan.loan_number}`,
         sourceType: JournalSourceType.REVERSAL,
-        sourceId: reversalCollection.id,
+        // Point reversal JE at the ORIGINAL collection so per-loan ledger queries
+        // surface both legs together. The reversal collection itself is linked
+        // through original_collection_id.
+        sourceId: original.id,
         createdBy: actorId,
         lines: mirrorJournalLines,
       },

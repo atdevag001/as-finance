@@ -116,10 +116,22 @@ export class CustomerService {
     };
   }
 
-  async findById(id: string) {
+  async findById(id: string, actorId?: string, actorRole?: string) {
     const customer = await this.customerRepository.findById(id);
     if (!customer) {
       throw new NotFoundError('Customer not found', 'CUSTOMER_NOT_FOUND');
+    }
+    // Scope enforcement: field officers can only read customers assigned to them
+    if (
+      actorId &&
+      actorRole &&
+      !UNRESTRICTED_ROLES.includes(actorRole as UserRole) &&
+      customer.assigned_officer_id !== actorId
+    ) {
+      throw new BusinessRuleError(
+        'You can only access customers assigned to you',
+        'SCOPE_VIOLATION',
+      );
     }
     return customer;
   }
