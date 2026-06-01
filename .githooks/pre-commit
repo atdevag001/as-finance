@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+#
+# Pre-commit hook: gitleaks scan + leaked-secret pattern check.
+# Activate this hook directory with:
+#     git config core.hooksPath .githooks
+#
+# Hook stays in the repo so every clone gets it (no dotfile management).
+
+set -euo pipefail
+
+# 1) gitleaks staged scan (if installed) — blocks commits containing secrets
+if command -v gitleaks >/dev/null 2>&1; then
+  if ! gitleaks protect --staged --redact --config .gitleaks.toml; then
+    echo "❌ gitleaks detected potential secrets in your staged changes."
+    echo "   Review the output above. If false-positive, add to .gitleaks.toml allowlist."
+    exit 1
+  fi
+else
+  echo "⚠️  gitleaks not installed — skipping secret scan."
+  echo "   Install: https://github.com/gitleaks/gitleaks#installing"
+fi
+
+# 2) Known-leaked-literal check (fail-fast even without gitleaks)
+LEAKED_PATTERNS=(
+  "as_finance_production_secret_key_2024_secure"
+  "minioadmin"
+)
+for pattern in "${LEAKED_PATTERNS[@]}"; do
+  if git diff --staged --diff-filter=AM -- ':!*.gitleaks.toml' ':!*.example' ':!.githooks/pre-commit' | grep -qE "$pattern"; then
+    echo "❌ Known-leaked literal '$pattern' found in your staged changes."
+    echo "   This value has been compromised — use a fresh secret instead."
+    exit 1
+  fi
+done
+
+exit 0

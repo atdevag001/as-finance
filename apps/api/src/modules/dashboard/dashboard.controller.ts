@@ -10,10 +10,10 @@ export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 
   @Get()
-  @RequirePermission('dashboard.view')
+  @RequirePermission('dashboard.read')
   @ApiOperation({ summary: 'Get dashboard KPIs' })
   @ApiResponse({ status: 200, description: 'Dashboard KPIs retrieved successfully' })
-  @ApiResponse({ status: 403, description: 'Missing dashboard.view permission' })
+  @ApiResponse({ status: 403, description: 'Missing dashboard.read permission' })
   async getKPIs(): Promise<DashboardKPIs> {
     return this.dashboardService.getKPIs();
   }

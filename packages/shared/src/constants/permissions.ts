@@ -90,5 +90,5 @@ export const PERMISSIONS: Record<string, readonly UserRole[]> = {
   'handover.verify': [SUPER_ADMIN, MANAGER, ACCOUNTANT],
 
   // Dashboard KPIs
-  'dashboard.view': READ_ALL,
+  'dashboard.read': READ_ALL,
 } as const;
