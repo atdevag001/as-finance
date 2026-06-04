@@ -397,6 +397,7 @@ model customers {
   @@index([status], name: "idx_customers_status")
   @@index([assigned_officer_id], name: "idx_customers_assigned_officer")
   @@index([created_by], name: "idx_customers_created_by")
+  @@index([photo_file_id], name: "idx_customers_photo_file_id")
 }
 
 /// KYC and supporting documents for customers
@@ -417,6 +418,8 @@ model customer_documents {
 
   @@index([customer_id], name: "idx_customer_documents_customer_id")
   @@index([document_type], name: "idx_customer_documents_type")
+  @@index([file_id], name: "idx_customer_documents_file_id")
+  @@index([verified_by], name: "idx_customer_documents_verified_by")
 }
 
 /// Family members of customers (for KYC/reference)
@@ -452,6 +455,7 @@ model guarantors {
   photo    file_metadata? @relation(fields: [photo_file_id], references: [id])
 
   @@index([customer_id], name: "idx_guarantors_customer_id")
+  @@index([photo_file_id], name: "idx_guarantors_photo_file_id")
 }
 
 /// Loan product definitions (versioned)
@@ -470,6 +474,7 @@ model loan_products {
 
   @@index([name], name: "idx_loan_products_name")
   @@index([is_active], name: "idx_loan_products_is_active")
+  @@index([current_version_id], name: "idx_loan_products_current_version_id")
 }
 
 /// Immutable versioned configuration for loan products
@@ -727,6 +732,8 @@ model receipts {
   @@index([loan_id], name: "idx_receipts_loan_id")
   @@index([customer_id], name: "idx_receipts_customer_id")
   @@index([payment_date], name: "idx_receipts_payment_date")
+  @@index([compensating_receipt_id], name: "idx_receipts_compensating_receipt_id")
+  @@index([original_receipt_id], name: "idx_receipts_original_receipt_id")
 }
 
 /// Penalty records — append-only, waivers tracked in-place
