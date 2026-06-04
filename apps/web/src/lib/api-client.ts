@@ -150,6 +150,60 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 }
 
 /**
+ * POST multipart/form-data to the API.
+ *
+ * Mirrors `request()` semantics (credentials, auth refresh on 401,
+ * x-request-id, ApiClientError on non-2xx) but does NOT set Content-Type —
+ * the browser sets it (including the multipart boundary) automatically when
+ * the body is a FormData instance.
+ */
+async function postFormData<T>(
+  path: string,
+  formData: FormData,
+  skipRefresh = false,
+): Promise<T> {
+  const requestId = generateRequestId();
+  const headers = new Headers();
+  headers.set('x-request-id', requestId);
+
+  const token = getAccessToken();
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'POST',
+    headers,
+    credentials: 'include',
+    body: formData,
+  });
+
+  // Handle 401 — attempt token refresh once
+  if (res.status === 401 && !skipRefresh) {
+    const newToken = await ensureValidToken();
+    if (newToken) {
+      return postFormData<T>(path, formData, true);
+    }
+    // Refresh failed — surface the 401
+  }
+
+  if (!res.ok) {
+    const errorBody = (await res.json().catch(() => ({
+      statusCode: res.status,
+      message: res.statusText,
+    }))) as ApiError;
+    throw new ApiClientError(res.status, { ...errorBody, requestId });
+  }
+
+  // 204 No Content
+  if (res.status === 204) {
+    return undefined as T;
+  }
+
+  return res.json() as Promise<T>;
+}
+
+/**
  * Fetch a binary file (blob) from the API.
  * Used for file downloads (PDF, Excel, etc.)
  */
@@ -186,6 +240,13 @@ export const apiClient = {
 
   post: <T>(path: string, body?: unknown, options?: RequestOptions) =>
     request<T>(path, { ...options, method: 'POST', body }),
+
+  /**
+   * POST multipart/form-data. Do not set Content-Type yourself —
+   * the browser will set the correct multipart boundary.
+   */
+  postFormData: <T>(path: string, formData: FormData) =>
+    postFormData<T>(path, formData),
 
   patch: <T>(path: string, body?: unknown, options?: RequestOptions) =>
     request<T>(path, { ...options, method: 'PATCH', body }),

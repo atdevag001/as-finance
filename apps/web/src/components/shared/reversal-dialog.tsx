@@ -35,7 +35,6 @@ const MIN_REASON_LENGTH = 10;
 export function ReversalDialog({ open, onOpenChange, collection }: ReversalDialogProps) {
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [idempotencyKey] = useState(() => crypto.randomUUID());
   const createReversal = useCreateReversal();
   const { showToast } = useToast();
 
@@ -55,6 +54,7 @@ export function ReversalDialog({ open, onOpenChange, collection }: ReversalDialo
   async function handleConfirm() {
     if (!collection || !isReasonValid) return;
     setError(null);
+    const idempotencyKey = crypto.randomUUID();
     try {
       await createReversal.mutateAsync({
         collectionId: collection.id,

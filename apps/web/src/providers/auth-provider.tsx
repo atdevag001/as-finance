@@ -12,6 +12,7 @@ import {
 } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { apiClient, setAccessToken, getAccessToken } from '@/lib/api-client';
+import { decodeJwtPayload } from '@/lib/jwt';
 import { useToastSafe } from './toast-provider';
 
 /**
@@ -30,10 +31,8 @@ function setTokenCookie(_token: string | null) {
 /** Parse JWT and get expiry timestamp (in ms) */
 function getJwtExpiry(token: string): number | null {
   try {
-    const [, payload] = token.split('.');
-    if (!payload) return null;
-    const decoded = JSON.parse(atob(payload));
-    return decoded.exp ? decoded.exp * 1000 : null;
+    const decoded = decodeJwtPayload(token) as { exp?: number } | null;
+    return decoded?.exp ? decoded.exp * 1000 : null;
   } catch {
     return null;
   }
@@ -42,9 +41,7 @@ function getJwtExpiry(token: string): number | null {
 /** Decode JWT payload to extract user info */
 function decodeJwt(token: string): { sub: string; role: string; exp: number } | null {
   try {
-    const [, payload] = token.split('.');
-    if (!payload) return null;
-    return JSON.parse(atob(payload));
+    return decodeJwtPayload(token) as { sub: string; role: string; exp: number };
   } catch {
     return null;
   }

@@ -29,7 +29,14 @@ const formSchema = z.object({
       const n = parseFloat(v);
       return !isNaN(n) && n > 0;
     }, 'Principal must be a positive amount'),
-  tenureMonths: z.coerce.number().int().min(1, 'Tenure must be at least 1 month'),
+  tenureMonths: z
+    .number({
+      required_error: 'Tenure is required',
+      invalid_type_error: 'Tenure must be a positive number',
+    })
+    .int('Tenure must be a whole number of months')
+    .min(1, 'Tenure must be at least 1 month')
+    .max(120, 'Tenure cannot exceed 120 months'),
   purpose: z.string().min(1, 'Purpose is required'),
   groupId: z.string().optional(),
 });
@@ -306,7 +313,12 @@ export default function NewLoanPage() {
             <Field label="Tenure (months) *" error={errors.tenureMonths?.message}>
               <Input
                 {...register('tenureMonths', {
-                  setValueAs: (v) => (v === '' ? undefined : Number(v)),
+                  setValueAs: (v) => {
+                    if (v === '' || v === null || v === undefined) return undefined;
+                    const n = Number(v);
+                    // Pass NaN/invalid through unchanged so zod's invalid_type_error fires
+                    return Number.isFinite(n) ? n : v;
+                  },
                 })}
                 type="number"
                 inputMode="numeric"

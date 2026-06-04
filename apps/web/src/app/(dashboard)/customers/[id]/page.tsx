@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { apiClient, getAccessToken } from '@/lib/api-client';
+import { apiClient } from '@/lib/api-client';
 import { useToast } from '@/providers/toast-provider';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 
@@ -133,17 +133,7 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
       formData.append('prefix', 'kyc');
       formData.append('customerId', id);
       formData.append('documentType', selectedDocType);
-      const response = await fetch(`${process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:3001'}/documents/upload`, {
-        method: 'POST',
-        body: formData,
-        headers: {
-          Authorization: `Bearer ${getAccessToken()}`,
-        },
-      });
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `Upload failed: ${response.status}`);
-      }
+      await apiClient.postFormData('/documents/upload', formData);
       showToast({ message: 'Document uploaded successfully.' });
       queryClient.invalidateQueries({ queryKey: ['customers', id, 'documents'] });
     } catch (err) {

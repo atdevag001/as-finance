@@ -36,9 +36,6 @@ export default function NewCollectionPage() {
   const { showToast } = useToast();
   const queryClient = useQueryClient();
 
-  // Idempotency key generated once per form session
-  const [idempotencyKey] = useState(() => crypto.randomUUID());
-
   // Loan search state
   const [loanSearch, setLoanSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -132,6 +129,7 @@ export default function NewCollectionPage() {
     setServerError(null);
 
     const amountPaise = Math.round(parseFloat(amountRupees) * 100);
+    const idempotencyKey = crypto.randomUUID();
 
     try {
       const result = await apiClient.post<CollectionResponse>(

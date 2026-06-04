@@ -23,16 +23,18 @@ import { Label } from '@/components/ui/label';
 
 export default function CollectionsPage() {
   const [page, setPage] = useState(1);
-  const today = todayIST();
-  const [startDate, setStartDate] = useState(today);
-  const [endDate, setEndDate] = useState(today);
+  const [startDate, setStartDate] = useState(() => todayIST());
+  const [endDate, setEndDate] = useState(() => todayIST());
   const [loanNumber, setLoanNumber] = useState('');
   const [aadhaar, setAadhaar] = useState('');
-  const [appliedFilters, setAppliedFilters] = useState({
-    startDate: today,
-    endDate: today,
-    loanNumber: '',
-    aadhaarLastFour: '',
+  const [appliedFilters, setAppliedFilters] = useState(() => {
+    const today = todayIST();
+    return {
+      startDate: today,
+      endDate: today,
+      loanNumber: '',
+      aadhaarLastFour: '',
+    };
   });
 
   const { data, isLoading, error } = useCollections({

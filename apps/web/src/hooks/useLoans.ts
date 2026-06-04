@@ -96,6 +96,13 @@ export function useLoanAction() {
   return useMutation({
     mutationFn: ({ id, action, body }: { id: string; action: string; body?: Record<string, unknown> }) =>
       apiClient.post(`/loans/${id}/${action}`, body),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['loans'] }); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['loans'] });
+      qc.invalidateQueries({ queryKey: ['loan'] });
+      qc.invalidateQueries({ queryKey: ['receipts'] });
+      qc.invalidateQueries({ queryKey: ['penalties'] });
+      qc.invalidateQueries({ queryKey: ['foreclosures'] });
+      qc.invalidateQueries({ queryKey: ['status-history'] });
+    },
   });
 }

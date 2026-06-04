@@ -27,7 +27,27 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useQuery } from '@tanstack/react-query';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, ApiClientError } from '@/lib/api-client';
+
+// Map backend error codes to user-friendly messages
+const CODE_MESSAGES: Record<string, string> = {
+  ALREADY_DISBURSED: 'This loan has already been disbursed.',
+  COLLECTIONS_EXIST: 'Cannot perform this action because collections exist for this loan.',
+  PERIOD_CLOSED: 'The accounting period for this date is closed.',
+  QUOTE_STALE: 'The foreclosure quote is no longer current. Please generate a new quote.',
+  QUOTE_EXPIRED: 'The foreclosure quote has expired. Please generate a new quote.',
+  INVALID_TRANSITION: 'This action is not allowed in the loan’s current state.',
+  TOKEN_REVOKED: 'Your session has been revoked. Please sign in again.',
+};
+
+function extractActionError(err: unknown, fallback: string): string {
+  if (err instanceof ApiClientError) {
+    const code = err.body?.code;
+    if (code && CODE_MESSAGES[code]) return CODE_MESSAGES[code];
+    return err.body?.message || fallback;
+  }
+  return (err as Error)?.message || fallback;
+}
 
 // Status history type
 interface StatusTransition {
@@ -100,18 +120,17 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
   const isActionInProgress = loanAction.isPending || waivePenalty.isPending ||
     generateQuote.isPending || executeForeclosure.isPending;
 
-  // Check quote expiry
+  // Check quote expiry — only tick while the dialog is open with an active quote
   useEffect(() => {
-    if (foreclosureQuote) {
-      const checkExpiry = () => {
-        const expired = new Date(foreclosureQuote.quoteExpiresAt) <= new Date();
-        setQuoteExpired(expired);
-      };
-      checkExpiry();
-      const interval = setInterval(checkExpiry, 1000);
-      return () => clearInterval(interval);
-    }
-  }, [foreclosureQuote]);
+    if (!foreclosureOpen || !foreclosureQuote) return;
+    const checkExpiry = () => {
+      const expired = new Date(foreclosureQuote.quoteExpiresAt) <= new Date();
+      setQuoteExpired(expired);
+    };
+    checkExpiry();
+    const interval = setInterval(checkExpiry, 1000);
+    return () => clearInterval(interval);
+  }, [foreclosureOpen, foreclosureQuote]);
 
   async function handleSubmitForReview() {
     setActionError(null);
@@ -119,7 +138,7 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
       await loanAction.mutateAsync({ id, action: 'submit' });
       showToast({ message: 'Loan submitted for review' });
     } catch (err) {
-      setActionError((err as Error).message || 'Failed to submit loan');
+      setActionError(extractActionError(err, 'Failed to submit loan'));
     }
   }
 
@@ -129,7 +148,7 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
       await loanAction.mutateAsync({ id, action: 'review' });
       showToast({ message: 'Review started' });
     } catch (err) {
-      setActionError((err as Error).message || 'Failed to start review');
+      setActionError(extractActionError(err, 'Failed to start review'));
     }
   }
 
@@ -145,7 +164,7 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
       setApproveFirstEmiDate('');
       showToast({ message: 'Loan approved successfully' });
     } catch (err) {
-      setActionError((err as Error).message || 'Failed to approve loan');
+      setActionError(extractActionError(err, 'Failed to approve loan'));
     }
   }
 
@@ -157,7 +176,7 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
       setRejectReason('');
       showToast({ message: 'Loan rejected' });
     } catch (err) {
-      setActionError((err as Error).message || 'Failed to reject loan');
+      setActionError(extractActionError(err, 'Failed to reject loan'));
     }
   }
 
@@ -181,7 +200,7 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
       setDisburseFirstEmiDate('');
       showToast({ message: 'Loan disbursed successfully' });
     } catch (err) {
-      setActionError((err as Error).message || 'Failed to disburse loan');
+      setActionError(extractActionError(err, 'Failed to disburse loan'));
     }
   }
 
@@ -201,7 +220,7 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
       setQuoteExpired(false);
       setForeclosureOpen(true);
     } catch (err) {
-      setActionError((err as Error).message || 'Failed to generate foreclosure quote');
+      setActionError(extractActionError(err, 'Failed to generate foreclosure quote'));
     }
   }
 
@@ -221,7 +240,7 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
       setForeclosurePaymentMode('cash');
       showToast({ message: 'Foreclosure completed. Loan is now closed.' });
     } catch (err) {
-      setActionError((err as Error).message || 'Failed to execute foreclosure');
+      setActionError(extractActionError(err, 'Failed to execute foreclosure'));
     }
   }
 
@@ -236,7 +255,7 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
       setWaiveApproverId('');
       showToast({ message: 'Penalty waived successfully' });
     } catch (err) {
-      setActionError((err as Error).message || 'Failed to waive penalty');
+      setActionError(extractActionError(err, 'Failed to waive penalty'));
     }
   }
 
@@ -247,7 +266,7 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
       setCloseOpen(false);
       showToast({ message: 'Loan closed successfully' });
     } catch (err) {
-      setActionError((err as Error).message || 'Failed to close loan');
+      setActionError(extractActionError(err, 'Failed to close loan'));
     }
   }
 
@@ -264,7 +283,7 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
       setRegenerateFirstEmiDate('');
       showToast({ message: 'EMI schedule regenerated successfully' });
     } catch (err) {
-      setActionError((err as Error).message || 'Failed to regenerate schedule');
+      setActionError(extractActionError(err, 'Failed to regenerate schedule'));
     }
   }
 
@@ -895,7 +914,13 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
       {/* Foreclosure Quote Dialog */}
       <ConfirmDialog
         open={foreclosureOpen}
-        onOpenChange={setForeclosureOpen}
+        onOpenChange={(open) => {
+          setForeclosureOpen(open);
+          if (!open) {
+            setForeclosureQuote(null);
+            setQuoteExpired(false);
+          }
+        }}
         title="Foreclosure Quote"
         description={quoteExpired ? 'Quote expired. Please generate a new quote.' : 'Review the settlement breakdown below.'}
         confirmLabel={quoteExpired ? 'Close' : 'Approve & Execute'}

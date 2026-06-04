@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Eye, EyeOff } from 'lucide-react';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, ApiClientError } from '@/lib/api-client';
 import { useToast } from '@/providers/toast-provider';
 import { ErrorMessage } from '@/components/shared';
 import { Button } from '@/components/ui/button';
@@ -83,11 +83,22 @@ export default function ChangePasswordPage() {
       showToast({ message: 'Password changed successfully.' });
       setFormData({ currentPassword: '', newPassword: '', confirmPassword: '' });
     } catch (err) {
-      const message = (err as Error).message;
-      if (message?.toLowerCase().includes('incorrect') || message?.toLowerCase().includes('invalid')) {
-        setError('Current password is incorrect.');
+      if (err instanceof ApiClientError) {
+        switch (err.body?.code) {
+          case 'INVALID_CREDENTIALS':
+            setError('Current password is incorrect.');
+            break;
+          case 'PASSWORD_REUSE':
+            setError('New password matches a recent password. Choose a different one.');
+            break;
+          case 'COMMON_PASSWORD':
+            setError('New password is too common; choose a less predictable password.');
+            break;
+          default:
+            setError(err.body?.message || 'Failed to change password.');
+        }
       } else {
-        setError(message || 'Failed to change password.');
+        setError((err as Error)?.message || 'Failed to change password.');
       }
     } finally {
       setIsSubmitting(false);

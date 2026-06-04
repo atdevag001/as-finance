@@ -41,9 +41,13 @@ describe('PaginationControls', () => {
   });
 
   describe('Hidden when single page', () => {
-    it('returns null when totalPages is 1', () => {
-      const { container } = render(<PaginationControls {...defaultProps} totalPages={1} />);
-      expect(container).toBeEmptyDOMElement();
+    it('hides navigation buttons but still shows page indicator when totalPages is 1', () => {
+      render(<PaginationControls {...defaultProps} totalPages={1} />);
+      // Indicator is always rendered for a valid (>= 1) totalPages
+      expect(screen.getByText('Page 1 of 1')).toBeInTheDocument();
+      // Navigation buttons should not be rendered when there's only one page
+      expect(screen.queryByRole('button', { name: 'Previous page' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Next page' })).not.toBeInTheDocument();
     });
 
     it('returns null when totalPages is 0', () => {

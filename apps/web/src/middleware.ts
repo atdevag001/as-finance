@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { decodeJwtPayload } from './lib/jwt';
 
 /** Public routes that don't require authentication */
 const PUBLIC_PATHS = ['/login'];
@@ -7,12 +8,9 @@ const PUBLIC_PATHS = ['/login'];
  * Lightweight JWT payload decoder (no verification — the API server verifies).
  * We only decode to check expiry and extract role for client-side route gating.
  */
-function decodeJwtPayload(token: string): { sub: string; role: string; exp: number } | null {
+function decodeJwt(token: string): { sub: string; role: string; exp: number } | null {
   try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
-    const payload = JSON.parse(atob(parts[1]!.replace(/-/g, '+').replace(/_/g, '/')));
-    return payload;
+    return decodeJwtPayload(token) as { sub: string; role: string; exp: number };
   } catch {
     return null;
   }
@@ -44,7 +42,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  const payload = decodeJwtPayload(accessToken);
+  const payload = decodeJwt(accessToken);
 
   if (!payload) {
     const loginUrl = new URL('/login', request.url);

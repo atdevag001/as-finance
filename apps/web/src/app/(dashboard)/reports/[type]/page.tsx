@@ -60,9 +60,8 @@ export default function ReportDetailPage() {
 function ReportDetailContent() {
   const params = useParams();
   const type = params['type'] as string;
-  const today = todayIST();
-  const [startDate, setStartDate] = useState(today);
-  const [endDate, setEndDate] = useState(today);
+  const [startDate, setStartDate] = useState(() => todayIST());
+  const [endDate, setEndDate] = useState(() => todayIST());
   const [status, setStatus] = useState('all');
   const [exporting, setExporting] = useState(false);
 

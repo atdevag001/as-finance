@@ -99,7 +99,7 @@ export default function GroupCollectPage({ params }: { params: Promise<{ id: str
                         <button
                           type="button"
                           className="mt-1 text-xs text-primary hover:underline"
-                          onClick={() => setAmounts((prev) => ({ ...prev, [m.id]: String((m.outstanding_paise ?? 0) / 100) }))}
+                          onClick={() => setAmounts((prev) => ({ ...prev, [m.id]: ((m.outstanding_paise ?? 0) / 100).toFixed(2) }))}
                         >
                           Fill due amount
                         </button>

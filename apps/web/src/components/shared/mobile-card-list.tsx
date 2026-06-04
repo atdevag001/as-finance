@@ -60,12 +60,28 @@ export function MobileCardList({ items, emptyMessage = 'No items found.', classN
 }
 
 function MobileCard({ item }: { item: MobileCardItem }) {
-  const content = (
+  const titleNode = item.href ? (
+    <Link href={item.href} className="truncate text-sm font-semibold text-foreground hover:underline">
+      {item.title}
+    </Link>
+  ) : item.onClick ? (
+    <button
+      type="button"
+      onClick={item.onClick}
+      className="truncate text-left text-sm font-semibold text-foreground hover:underline"
+    >
+      {item.title}
+    </button>
+  ) : (
+    <div className="truncate text-sm font-semibold text-foreground">{item.title}</div>
+  );
+
+  return (
     <div className="rounded-lg border bg-card p-4 shadow-sm transition-colors hover:bg-accent/50 active:bg-accent">
       {/* Top row: Title and Right Value */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-semibold text-foreground">{item.title}</div>
+          {titleNode}
           {item.subtitle && (
             <div className="mt-0.5 truncate text-sm text-muted-foreground">{item.subtitle}</div>
           )}
@@ -89,24 +105,6 @@ function MobileCard({ item }: { item: MobileCardItem }) {
       )}
     </div>
   );
-
-  if (item.href) {
-    return (
-      <Link href={item.href} className="block">
-        {content}
-      </Link>
-    );
-  }
-
-  if (item.onClick) {
-    return (
-      <button type="button" onClick={item.onClick} className="block w-full text-left">
-        {content}
-      </button>
-    );
-  }
-
-  return content;
 }
 
 /**

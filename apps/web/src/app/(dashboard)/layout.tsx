@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Menu, X, LogOut } from 'lucide-react';
 import { useAuth } from '@/providers/auth-provider';
@@ -14,6 +14,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      router.replace('/login');
+    }
+  }, [isLoading, isAuthenticated, router]);
+
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -23,7 +29,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   if (!isAuthenticated) {
-    router.replace('/login');
     return null;
   }
 
