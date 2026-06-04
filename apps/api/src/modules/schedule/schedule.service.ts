@@ -47,9 +47,16 @@ function normalizeZero(n: number): number {
 
 /**
  * Derive the number of installments from tenure (months) and frequency.
+ *
  *   monthly: N = tenureMonths
- *   weekly:  N = tenureMonths × 4
- *   daily:   N = tenureMonths × 30
+ *   weekly:  N = ceil(tenureMonths × 52 / 12)
+ *   daily:   N = ceil(tenureMonths × 365.25 / 12)
+ *
+ * Calendar-accurate: a year has ~52.18 weeks and ~365.25 days (Julian year
+ * accounting for leap years). The previous implementation used the rough
+ * approximations 4 weeks/month and 30 days/month, which materially under-counted
+ * installments for longer tenures (e.g., 12 months daily → 360 instead of 366).
+ * Ceiling ensures the schedule never under-covers the tenure period.
  */
 export function deriveInstallmentCount(
   tenureMonths: number,
@@ -59,9 +66,9 @@ export function deriveInstallmentCount(
     case Frequency.MONTHLY:
       return tenureMonths;
     case Frequency.WEEKLY:
-      return tenureMonths * 4;
+      return Math.ceil((tenureMonths * 52) / 12);
     case Frequency.DAILY:
-      return tenureMonths * 30;
+      return Math.ceil((tenureMonths * 365.25) / 12);
     default:
       throw new Error(`Unsupported frequency: ${frequency}`);
   }
@@ -210,56 +217,53 @@ export function calculateFlatEMI(
   const totalInterest = P.mul(R).div(10000).mul(T).div(12).toDecimalPlaces(0, Decimal.ROUND_HALF_UP);
 
   const N = deriveInstallmentCount(tenureMonths, frequency);
-  const nDec = new Decimal(N);
 
-  // Per-installment components (before rounding)
-  const perInstallmentPrincipal = P.div(nDec);
-  const perInstallmentInterest = totalInterest.div(nDec);
+  // H18: Distribute the rounding remainder evenly across the FIRST `remainder`
+  // installments (1 paisa each) rather than dumping it into the last installment.
+  //
+  // Old behaviour: every regular installment got floor(P/N) paise of principal
+  // and the last installment absorbed (P - floor(P/N) × (N-1)) — which could be
+  // up to N-1 paise larger than the others. That created an artificially "jumbo"
+  // final installment and could surprise borrowers / break EMI-equality
+  // assumptions downstream.
+  //
+  // New behaviour: the first `remainder` installments each get +1 paisa.
+  // Differences between any two installments are now at most 1 paisa. The
+  // cumulative principal and interest still reconcile exactly.
+  const totalPrincipalPaise = principalPaise;
+  const totalInterestPaise = totalInterest.toNumber();
 
-  // Rounding point: round each installment's principal and interest to integer paise.
-  // Use ROUND_FLOOR (truncate toward zero) so that cumulative total of N-1 installments
-  // never exceeds the total. The last installment absorbs the positive remainder.
-  // Using ROUND_HALF_UP here can cause the cumulative sum to exceed the total when
-  // amounts are small relative to the number of installments (e.g., daily frequency),
-  // resulting in a negative last installment.
-  const roundedPrincipal = perInstallmentPrincipal.toDecimalPlaces(0, Decimal.ROUND_FLOOR).toNumber();
-  const roundedInterest = perInstallmentInterest.toDecimalPlaces(0, Decimal.ROUND_FLOOR).toNumber();
+  const perInstallmentPrincipal = Math.floor(totalPrincipalPaise / N);
+  const principalRemainder = totalPrincipalPaise - perInstallmentPrincipal * N;
+
+  const perInstallmentInterest = Math.floor(totalInterestPaise / N);
+  const interestRemainder = totalInterestPaise - perInstallmentInterest * N;
+
+  const principalPaiseFor = (idx: number): number =>
+    perInstallmentPrincipal + (idx < principalRemainder ? 1 : 0);
+  const interestPaiseFor = (idx: number): number =>
+    perInstallmentInterest + (idx < interestRemainder ? 1 : 0);
 
   const installments: Installment[] = [];
-  let cumulativePrincipal = 0;
-  let cumulativeInterest = 0;
-
   for (let i = 1; i <= N; i++) {
-    if (i < N) {
-      // Regular installment
-      cumulativePrincipal += roundedPrincipal;
-      cumulativeInterest += roundedInterest;
-      installments.push({
-        installmentNumber: i,
-        dueDate: new Date(), // placeholder — caller sets due dates
-        principalPaise: roundedPrincipal,
-        interestPaise: roundedInterest,
-        totalPaise: roundedPrincipal + roundedInterest,
-      });
-    } else {
-      // Last installment absorbs rounding difference
-      const lastPrincipal = normalizeZero(principalPaise - cumulativePrincipal);
-      const lastInterest = normalizeZero(totalInterest.toNumber() - cumulativeInterest);
-      installments.push({
-        installmentNumber: i,
-        dueDate: new Date(), // placeholder
-        principalPaise: lastPrincipal,
-        interestPaise: lastInterest,
-        totalPaise: normalizeZero(lastPrincipal + lastInterest),
-      });
-    }
+    const principalPaiseI = normalizeZero(principalPaiseFor(i - 1));
+    const interestPaiseI = normalizeZero(interestPaiseFor(i - 1));
+    installments.push({
+      installmentNumber: i,
+      dueDate: new Date(), // placeholder — caller sets due dates
+      principalPaise: principalPaiseI,
+      interestPaise: interestPaiseI,
+      totalPaise: normalizeZero(principalPaiseI + interestPaiseI),
+    });
   }
 
-  const emi = new Decimal(roundedPrincipal + roundedInterest).toNumber();
+  // EMI for the "base" installment (those without the +1 paisa adjustment).
+  // When P and totalInterest divide evenly by N, all installments share this EMI.
+  const emi = perInstallmentPrincipal + perInstallmentInterest;
 
   return {
     emiPaise: emi,
-    totalInterestPaise: totalInterest.toNumber(),
+    totalInterestPaise: totalInterestPaise,
     numberOfInstallments: N,
     installments,
   };

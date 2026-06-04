@@ -200,7 +200,7 @@ export class LoanService {
 
     // Re-validate at submission time
     const customer = await this.loanRepository.getCustomerStatus(loan.customer_id);
-    if (customer && customer.status === 'blacklisted') {
+    if (customer?.status === 'blacklisted') {
       throw new BusinessRuleError(
         'Cannot submit loan for a blacklisted customer',
         'CUSTOMER_BLACKLISTED',
@@ -314,6 +314,11 @@ export class LoanService {
 
   /**
    * Approve a loan under review.
+   *
+   * All six writes (status update, schedule installments, loan totals,
+   * status_history, approval, audit log) are wrapped in a single
+   * prisma.$transaction so a mid-flight failure leaves no partial state
+   * (e.g. an "approved" loan with no schedule).
    */
   async approve(
     loanId: string,
@@ -336,14 +341,11 @@ export class LoanService {
       );
     }
 
-    const updated = await this.loanRepository.updateStatus(
-      loanId,
-      'approved',
-      { approved_by: actorId },
-      loan.version,
-    );
-
-    // Generate and persist the EMI schedule
+    // Pre-compute the schedule outside the transaction (pure function,
+    // no IO) so the tx body stays as small as possible.
+    let schedule: ReturnType<typeof generateSchedule> | null = null;
+    let totalInterestPaise = 0;
+    let totalPayablePaise = 0;
     if (loan.product_version) {
       const pv = loan.product_version;
       // Use provided firstEmiDate or default to current date
@@ -360,7 +362,7 @@ export class LoanService {
         scheduleStartDate = this.calculateStartDateFromFirstEmi(firstEmi, pv.repayment_frequency);
       }
 
-      const schedule = generateSchedule({
+      schedule = generateSchedule({
         principalPaise: Number(loan.principal_paise),
         annualRateBps: pv.annual_rate_bps,
         tenureMonths: loan.tenure_months,
@@ -370,43 +372,67 @@ export class LoanService {
         holidays: [],
       } as ScheduleParams);
 
-      // Calculate total interest and total payable
-      const totalInterestPaise = schedule.reduce((sum, inst) => sum + inst.interestPaise, 0);
-      const totalPayablePaise = Number(loan.principal_paise) + totalInterestPaise;
-
-      // Persist schedule installments
-      await this.loanRepository.createScheduleInstallments(loanId, schedule);
-
-      // Update loan with total interest and total payable
-      await this.loanRepository.updateLoanTotals(loanId, totalInterestPaise, totalPayablePaise);
+      totalInterestPaise = schedule.reduce((sum, inst) => sum + inst.interestPaise, 0);
+      totalPayablePaise = Number(loan.principal_paise) + totalInterestPaise;
     }
 
-    await this.loanRepository.createStatusHistory({
-      loan_id: loanId,
-      from_status: 'under_review',
-      to_status: 'approved',
-      changed_by: actorId,
-    });
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await this.loanRepository.updateStatus(
+        loanId,
+        'approved',
+        { approved_by: actorId },
+        loan.version,
+        tx,
+      );
 
-    await this.loanRepository.createApproval({
-      loan_id: loanId,
-      action: 'approved',
-      actor_id: actorId,
-      remarks: dto.remarks,
-    });
+      // Persist the EMI schedule and totals inside the same tx so an
+      // approved loan can never end up without a schedule.
+      if (schedule) {
+        await this.loanRepository.createScheduleInstallments(loanId, schedule, tx);
+        await this.loanRepository.updateLoanTotals(
+          loanId,
+          totalInterestPaise,
+          totalPayablePaise,
+          tx,
+        );
+      }
 
-    await this.loanRepository.createAuditLog({
-      action_type: 'loan_approved',
-      actor_id: actorId,
-      actor_role: actorRole,
-      target_entity: 'loan',
-      target_id: loanId,
-      before_state: { status: 'under_review' },
-      after_state: { status: 'approved', approved_by: actorId },
-      remarks: dto.remarks,
-    });
+      await this.loanRepository.createStatusHistory(
+        {
+          loan_id: loanId,
+          from_status: 'under_review',
+          to_status: 'approved',
+          changed_by: actorId,
+        },
+        tx,
+      );
 
-    return updated;
+      await this.loanRepository.createApproval(
+        {
+          loan_id: loanId,
+          action: 'approved',
+          actor_id: actorId,
+          remarks: dto.remarks,
+        },
+        tx,
+      );
+
+      await this.loanRepository.createAuditLog(
+        {
+          action_type: 'loan_approved',
+          actor_id: actorId,
+          actor_role: actorRole,
+          target_entity: 'loan',
+          target_id: loanId,
+          before_state: { status: 'under_review' },
+          after_state: { status: 'approved', approved_by: actorId },
+          remarks: dto.remarks,
+        },
+        tx,
+      );
+
+      return updated;
+    });
   }
 
   /**
@@ -496,7 +522,7 @@ export class LoanService {
     });
 
     await this.loanRepository.createAuditLog({
-      action_type: `loan_${toStatus}` as string,
+      action_type: `loan_${toStatus}`,
       actor_id: actorId,
       actor_role: actorRole,
       target_entity: 'loan',

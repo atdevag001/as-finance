@@ -7,9 +7,10 @@ import { AccountingService } from '../accounting/accounting.service';
 import { AuditService } from '../audit/audit.service';
 import { IdempotencyService } from '../idempotency/idempotency.service';
 import { LoanService } from '../loan/loan.service';
+import { generateSchedule } from '../schedule/schedule.service';
 import { DisburseDto } from './dto/disburse.dto';
 import { BusinessRuleError, ConflictError, NotFoundError } from '../../common/errors';
-import { addMonthsClamped } from '../../common/utils/date.util';
+import { addMonthsClamped, parseDateIST } from '../../common/utils/date.util';
 import { canBypassMakerChecker } from '../../common/constants/maker-checker';
 
 // Configure Decimal.js: ROUND_HALF_UP for financial calculations
@@ -172,8 +173,13 @@ export class DisbursementService {
       throw new NotFoundError(`Loan not found: ${dto.loanId}`);
     }
 
-    // Re-validate status within transaction (guard against race conditions)
+    // Re-validate the full transition path within the transaction. Both
+    // edges of the state machine (approved → disbursed → active) must be
+    // legal — we validate both, but the persisted state machine collapses
+    // to a single write so we never observe an intermediate row that an
+    // out-of-order reader could see.
     this.loanService.validateTransition(loan.status, 'disbursed');
+    this.loanService.validateTransition('disbursed', 'active');
 
     // Maker-checker enforcement (bypass for allowed roles)
     // Disbursing user must be different from approving user
@@ -185,10 +191,13 @@ export class DisbursementService {
     }
 
     const now = new Date();
-    const disbursementDate = new Date(now.toISOString().split('T')[0]!); // IST business date
+    const disbursementDate = parseDateIST(now.toISOString().split('T')[0]!); // IST business date
 
-    // ── Step 1: Transition loan status approved → disbursed ──
-    await this.disbursementRepository.updateLoanStatus(dto.loanId, 'disbursed', tx);
+    // ── Step 1: Status history for the audit trail (approved → disbursed → active) ──
+    // We persist both edges of the state machine for audit traceability, but
+    // perform a single status write below (with optimistic-lock check) to
+    // avoid writing an intermediate 'disbursed' row that no other reader
+    // should ever observe.
     await this.disbursementRepository.createStatusHistory(
       {
         loan_id: dto.loanId,
@@ -198,9 +207,6 @@ export class DisbursementService {
       },
       tx,
     );
-
-    // Transition disbursed → active
-    await this.disbursementRepository.updateLoanStatus(dto.loanId, 'active', tx);
     await this.disbursementRepository.createStatusHistory(
       {
         loan_id: dto.loanId,
@@ -307,7 +313,7 @@ export class DisbursementService {
     );
 
     // ── Step 6: Handle first EMI date override if provided ──
-    let schedules = loan.schedules;
+    const schedules = loan.schedules;
     let totalPayable = loan.total_payable_paise ?? loan.principal_paise;
 
     // Track first/last due dates for later use
@@ -315,8 +321,10 @@ export class DisbursementService {
     let computedLastDueDate: Date | undefined;
 
     if (dto.firstEmiDate) {
-      // Validate first EMI date is after disbursement date
-      const firstEmi = new Date(dto.firstEmiDate);
+      // Validate first EMI date is after disbursement date.
+      // YYYY-MM-DD must be parsed as IST midnight (not UTC) so the comparison
+      // against `disbursementDate` (also IST midnight) is in the same TZ.
+      const firstEmi = parseDateIST(dto.firstEmiDate);
       if (firstEmi <= disbursementDate) {
         throw new BusinessRuleError(
           'First EMI date must be after disbursement date',
@@ -328,8 +336,6 @@ export class DisbursementService {
       const pv = loan.product_version;
       const scheduleStartDate = this.calculateStartDateFromFirstEmi(firstEmi, pv.repayment_frequency);
 
-      // Import and use schedule generator
-      const { generateSchedule } = await import('../schedule/schedule.service');
       const newSchedule = generateSchedule({
         principalPaise: Number(loan.principal_paise),
         annualRateBps: pv.annual_rate_bps,
@@ -345,30 +351,31 @@ export class DisbursementService {
       const totalPayablePaise = Number(loan.principal_paise) + totalInterestPaise;
       totalPayable = BigInt(totalPayablePaise);
 
-      // Delete old schedule and create new one within transaction
-      await tx['loan_schedules'].deleteMany({
+      // Rebuild the schedule atomically: delete the old rows, then insert the
+      // new ones in a single createMany (N round-trips → 1).
+      await tx.loan_schedules.deleteMany({
         where: { loan_id: dto.loanId },
       });
 
-      for (const inst of newSchedule) {
-        await tx['loan_schedules'].create({
-          data: {
+      if (newSchedule.length > 0) {
+        await tx.loan_schedules.createMany({
+          data: newSchedule.map((inst) => ({
             loan_id: dto.loanId,
             installment_number: inst.installmentNumber,
             due_date: inst.dueDate,
             principal_paise: inst.principalPaise,
             interest_paise: inst.interestPaise,
             total_paise: inst.totalPaise,
-            principal_paid_paise: 0,
-            interest_paid_paise: 0,
-            penalty_paid_paise: 0,
-            status: 'pending',
-          } as never,
+            principal_paid_paise: 0n,
+            interest_paid_paise: 0n,
+            penalty_paid_paise: 0n,
+            status: 'pending' as never,
+          })),
         });
       }
 
       // Update totals on loan
-      await tx['loans'].update({
+      await tx.loans.update({
         where: { id: dto.loanId },
         data: {
           total_interest_paise: totalInterestPaise,
@@ -387,13 +394,25 @@ export class DisbursementService {
     await this.disbursementRepository.updateLoanForDisbursement(
       dto.loanId,
       {
-        status: 'active',
         disbursement_date: disbursementDate,
         first_due_date: firstDueDate,
         last_due_date: lastDueDate,
         cached_outstanding_paise: totalPayable,
         processing_fee_paise: processingFeePaise > 0n ? processingFeePaise : undefined,
       },
+      tx,
+    );
+
+    // ── Single status transition: approved → active (with optimistic lock) ──
+    // We've validated both edges of the state machine above (approved →
+    // disbursed → active) and persisted both rows in loan_status_history,
+    // so this single write preserves the audit trail while ensuring no
+    // intermediate 'disbursed' row is ever observable to concurrent readers
+    // and the version check guards against concurrent state changes.
+    await this.disbursementRepository.updateLoanStatusWithVersion(
+      dto.loanId,
+      'active',
+      loan.version,
       tx,
     );
 

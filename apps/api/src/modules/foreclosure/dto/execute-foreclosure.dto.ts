@@ -17,6 +17,16 @@ export class ExecuteForeclosureDto {
   @IsString()
   rebateReason?: string;
 
+  /**
+   * @deprecated Server-derived from authenticated user since 2026-06.
+   * Client-supplied value is logged but not trusted.
+   *
+   * H13 — Historically the client could nominate any user as the rebate
+   * authorizer, which broke the four-eyes audit trail. The service now
+   * derives this from the JWT subject; this field is retained for backwards
+   * compatibility (so existing clients don't 400) and for audit logging of
+   * the *attempted* value.
+   */
   @ApiPropertyOptional({ description: 'User ID authorizing the rebate' })
   @IsOptional()
   @IsUUID()

@@ -9,6 +9,7 @@ import { IdempotencyService } from '../idempotency/idempotency.service';
 import { ReceiptService } from '../receipt/receipt.service';
 import { PostCollectionDto } from './dto/post-collection.dto';
 import { BusinessRuleError, NotFoundError } from '../../common/errors';
+import { parseDateIST } from '../../common/utils/date.util';
 import {
   allocate,
   AllocationResult,
@@ -108,10 +109,20 @@ export class CollectionService {
   }
 
   /**
-   * Execute the collection atomically within a transaction.
-   * All steps use the tx client so failure rolls back everything.
+   * Tx-aware collection executor — same body as the previous private
+   * implementation, now public so cross-module callers (e.g. group bulk
+   * collection in GroupService) can run a collection inside an already-open
+   * transaction without nesting prisma.$transaction (which would deadlock).
+   *
+   * The caller is responsible for:
+   *   - Idempotency (call IdempotencyService.find before invoking this)
+   *   - Wrapping in a transaction (this method assumes `tx` is already a
+   *     live TransactionClient)
+   *
+   * For single-collection HTTP flows, use postCollection() which handles
+   * idempotency + tx-wrapping for you.
    */
-  private async executeCollection(
+  async executeCollection(
     tx: TxClient,
     dto: PostCollectionDto,
     actorId: string,
@@ -165,6 +176,10 @@ export class CollectionService {
       penaltyId: p.id,
       amountPaise: Number(p.amount_paise),
       paidPaise: Number(p.paid_paise), // Real partial-paid amount; was hard-coded 0n (bug)
+      // installment_id can be undefined in legacy/mock data; left undefined when absent
+      // so the allocation engine can still run and the per-row allocation persistence
+      // will fall back to a deterministic installment lookup if needed.
+      installmentId: (p as { installment_id?: string }).installment_id,
     }));
 
     const allocationResult = allocate({
@@ -200,7 +215,9 @@ export class CollectionService {
       penaltyIncomeAccount.id,
     );
 
-    const paymentDate = new Date(dto.paymentDate);
+    // (H5) IST-midnight pin: avoid host-TZ drift in receipt/journal dates.
+    // parseDateIST('YYYY-MM-DD') anchors to 00:00 IST, the canonical business day.
+    const paymentDate = parseDateIST(dto.paymentDate);
 
     const journalEntry = await this.accountingService.createJournalEntry(
       {
@@ -251,7 +268,12 @@ export class CollectionService {
 
     // ── Step i: Compute new outstanding and update loan ──
     const newOutstanding = new Decimal(totalOutstanding).minus(dto.amountPaise).toNumber();
-    const { dpd, overdueBucket } = this.computeDpdAndBucket(loan.schedules, allocationResult, paymentDate);
+    // (H6) DPD is "days past due as of today (system clock)", NOT the user-supplied
+    // paymentDate — a back-dated payment must not magically clear DPD, and a
+    // future-dated payment must not invent fake DPD. The "today" instant is the
+    // single source of truth for both DPD and auto-status-transition logic.
+    const nowForDpd = new Date();
+    const { dpd, overdueBucket } = this.computeDpdAndBucket(loan.schedules, allocationResult, nowForDpd);
 
     await this.collectionRepository.updateLoanOutstanding(
       dto.loanId,
@@ -267,12 +289,14 @@ export class CollectionService {
     // Past-due check uses SYSTEM time (today), NOT user-supplied paymentDate.
     // Otherwise a back-dated or future-dated paymentDate could falsely flip
     // status: e.g. paymentDate=2030 makes all installments look "settled".
+    // Reuses the same `nowForDpd` instant so DPD and status are computed at
+    // exactly the same moment.
     const newStatus = this.computeAutoTransitionStatus(
       lockedLoan.status,
       newOutstanding,
       loan.schedules,
       allocationResult,
-      new Date(),
+      nowForDpd,
     );
     if (newStatus && newStatus !== lockedLoan.status) {
       await tx.loans.update({
@@ -431,6 +455,46 @@ export class CollectionService {
   }
 
   /**
+   * (M15 prep) Recompute the loan's authoritative outstanding balance from the
+   * schedule + pending penalties — the single source of truth for
+   * cached_outstanding_paise.
+   *
+   * Public so collection reversal (and any other module that mutates schedule
+   * paid amounts or penalty payment state) can recompute the cache atomically
+   * within its own transaction instead of subtracting deltas (which drifts
+   * across rounding boundaries).
+   *
+   * Returns the recomputed value AND writes it back to loans.cached_outstanding_paise.
+   * Throws NotFoundError if the loan does not exist.
+   */
+  async recomputeCachedOutstanding(loanId: string, tx: TxClient): Promise<number> {
+    const loan = await this.collectionRepository.getLoanForCollection(loanId, tx);
+    if (!loan) throw new NotFoundError(`Loan not found: ${loanId}`);
+
+    const scheduleOutstanding = this.computeOutstanding(loan.schedules);
+    const pendingPenalties = await this.collectionRepository.getPendingPenalties(loanId, tx);
+    const penaltyOutstanding = pendingPenalties.reduce(
+      (sum, p) => sum + Math.max(0, Number(p.amount_paise) - Number(p.paid_paise)),
+      0,
+    );
+    const total = scheduleOutstanding + penaltyOutstanding;
+
+    await this.collectionRepository.updateLoanOutstanding(
+      loanId,
+      {
+        cached_outstanding_paise: BigInt(Math.max(0, total)),
+        // Preserve current DPD/bucket; reversal/penalty flows can recompute
+        // these separately if needed. We don't override them here because
+        // recomputeCachedOutstanding is a narrow "money is the truth" helper.
+        dpd: loan.dpd ?? 0,
+        overdue_bucket: loan.overdue_bucket ?? null,
+      },
+      tx,
+    );
+    return total;
+  }
+
+  /**
    * Build journal entry lines for the collection.
    *
    * DR Cash/Bank (total amount)
@@ -490,51 +554,99 @@ export class CollectionService {
   }
 
   /**
-   * Build allocation records grouped by installment for persistence.
+   * Build allocation records for persistence.
+   *
+   * Two kinds of rows are produced:
+   *
+   * 1. INSTALLMENT rows — one per installment that received interest and/or
+   *    principal allocation. Aggregates interest + principal per installment.
+   *    `penalty_id` is null.
+   *
+   * 2. PENALTY rows — one per penalty allocation. Each carries the penalty's
+   *    parent installment_id (penalties.installment_id is NOT NULL in the
+   *    schema, so we always have one) AND the penalty_id so reversal/reports
+   *    can join collection_allocations → penalties directly without round-
+   *    tripping through installments.
+   *
+   * We do NOT roll penalty_paise into the same row as interest/principal —
+   * that loses the penalty_id linkage. Each penalty allocation gets its own
+   * row with penalty_paise > 0 and interest/principal = 0.
+   *
+   * If a penalty allocation arrives without a known installment_id (legacy
+   * data / test fixtures), we skip persisting it as an allocation row — the
+   * penalties.paid_paise + is_paid columns still track payment progress so
+   * outstanding/closure math stays correct.
    */
   private buildAllocationRecords(
     collectionId: string,
     allocationResult: AllocationResult,
   ) {
-    // Group allocations by installment
-    const byInstallment = new Map<
-      string,
-      { penalty: number; interest: number; principal: number }
-    >();
+    // 1. INSTALLMENT rows — interest + principal grouped by installment_id.
+    const byInstallment = new Map<string, { interest: number; principal: number }>();
 
     for (const line of allocationResult.allocations) {
+      if (line.component === 'penalty') continue; // handled below
       const instId = line.installmentId;
-      if (!instId) continue; // Penalty allocations without installment ID
+      if (!instId) continue;
 
-      const existing = byInstallment.get(instId) ?? { penalty: 0, interest: 0, principal: 0 };
-      switch (line.component) {
-        case 'penalty':
-          existing.penalty += line.amountPaise;
-          break;
-        case 'interest':
-          existing.interest += line.amountPaise;
-          break;
-        case 'principal':
-          existing.principal += line.amountPaise;
-          break;
-      }
+      const existing = byInstallment.get(instId) ?? { interest: 0, principal: 0 };
+      if (line.component === 'interest') existing.interest += line.amountPaise;
+      if (line.component === 'principal') existing.principal += line.amountPaise;
       byInstallment.set(instId, existing);
     }
 
-    // Also handle penalty allocations that reference penaltyId but not installmentId
-    // These need to be associated with an installment for the allocation record.
-    // Penalties are linked to installments via the penalties table.
-    // For simplicity, penalty allocations without installmentId are tracked
-    // at the loan level (we skip them in per-installment records).
+    const installmentRows: ReturnType<typeof this.makeAllocationRow>[] = [];
+    for (const [installmentId, amounts] of byInstallment) {
+      installmentRows.push(this.makeAllocationRow({
+        collectionId,
+        installmentId,
+        penaltyId: null,
+        penalty: 0,
+        interest: amounts.interest,
+        principal: amounts.principal,
+      }));
+    }
 
-    return [...byInstallment.entries()].map(([installmentId, amounts]) => ({
-      collection_id: collectionId,
-      installment_id: installmentId,
-      penalty_paise: amounts.penalty,
-      interest_paise: amounts.interest,
-      principal_paise: amounts.principal,
-      total_paise: amounts.penalty + amounts.interest + amounts.principal,
-    }));
+    // 2. PENALTY rows — one per penalty allocation, carrying penalty_id +
+    //    installment_id (the penalty's parent installment). Rows without a
+    //    known installment_id are skipped (NOT NULL constraint).
+    const penaltyRows: ReturnType<typeof this.makeAllocationRow>[] = [];
+    for (const line of allocationResult.allocations) {
+      if (line.component !== 'penalty') continue;
+      const penaltyId = line.penaltyId;
+      const installmentId = line.installmentId;
+      if (!penaltyId || !installmentId) continue;
+
+      penaltyRows.push(this.makeAllocationRow({
+        collectionId,
+        installmentId,
+        penaltyId,
+        penalty: line.amountPaise,
+        interest: 0,
+        principal: 0,
+      }));
+    }
+
+    return [...installmentRows, ...penaltyRows];
+  }
+
+  private makeAllocationRow(args: {
+    collectionId: string;
+    installmentId: string;
+    penaltyId: string | null;
+    penalty: number;
+    interest: number;
+    principal: number;
+  }) {
+    return {
+      collection_id: args.collectionId,
+      installment_id: args.installmentId,
+      penalty_id: args.penaltyId,
+      penalty_paise: args.penalty,
+      interest_paise: args.interest,
+      principal_paise: args.principal,
+      total_paise: args.penalty + args.interest + args.principal,
+    };
   }
 
   /**
@@ -634,7 +746,12 @@ export class CollectionService {
       interest_paid_paise: bigint;
     }[],
     allocationResult: AllocationResult,
-    paymentDate: Date,
+    /**
+     * The "now" instant used to decide which installments are past due.
+     * Caller MUST pass `new Date()` (system clock), NOT the user-supplied
+     * paymentDate — see (H6) above.
+     */
+    now: Date,
   ): string | null {
     if (!['active', 'overdue'].includes(currentStatus)) return null;
 
@@ -659,7 +776,7 @@ export class CollectionService {
         interestPaid >= Number(s.interest_paise);
       if (!fullyPaid) {
         anyUnpaid = true;
-        if (s.due_date < paymentDate) anyPastDue = true;
+        if (s.due_date < now) anyPastDue = true;
       }
     }
 
@@ -681,7 +798,13 @@ export class CollectionService {
       interest_paid_paise: bigint;
     }[],
     allocationResult: AllocationResult,
-    paymentDate: Date,
+    /**
+     * The "as of" instant — DPD is computed as days between this and the
+     * earliest still-unpaid installment due_date. Production callers MUST
+     * pass new Date() (system clock); tests may pass a fixed date to exercise
+     * specific bucket boundaries.
+     */
+    asOfDate: Date,
   ): { dpd: number; overdueBucket: string | null } {
     // Build updated paid amounts
     const additions = new Map<string, { principal: number; interest: number }>();
@@ -713,8 +836,7 @@ export class CollectionService {
       return { dpd: 0, overdueBucket: 'bucket_0' };
     }
 
-    const today = paymentDate;
-    const diffMs = today.getTime() - earliestUnpaidDate.getTime();
+    const diffMs = asOfDate.getTime() - earliestUnpaidDate.getTime();
     const dpd = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
 
     let overdueBucket: string;

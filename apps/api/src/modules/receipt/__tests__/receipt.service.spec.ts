@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ReceiptService, GenerateReceiptInput } from '../receipt.service';
-import { ReceiptRepository } from '../receipt.repository';
+import { ReceiptService, type GenerateReceiptInput } from '../receipt.service';
+import type { ReceiptRepository } from '../receipt.repository';
 import { NotFoundError } from '../../../common/errors';
 
 function makeReceiptInput(overrides?: Partial<GenerateReceiptInput>): GenerateReceiptInput {

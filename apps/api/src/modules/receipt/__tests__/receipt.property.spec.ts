@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import * as fc from 'fast-check';
-import { ReceiptService, GenerateReceiptInput } from '../receipt.service';
-import { ReceiptRepository } from '../receipt.repository';
+import { ReceiptService, type GenerateReceiptInput } from '../receipt.service';
+import type { ReceiptRepository } from '../receipt.repository';
 
 /**
  * Property 18: Receipt Reconciliation

@@ -113,16 +113,23 @@ function createMockDeps() {
 }
 
 
+// Quote must match what the service computes live from createMockLoan()
+// (H16 quote-staleness check rejects drift > 100 paise).
+//   outstanding   = (833333 − 200000) + 833333 + 833334 = 2_300_000
+//   flat accrued  = total_interest 1_200_000 (settlement > last_due)
+//                   − interest already paid 50_000        = 1_150_000
+//   penalties     = 5_000
+//   settlement    = 2_300_000 + 1_150_000 + 5_000         = 3_455_000
 function buildQuoteRecord(overrides: Record<string, unknown> = {}) {
   return {
     id: 'fc-1',
     loan_id: 'loan-1',
     status: 'quote',
-    outstanding_principal_paise: 1466667n,
-    accrued_interest_paise: 50000n,
-    pending_penalties_paise: 5000n,
+    outstanding_principal_paise: 2_300_000n,
+    accrued_interest_paise: 1_150_000n,
+    pending_penalties_paise: 5_000n,
     rebate_paise: 0n,
-    settlement_amount_paise: 1521667n,
+    settlement_amount_paise: 3_455_000n,
     requested_by: 'user-requester',
     quote_expires_at: new Date(Date.now() + 86400000),
     rebate_reason: null,
@@ -138,12 +145,16 @@ describe('Foreclosure Flow Integration', () => {
   let repo: ReturnType<typeof createMockForeclosureRepo>;
   let deps: ReturnType<typeof createMockDeps>;
 
+  let loanService: { validateTransition: ReturnType<typeof vi.fn> };
+
   beforeEach(() => {
     repo = createMockForeclosureRepo();
     deps = createMockDeps();
+    loanService = { validateTransition: vi.fn() };
     service = new ForeclosureService(
       deps.prisma as never, repo as never, deps.accounting as never,
       deps.audit as never, deps.idempotency as never, deps.receipt as never,
+      loanService as never,
     );
   });
 
@@ -821,7 +832,24 @@ describe('Foreclosure Flow Integration', () => {
     });
 
     it('should produce balanced journal for settlement with all components', async () => {
-      // Quote with principal + interest + penalties
+      // Quote with principal + interest + penalties. Override the loan and
+      // penalty mocks so the live recomputation matches the quote within
+      // H16 tolerance.
+      repo.getLoanForForeclosure.mockResolvedValue(createMockLoan({
+        total_interest_paise: 8_000n,
+        last_due_date: new Date('2024-12-01'),
+        schedules: [
+          {
+            id: 's-1', installment_number: 1, due_date: new Date('2024-02-01'),
+            principal_paise: 100_000n, interest_paise: 8_000n, total_paise: 108_000n,
+            principal_paid_paise: 0n, interest_paid_paise: 0n,
+            penalty_paid_paise: 0n, status: 'pending',
+          },
+        ],
+      }));
+      repo.getPendingPenalties.mockResolvedValue([
+        { id: 'pen-1', amount_paise: 3_000n, installment_id: 's-1' },
+      ]);
       repo.findById.mockResolvedValue(
         buildQuoteRecord({
           outstanding_principal_paise: 100000n,
@@ -846,6 +874,23 @@ describe('Foreclosure Flow Integration', () => {
     });
 
     it('should produce balanced journal for settlement with rebate', async () => {
+      // Live state must match the (rebate-adjusted) quote. Compare uses
+      // quote.rebate_paise = 5000, so live settlement = 100k+8k+3k − 5k = 106k.
+      repo.getLoanForForeclosure.mockResolvedValue(createMockLoan({
+        total_interest_paise: 8_000n,
+        last_due_date: new Date('2024-12-01'),
+        schedules: [
+          {
+            id: 's-1', installment_number: 1, due_date: new Date('2024-02-01'),
+            principal_paise: 100_000n, interest_paise: 8_000n, total_paise: 108_000n,
+            principal_paid_paise: 0n, interest_paid_paise: 0n,
+            penalty_paid_paise: 0n, status: 'pending',
+          },
+        ],
+      }));
+      repo.getPendingPenalties.mockResolvedValue([
+        { id: 'pen-1', amount_paise: 3_000n, installment_id: 's-1' },
+      ]);
       repo.findById.mockResolvedValue(
         buildQuoteRecord({
           outstanding_principal_paise: 100000n,

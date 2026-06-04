@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Prisma } from '@prisma/client';
 import { IdempotencyService } from '../idempotency.service';
-import { PrismaService } from '../../../database/prisma.service';
+import type { PrismaService } from '../../../database/prisma.service';
 
 /**
  * Unit tests for IdempotencyService.
@@ -181,7 +181,7 @@ describe('IdempotencyService', () => {
       const after = Date.now();
 
       const createCall = mockPrisma.idempotency_keys.create.mock
-        .calls[0]?.[0] as any;
+        .calls[0]?.[0];
       const expiresAt = new Date(
         createCall.data.expires_at as string,
       ).getTime();

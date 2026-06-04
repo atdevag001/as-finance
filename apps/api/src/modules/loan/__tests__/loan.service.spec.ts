@@ -327,11 +327,14 @@ describe('LoanService', () => {
       const result = await service.approve('loan-1', { remarks: 'Looks good' }, 'user-approver', 'manager');
 
       expect(result).toBeDefined();
+      // approve() now wraps all writes in prisma.$transaction so every
+      // repo write receives the tx client as an extra trailing arg.
       expect(repo.updateStatus).toHaveBeenCalledWith(
         'loan-1',
         'approved',
         expect.objectContaining({ approved_by: 'user-approver' }),
         expect.any(Number), // optimistic-lock version
+        expect.anything(), // tx
       );
     });
 
@@ -343,6 +346,7 @@ describe('LoanService', () => {
         'approved',
         expect.objectContaining({ approved_by: 'user-approver' }),
         expect.any(Number),
+        expect.anything(), // tx
       );
     });
 
@@ -356,6 +360,7 @@ describe('LoanService', () => {
           actor_id: 'user-approver',
           remarks: 'All checks passed',
         }),
+        expect.anything(), // tx
       );
     });
 
@@ -372,6 +377,7 @@ describe('LoanService', () => {
           before_state: { status: 'under_review' },
           after_state: expect.objectContaining({ status: 'approved', approved_by: 'user-approver' }),
         }),
+        expect.anything(), // tx
       );
     });
 
@@ -381,11 +387,13 @@ describe('LoanService', () => {
       expect(repo.createScheduleInstallments).toHaveBeenCalledWith(
         'loan-1',
         expect.any(Array),
+        expect.anything(), // tx
       );
       expect(repo.updateLoanTotals).toHaveBeenCalledWith(
         'loan-1',
         expect.any(Number),
         expect.any(Number),
+        expect.anything(), // tx
       );
     });
 
@@ -434,6 +442,7 @@ describe('LoanService', () => {
         'approved',
         expect.objectContaining({ approved_by: 'admin-user' }),
         expect.any(Number),
+        expect.anything(), // tx
       );
     });
 
@@ -450,6 +459,7 @@ describe('LoanService', () => {
         'approved',
         expect.objectContaining({ approved_by: 'different-user' }),
         expect.any(Number),
+        expect.anything(), // tx
       );
     });
 

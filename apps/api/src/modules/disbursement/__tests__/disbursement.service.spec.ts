@@ -20,6 +20,7 @@ function createMockLoan(overrides: Record<string, unknown> = {}) {
     principal_paise: 10000000n, // ₹1,00,000
     tenure_months: 12,
     status: 'approved',
+    version: 1,
     total_payable_paise: 11200000n,
     created_by: 'user-creator',
     approved_by: 'user-approver',
@@ -57,6 +58,7 @@ function createMockRepo() {
     findAccountByCode: vi.fn(),
     create: vi.fn(),
     updateLoanStatus: vi.fn(),
+    updateLoanStatusWithVersion: vi.fn(),
     createStatusHistory: vi.fn(),
     updateLoanForDisbursement: vi.fn(),
     enqueueOutboxMessage: vi.fn(),
@@ -223,13 +225,22 @@ describe('DisbursementService', () => {
     it('should transition loan status approved → disbursed → active', async () => {
       await service.disburse(dto, 'actor-1', 'manager');
 
-      // Two status updates: approved→disbursed, disbursed→active
-      expect(repo.updateLoanStatus).toHaveBeenCalledTimes(2);
-      expect(repo.updateLoanStatus.mock.calls[0]![1]).toBe('disbursed');
-      expect(repo.updateLoanStatus.mock.calls[1]![1]).toBe('active');
+      // C6: Three status writes consolidated into ONE final transition.
+      // We persist both edges of the state machine in loan_status_history
+      // for audit traceability, but only write the row once (approved →
+      // active) via updateLoanStatusWithVersion — no intermediate
+      // 'disbursed' row ever lands in the loans table.
+      expect(repo.updateLoanStatus).not.toHaveBeenCalled();
+      expect(repo.updateLoanStatusWithVersion).toHaveBeenCalledTimes(1);
+      const statusCall = repo.updateLoanStatusWithVersion.mock.calls[0]!;
+      expect(statusCall[1]).toBe('active');
+      // Version is passed for optimistic-lock check
+      expect(statusCall[2]).toBe(1);
 
-      // Two status history entries
+      // Two status history entries (audit trail for both edges)
       expect(repo.createStatusHistory).toHaveBeenCalledTimes(2);
+      expect(repo.createStatusHistory.mock.calls[0]![0].to_status).toBe('disbursed');
+      expect(repo.createStatusHistory.mock.calls[1]![0].to_status).toBe('active');
     });
 
     it('should create audit log entry', async () => {
@@ -433,7 +444,7 @@ describe('DisbursementService', () => {
    */
   describe('calculateProcessingFee()', () => {
     // Helper to call the private method directly
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     function calcFee(principalPaise: bigint, feeType: string, feeValue: number): bigint {
       return (service as any)['calculateProcessingFee'](principalPaise, feeType, feeValue);
     }

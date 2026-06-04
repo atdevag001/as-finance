@@ -54,6 +54,7 @@ export class ForeclosureRepository {
         cached_outstanding_paise: true,
         disbursement_date: true,
         last_due_date: true,
+        last_interest_accrued_to: true,
         dpd: true,
         overdue_bucket: true,
         created_by: true,
@@ -200,6 +201,7 @@ export class ForeclosureRepository {
       cached_outstanding_paise?: bigint | number;
       dpd?: number;
       overdue_bucket?: string | null;
+      last_interest_accrued_to?: Date | null;
     },
     tx: TxClient,
   ) {

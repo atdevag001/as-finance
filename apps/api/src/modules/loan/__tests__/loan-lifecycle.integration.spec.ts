@@ -353,9 +353,9 @@ describe('Loan Lifecycle Integration', () => {
     });
 
     it('should prevent any transition from rejected (terminal state)', () => {
-      expect(() => loanService.validateTransition('rejected', 'draft')).toThrow(BusinessRuleError);
-      expect(() => loanService.validateTransition('rejected', 'submitted')).toThrow(BusinessRuleError);
-      expect(() => loanService.validateTransition('rejected', 'active')).toThrow(BusinessRuleError);
+      expect(() => { loanService.validateTransition('rejected', 'draft'); }).toThrow(BusinessRuleError);
+      expect(() => { loanService.validateTransition('rejected', 'submitted'); }).toThrow(BusinessRuleError);
+      expect(() => { loanService.validateTransition('rejected', 'active'); }).toThrow(BusinessRuleError);
     });
   });
 
@@ -707,12 +707,12 @@ describe('Loan Lifecycle Integration', () => {
 
   describe('Invalid state transitions', () => {
     it('should reject all invalid transitions', () => {
-      expect(() => loanService.validateTransition('draft', 'approved')).toThrow(BusinessRuleError);
-      expect(() => loanService.validateTransition('draft', 'active')).toThrow(BusinessRuleError);
-      expect(() => loanService.validateTransition('closed', 'active')).toThrow(BusinessRuleError);
-      expect(() => loanService.validateTransition('rejected', 'submitted')).toThrow(BusinessRuleError);
-      expect(() => loanService.validateTransition('defaulted', 'active')).toThrow(BusinessRuleError);
-      expect(() => loanService.validateTransition('foreclosed', 'active')).toThrow(BusinessRuleError);
+      expect(() => { loanService.validateTransition('draft', 'approved'); }).toThrow(BusinessRuleError);
+      expect(() => { loanService.validateTransition('draft', 'active'); }).toThrow(BusinessRuleError);
+      expect(() => { loanService.validateTransition('closed', 'active'); }).toThrow(BusinessRuleError);
+      expect(() => { loanService.validateTransition('rejected', 'submitted'); }).toThrow(BusinessRuleError);
+      expect(() => { loanService.validateTransition('defaulted', 'active'); }).toThrow(BusinessRuleError);
+      expect(() => { loanService.validateTransition('foreclosed', 'active'); }).toThrow(BusinessRuleError);
     });
 
     it('should reject transitions from terminal states', () => {
@@ -721,7 +721,7 @@ describe('Loan Lifecycle Integration', () => {
 
       for (const terminal of terminalStates) {
         for (const target of allStatuses) {
-          expect(() => loanService.validateTransition(terminal, target)).toThrow(BusinessRuleError);
+          expect(() => { loanService.validateTransition(terminal, target); }).toThrow(BusinessRuleError);
         }
       }
     });

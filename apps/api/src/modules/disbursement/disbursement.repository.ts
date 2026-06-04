@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
+import { ConflictError } from '../../common/errors';
 
 /**
  * Prisma transaction client type — a subset of PrismaService used within
@@ -45,7 +46,7 @@ export class DisbursementRepository {
    */
   async create(data: CreateDisbursementData, tx?: TxClient) {
     const client = tx ?? this.prisma;
-    return (client as TxClient).disbursements.create({
+    return (client).disbursements.create({
       data: {
         loan_id: data.loan_id,
         amount_paise: data.amount_paise,
@@ -82,7 +83,7 @@ export class DisbursementRepository {
    */
   async isAlreadyDisbursed(loanId: string, tx?: TxClient): Promise<boolean> {
     const client = tx ?? this.prisma;
-    const count = await (client as TxClient).disbursements.count({
+    const count = await (client).disbursements.count({
       where: { loan_id: loanId },
     });
     return count > 0;
@@ -104,7 +105,7 @@ export class DisbursementRepository {
    */
   async hasSchedule(loanId: string, tx?: TxClient): Promise<boolean> {
     const client = tx ?? this.prisma;
-    const count = await (client as TxClient).loan_schedules.count({
+    const count = await (client).loan_schedules.count({
       where: { loan_id: loanId },
     });
     return count > 0;
@@ -114,10 +115,10 @@ export class DisbursementRepository {
    * Check if a customer has uploaded KYC documents.
    * Returns true if documents exist or if no documents are required (no document records at all).
    */
-  async hasKycDocuments(customerId: string, tx?: TxClient): Promise<boolean> {
+  hasKycDocuments(_customerId: string, _tx?: TxClient): Promise<boolean> {
     // For now, skip KYC check — KYC upload is handled separately and
     // should not block disbursement in environments without MinIO/S3
-    return true;
+    return Promise.resolve(true);
   }
 
   /**
@@ -125,7 +126,7 @@ export class DisbursementRepository {
    */
   async getLoanForDisbursement(loanId: string, tx?: TxClient) {
     const client = tx ?? this.prisma;
-    return (client as TxClient).loans.findUnique({
+    return (client).loans.findUnique({
       where: { id: loanId },
       select: {
         id: true,
@@ -134,6 +135,7 @@ export class DisbursementRepository {
         principal_paise: true,
         tenure_months: true,
         status: true,
+        version: true,
         total_payable_paise: true,
         created_by: true,
         approved_by: true,
@@ -168,11 +170,14 @@ export class DisbursementRepository {
 
   /**
    * Update loan fields for disbursement within a transaction.
+   *
+   * Note: status is intentionally NOT written here — the active transition is
+   * applied via `updateLoanStatusWithVersion` so the optimistic-lock check is
+   * not bypassed. This method writes only the date/balance fields.
    */
   async updateLoanForDisbursement(
     loanId: string,
     data: {
-      status: string;
       disbursement_date: Date;
       first_due_date: Date;
       last_due_date: Date;
@@ -216,12 +221,41 @@ export class DisbursementRepository {
 
   /**
    * Update loan status within a transaction.
+   *
+   * @deprecated Use `updateLoanStatusWithVersion` — this method bypasses the
+   * optimistic-lock version check and can clobber concurrent writes.
    */
   async updateLoanStatus(loanId: string, status: string, tx: TxClient) {
     return tx.loans.update({
       where: { id: loanId },
-      data: { status } as never,
+      data: { status, version: { increment: 1 } } as never,
     });
+  }
+
+  /**
+   * Update loan status with optimistic-lock version check within a transaction.
+   * Mirrors `LoanRepository.updateStatus`'s contract so disbursement transitions
+   * participate in the same concurrency-safety regime as other loan transitions.
+   *
+   * Throws `CONFLICT_OPTIMISTIC_LOCK` if the row was modified since the version
+   * was read (someone else bumped it — caller must reload and retry).
+   */
+  async updateLoanStatusWithVersion(
+    loanId: string,
+    status: string,
+    expectedVersion: number,
+    tx: TxClient,
+  ) {
+    const result = await tx.loans.updateMany({
+      where: { id: loanId, version: expectedVersion },
+      data: { status, version: { increment: 1 } } as never,
+    });
+    if (result.count === 0) {
+      throw new ConflictError(
+        'Loan was modified by another request. Please reload and retry.',
+        'CONFLICT_OPTIMISTIC_LOCK',
+      );
+    }
   }
 
   /**

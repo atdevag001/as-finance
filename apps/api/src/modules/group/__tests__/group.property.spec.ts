@@ -102,6 +102,7 @@ function createMocks() {
 
   const mockCollectionService = {
     postCollection: vi.fn(),
+    executeCollection: vi.fn(),
   };
 
   const mockAuditService = {
@@ -350,10 +351,7 @@ describe('Property 31: Group Collection Sum Integrity', () => {
           const groupLoans = breakdown.map((m) => ({ id: m.loanId, loan_number: `LN-${m.loanId}` }));
           mockGroupRepository.getGroupMemberLoans.mockResolvedValue(groupLoans);
           mockGroupRepository.createGroupCollection.mockResolvedValue({ id: 'gc-1' });
-          mockCollectionService.postCollection.mockResolvedValue({
-            statusCode: 201,
-            data: { collectionId: 'c-1' },
-          });
+          mockCollectionService.executeCollection.mockResolvedValue({ collectionId: 'c-1' });
           mockIdempotencyService.store.mockResolvedValue({});
 
           // Should NOT throw — sum matches total
@@ -462,10 +460,7 @@ describe('Property 41: Batch Collection Per-Member Dispatch', () => {
             breakdown.map((m: BreakdownItem) => ({ id: m.loanId, loan_number: `LN-${m.loanId}` })),
           );
           mockGroupRepository.createGroupCollection.mockResolvedValue({ id: 'gc-1' });
-          mockCollectionService.postCollection.mockResolvedValue({
-            statusCode: 201,
-            data: { collectionId: 'c-1' },
-          });
+          mockCollectionService.executeCollection.mockResolvedValue({ collectionId: 'c-1' });
           mockIdempotencyService.store.mockResolvedValue({});
 
           await service.postGroupCollection(
@@ -482,15 +477,17 @@ describe('Property 41: Batch Collection Per-Member Dispatch', () => {
           );
 
           // Exactly N calls — one per member
-          expect(mockCollectionService.postCollection).toHaveBeenCalledTimes(breakdown.length);
+          expect(mockCollectionService.executeCollection).toHaveBeenCalledTimes(breakdown.length);
 
-          // Each member's loanId and amountPaise appear in exactly one call
-          const calls = mockCollectionService.postCollection.mock.calls;
+          // Each member's loanId and amountPaise appear in exactly one call.
+          // executeCollection signature: (tx, dto, actorId, actorRole) — dto
+          // is the SECOND positional argument.
+          const calls = mockCollectionService.executeCollection.mock.calls;
           for (const member of breakdown) {
             const matchingCall = calls.find(
               (c: unknown[]) =>
-                (c[0] as { loanId: string; amountPaise: number }).loanId === member.loanId &&
-                (c[0] as { loanId: string; amountPaise: number }).amountPaise === member.amountPaise,
+                (c[1] as { loanId: string; amountPaise: number }).loanId === member.loanId &&
+                (c[1] as { loanId: string; amountPaise: number }).amountPaise === member.amountPaise,
             );
             expect(matchingCall).toBeDefined();
           }
@@ -522,10 +519,7 @@ describe('Property 41: Batch Collection Per-Member Dispatch', () => {
             breakdown.map((m: BreakdownItem) => ({ id: m.loanId, loan_number: `LN-${m.loanId}` })),
           );
           mockGroupRepository.createGroupCollection.mockResolvedValue({ id: 'gc-1' });
-          mockCollectionService.postCollection.mockResolvedValue({
-            statusCode: 201,
-            data: { collectionId: 'c-1' },
-          });
+          mockCollectionService.executeCollection.mockResolvedValue({ collectionId: 'c-1' });
           mockIdempotencyService.store.mockResolvedValue({});
 
           await service.postGroupCollection(
@@ -541,10 +535,12 @@ describe('Property 41: Batch Collection Per-Member Dispatch', () => {
             'collection_officer',
           );
 
-          // Sum of all dispatched amounts must equal total
-          const calls = mockCollectionService.postCollection.mock.calls;
+          // Sum of all dispatched amounts must equal total.
+          // executeCollection signature: (tx, dto, actorId, actorRole) — dto
+          // is the SECOND positional argument.
+          const calls = mockCollectionService.executeCollection.mock.calls;
           const dispatchedSum = calls.reduce(
-            (sum: number, c: unknown[]) => sum + (c[0] as { amountPaise: number }).amountPaise,
+            (sum: number, c: unknown[]) => sum + (c[1] as { amountPaise: number }).amountPaise,
             0,
           );
           expect(dispatchedSum).toBe(correctSum);
@@ -577,10 +573,7 @@ describe('Property 41: Batch Collection Per-Member Dispatch', () => {
             breakdown.map((m: BreakdownItem) => ({ id: m.loanId, loan_number: `LN-${m.loanId}` })),
           );
           mockGroupRepository.createGroupCollection.mockResolvedValue({ id: 'gc-1' });
-          mockCollectionService.postCollection.mockResolvedValue({
-            statusCode: 201,
-            data: { collectionId: 'c-1' },
-          });
+          mockCollectionService.executeCollection.mockResolvedValue({ collectionId: 'c-1' });
           mockIdempotencyService.store.mockResolvedValue({});
 
           await service.postGroupCollection(
@@ -596,13 +589,15 @@ describe('Property 41: Batch Collection Per-Member Dispatch', () => {
             'collection_officer',
           );
 
-          // Each member's idempotency key follows the pattern: {baseKey}__member__{loanId}
-          const calls = mockCollectionService.postCollection.mock.calls;
+          // Each member's idempotency key follows the pattern: {baseKey}__member__{loanId}.
+          // executeCollection signature: (tx, dto, actorId, actorRole) — dto
+          // is the SECOND positional argument.
+          const calls = mockCollectionService.executeCollection.mock.calls;
           for (const member of breakdown) {
             const expectedKey = `${baseKey}__member__${member.loanId}`;
             const matchingCall = calls.find(
               (c: unknown[]) =>
-                (c[0] as { idempotencyKey: string }).idempotencyKey === expectedKey,
+                (c[1] as { idempotencyKey: string }).idempotencyKey === expectedKey,
             );
             expect(matchingCall).toBeDefined();
           }
@@ -649,12 +644,12 @@ describe('Property 42: Batch Collection Atomicity', () => {
 
           // Make the Nth member's collection fail
           let callCount = 0;
-          mockCollectionService.postCollection.mockImplementation(async () => {
+          mockCollectionService.executeCollection.mockImplementation(async () => {
             const currentCall = callCount++;
             if (currentCall === failIndex) {
               throw new Error('Simulated member collection failure');
             }
-            return { statusCode: 201, data: { collectionId: `c-${currentCall}` } };
+            return { collectionId: `c-${currentCall}` };
           });
 
           // The entire group collection should fail
@@ -703,10 +698,7 @@ describe('Property 42: Batch Collection Atomicity', () => {
             breakdown.map((m: BreakdownItem) => ({ id: m.loanId, loan_number: `LN-${m.loanId}` })),
           );
           mockGroupRepository.createGroupCollection.mockResolvedValue({ id: 'gc-1' });
-          mockCollectionService.postCollection.mockResolvedValue({
-            statusCode: 201,
-            data: { collectionId: 'c-1' },
-          });
+          mockCollectionService.executeCollection.mockResolvedValue({ collectionId: 'c-1' });
           mockIdempotencyService.store.mockResolvedValue({});
 
           const result = await service.postGroupCollection(

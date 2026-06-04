@@ -104,20 +104,25 @@ describe('Property 3: Total Reconciliation — installment totals equal total pa
   });
 });
 
-// ─── Property 4: Rounding Absorption ────────────────────────────────────────
+// ─── Property 4: Rounding Distribution ──────────────────────────────────────
 
 /**
- * Property 4: Rounding Absorption
+ * Property 4: Rounding Distribution (H18)
  *
- * For all valid ScheduleParams, the rounding difference is absorbed exclusively
- * by the last installment. For flat interest, all non-last installments have
- * identical principal and interest. For reducing balance, all non-last installments
- * have the same total (EMI).
+ * For flat interest, the rounding remainder is distributed 1 paisa per
+ * installment across the FIRST `remainder` installments (not dumped into the
+ * last). As a consequence, every installment's principal differs from any
+ * other by AT MOST 1 paisa, and the same holds for interest. There are at
+ * most two distinct principal values and at most two distinct interest values
+ * in the schedule, and the two values (when both are present) differ by exactly 1.
+ *
+ * For reducing balance, all non-last installments have totalPaise ≤ EMI
+ * (clamped near the end to avoid cumulative overshoot).
  *
  * **Validates: Requirements 2.4**
  */
-describe('Property 4: Rounding Absorption — rounding difference in last installment only', () => {
-  it('flat interest: non-last installments have identical principal and interest', () => {
+describe('Property 4: Rounding Distribution — at most 1-paisa spread across flat installments', () => {
+  it('flat interest: any two installments differ by ≤ 1 paisa in principal and in interest', () => {
     const flatParamsArb = scheduleParamsArb.map((p) => ({
       ...p,
       interestType: InterestType.FLAT as InterestType,
@@ -128,13 +133,21 @@ describe('Property 4: Rounding Absorption — rounding difference in last instal
         const schedule = generateSchedule(params);
         if (schedule.length <= 1) return;
 
-        const firstPrincipal = schedule[0]!.principalPaise;
-        const firstInterest = schedule[0]!.interestPaise;
+        const principals = schedule.map((i) => i.principalPaise);
+        const interests = schedule.map((i) => i.interestPaise);
 
-        for (let i = 1; i < schedule.length - 1; i++) {
-          expect(schedule[i]!.principalPaise).toBe(firstPrincipal);
-          expect(schedule[i]!.interestPaise).toBe(firstInterest);
-        }
+        // At most 1 paisa spread between max and min, for both principal and interest.
+        const pMax = Math.max(...principals);
+        const pMin = Math.min(...principals);
+        expect(pMax - pMin).toBeLessThanOrEqual(1);
+
+        const iMax = Math.max(...interests);
+        const iMin = Math.min(...interests);
+        expect(iMax - iMin).toBeLessThanOrEqual(1);
+
+        // At most two distinct values per series (the "base" amount and base+1).
+        expect(new Set(principals).size).toBeLessThanOrEqual(2);
+        expect(new Set(interests).size).toBeLessThanOrEqual(2);
       }),
       { numRuns: 1000 },
     );

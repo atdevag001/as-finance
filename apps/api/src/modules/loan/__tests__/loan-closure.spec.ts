@@ -294,7 +294,7 @@ describe('LoanService.closeLoan', () => {
       ];
 
       for (const target of statuses) {
-        expect(() => service.validateTransition('closed', target)).toThrow(
+        expect(() => { service.validateTransition('closed', target); }).toThrow(
           BusinessRuleError,
         );
       }

@@ -10,6 +10,20 @@ import { ReceiptService } from '../receipt/receipt.service';
 import { ReverseCollectionDto } from './dto/reverse-collection.dto';
 import { BusinessRuleError, ConflictError, NotFoundError } from '../../common/errors';
 
+/**
+ * Schedule shape used for outstanding recomputation. The reversal flow keeps
+ * the in-memory schedule (loan.schedules) intact and applies the per-allocation
+ * subtractions locally — re-fetching mid-transaction would race with the
+ * updates we just issued.
+ */
+type ScheduleForOutstanding = {
+  id: string;
+  principal_paise: bigint;
+  interest_paise: bigint;
+  principal_paid_paise: bigint;
+  interest_paid_paise: bigint;
+};
+
 // Configure Decimal.js: ROUND_HALF_UP for financial calculations
 Decimal.set({ rounding: Decimal.ROUND_HALF_UP });
 
@@ -144,18 +158,36 @@ export class ReversalService {
       });
     }
 
-    // ── Step c2: Reverse penalty payments ──
-    // For each original allocation that paid penalty on an installment, find the
-    // penalty(ies) on that installment and reverse paid_paise / clear is_paid.
+    // ── Step c2: Reverse penalty payments (H4 fix) ──
+    // Targeted reversal: when forward collection allocation recorded `penalty_id`,
+    // we decrement THAT exact penalty row by THAT exact paise. This is safe
+    // against later penalty rows shifting the oldest-first order between
+    // forward and reverse (e.g. new penalty inserted, prior penalty waived).
+    //
+    // Pre-migration data has penalty_id = NULL — fall back to the legacy
+    // oldest-first walk for those rows so historical reversals stay correct.
     for (const alloc of originalAllocations) {
       const penaltyPaise = BigInt(alloc.penalty_paise);
       if (penaltyPaise <= 0n) continue;
 
-      // Reverse penalties in the SAME order forward allocation used (oldest
-      // penalty_period first). Reversal removes the most-recently-applied
-      // increment, but if the original allocation paid 1st → 2nd → 3rd, the
-      // reversal must clear in the same ASC order — otherwise partial-paid
-      // penalties end up with the wrong `is_paid` state.
+      if (alloc.penalty_id) {
+        // Post-migration: decrement the exact penalty that was paid. Clear
+        // is_paid unconditionally — any non-zero remainder means the penalty
+        // is no longer fully settled.
+        await tx.penalties.update({
+          where: { id: alloc.penalty_id },
+          data: {
+            paid_paise: { decrement: penaltyPaise },
+            is_paid: false,
+          },
+        });
+        continue;
+      }
+
+      // TODO(pre-migration): collection_allocations.penalty_id is NULL for
+      // rows created before the schema migration. Fall back to oldest-first
+      // walk over paid penalties on this installment. Remove this branch once
+      // all legacy allocations have been backfilled.
       const paidPenalties = await tx.penalties.findMany({
         where: {
           installment_id: alloc.installment_id,
@@ -235,10 +267,36 @@ export class ReversalService {
       totalPrincipal += Number(alloc.principal_paise);
     }
 
-    // Compute new outstanding after reversal
+    // Compute new outstanding from authoritative sources (M15 fix).
+    //
+    // Previously we did `currentOutstanding + reversalAmount`, which drifts
+    // whenever the cached value disagrees with the schedule/penalty truth
+    // (penalty accruals applied since the original collection, fee waivers,
+    // rounding boundaries, prior off-cycle adjustments, etc.). Recomputing
+    // gives a self-healing value.
+    //
+    // Schedule outstanding is computed from the in-memory schedules with the
+    // same subtractions we just persisted via restoreInstallments — equivalent
+    // to re-reading the table, but skips a round-trip mid-transaction.
+    //
+    // Penalty outstanding is queried fresh from the DB; step c2 above already
+    // decremented paid_paise on the affected penalty rows in this same tx.
     const currentOutstanding = Number(loan.cached_outstanding_paise ?? 0);
     const reversalAmount = Number(original.amount_paise);
-    const newOutstanding = currentOutstanding + reversalAmount;
+
+    const restoredScheduleOutstanding = this.computeRestoredScheduleOutstanding(
+      loan.schedules,
+      originalAllocations,
+    );
+    const pendingPenalties = await this.collectionRepository.getPendingPenalties(
+      original.loan_id,
+      tx,
+    );
+    const penaltyOutstanding = pendingPenalties.reduce(
+      (sum, p) => sum + Math.max(0, Number(p.amount_paise) - Number(p.paid_paise)),
+      0,
+    );
+    const newOutstanding = restoredScheduleOutstanding + penaltyOutstanding;
 
     let compensatingReceipt: { id: string; receipt_number: string } | null = null;
 
@@ -395,6 +453,10 @@ export class ReversalService {
 
   /**
    * Fetch original allocation records for the collection.
+   *
+   * `penalty_id` is included so reversal can decrement the exact penalty row
+   * that was originally paid (H4 fix). Pre-migration rows have penalty_id=NULL
+   * and fall back to the legacy oldest-first walk.
    */
   private async getOriginalAllocations(collectionId: string, tx: TxClient) {
     return tx.collection_allocations.findMany({
@@ -402,6 +464,7 @@ export class ReversalService {
       select: {
         id: true,
         installment_id: true,
+        penalty_id: true,
         penalty_paise: true,
         interest_paise: true,
         principal_paise: true,
@@ -504,6 +567,41 @@ export class ReversalService {
         tx,
       );
     }
+  }
+
+  /**
+   * Compute total schedule outstanding AFTER applying reversal subtractions.
+   *
+   * Mirrors CollectionService.computeOutstanding but works against the
+   * in-memory schedules with reversal deltas applied locally (so we don't
+   * have to re-read the schedule rows we just updated mid-transaction).
+   */
+  private computeRestoredScheduleOutstanding(
+    schedules: ScheduleForOutstanding[],
+    allocations: {
+      installment_id: string;
+      principal_paise: bigint;
+      interest_paise: bigint;
+    }[],
+  ): number {
+    const subtractions = new Map<string, { principal: number; interest: number }>();
+    for (const alloc of allocations) {
+      const existing = subtractions.get(alloc.installment_id) ?? { principal: 0, interest: 0 };
+      existing.principal += Number(alloc.principal_paise);
+      existing.interest += Number(alloc.interest_paise);
+      subtractions.set(alloc.installment_id, existing);
+    }
+
+    let outstanding = new Decimal(0);
+    for (const s of schedules) {
+      const sub = subtractions.get(s.id) ?? { principal: 0, interest: 0 };
+      const principalPaid = Math.max(0, Number(s.principal_paid_paise) - sub.principal);
+      const interestPaid = Math.max(0, Number(s.interest_paid_paise) - sub.interest);
+      const principalRemaining = new Decimal(Number(s.principal_paise)).minus(principalPaid);
+      const interestRemaining = new Decimal(Number(s.interest_paise)).minus(interestPaid);
+      outstanding = outstanding.plus(principalRemaining).plus(interestRemaining);
+    }
+    return outstanding.toDecimalPlaces(0, Decimal.ROUND_HALF_UP).toNumber();
   }
 
   /**

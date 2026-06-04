@@ -59,6 +59,9 @@ function createMockCollectionRepository() {
     updateLoanOutstanding: vi.fn(),
     getOfficerName: vi.fn().mockResolvedValue('Test Officer'),
     findAccountByCode: vi.fn(),
+    // M15: reversal recomputes outstanding from schedule + pending penalties.
+    // Default = no pending penalties so schedule-only recompute is exercised.
+    getPendingPenalties: vi.fn().mockResolvedValue([]),
   };
 }
 
@@ -642,6 +645,7 @@ describe('ReversalService', () => {
         select: {
           id: true,
           installment_id: true,
+          penalty_id: true,
           penalty_paise: true,
           interest_paise: true,
           principal_paise: true,

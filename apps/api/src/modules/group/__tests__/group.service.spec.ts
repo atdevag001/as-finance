@@ -21,6 +21,7 @@ const mockGroupRepository = {
 
 const mockCollectionService = {
   postCollection: vi.fn(),
+  executeCollection: vi.fn(),
 };
 
 const mockAuditService = {
@@ -339,10 +340,7 @@ describe('GroupService', () => {
         { id: 'l2', loan_number: 'LN-2' },
       ]);
       mockGroupRepository.createGroupCollection.mockResolvedValue({ id: 'gc1' });
-      mockCollectionService.postCollection.mockResolvedValue({
-        statusCode: 201,
-        data: { collectionId: 'c1' },
-      });
+      mockCollectionService.executeCollection.mockResolvedValue({ collectionId: 'c1' });
       mockAuditService.createAuditLog.mockResolvedValue({});
       mockIdempotencyService.store.mockResolvedValue({});
 
@@ -363,9 +361,12 @@ describe('GroupService', () => {
       );
 
       expect(result.statusCode).toBe(201);
-      expect(mockCollectionService.postCollection).toHaveBeenCalledTimes(2);
-      // Verify deterministic idempotency keys for member collections
-      expect(mockCollectionService.postCollection).toHaveBeenCalledWith(
+      expect(mockCollectionService.executeCollection).toHaveBeenCalledTimes(2);
+      // Verify deterministic idempotency keys for member collections.
+      // executeCollection takes (tx, dto, actorId, actorRole) so the dto is
+      // the SECOND argument.
+      expect(mockCollectionService.executeCollection).toHaveBeenCalledWith(
+        expect.anything(),
         expect.objectContaining({
           loanId: 'l1',
           amountPaise: 6000,

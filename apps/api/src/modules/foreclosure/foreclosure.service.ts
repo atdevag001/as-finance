@@ -11,6 +11,8 @@ import { CreateForeclosureQuoteDto } from './dto/create-foreclosure-quote.dto';
 import { ExecuteForeclosureDto } from './dto/execute-foreclosure.dto';
 import { BusinessRuleError, NotFoundError } from '../../common/errors';
 import { canBypassMakerChecker } from '../../common/constants/maker-checker';
+import { calendarDaysDiff } from '../../common/utils/date.util';
+import { LoanService } from '../loan/loan.service';
 
 // Configure Decimal.js: ROUND_HALF_UP for financial calculations
 Decimal.set({ rounding: Decimal.ROUND_HALF_UP });
@@ -94,14 +96,12 @@ export function calculateFlatAccruedInterest(
   lastDueDate: Date,
   settlementDate: Date,
 ): number {
-  const totalDays = Math.max(
-    1,
-    Math.floor((lastDueDate.getTime() - disbursementDate.getTime()) / (1000 * 60 * 60 * 24)),
-  );
-  const elapsedDays = Math.max(
-    0,
-    Math.floor((settlementDate.getTime() - disbursementDate.getTime()) / (1000 * 60 * 60 * 24)),
-  );
+  // H6: Use calendar-day diff (IST-aware), not raw ms division
+  const totalDays = Math.max(1, calendarDaysDiff(disbursementDate, lastDueDate));
+  // H17: Clamp elapsed days to [0, totalDays] so a settlement past the last
+  // due date does not over-accrue beyond the contractual total interest.
+  const rawElapsed = calendarDaysDiff(disbursementDate, settlementDate);
+  const elapsedDays = Math.min(totalDays, Math.max(0, rawElapsed));
 
   // Pro-rata: totalInterest × elapsedDays / totalDays
   const accrued = new Decimal(totalInterestPaise)
@@ -129,11 +129,11 @@ export function calculateReducingBalanceAccruedInterest(
   lastPaymentOrDisbursementDate: Date,
   settlementDate: Date,
 ): number {
+  // H6: Use calendar-day diff (IST-aware), not raw ms division — avoids
+  // off-by-one across midnight and DST-related double-counting.
   const days = Math.max(
     0,
-    Math.floor(
-      (settlementDate.getTime() - lastPaymentOrDisbursementDate.getTime()) / (1000 * 60 * 60 * 24),
-    ),
+    calendarDaysDiff(lastPaymentOrDisbursementDate, settlementDate),
   );
 
   // daily_rate = annual_rate_bps / 10000 / 365
@@ -167,6 +167,7 @@ export class ForeclosureService {
     private readonly auditService: AuditService,
     private readonly idempotencyService: IdempotencyService,
     private readonly receiptService: ReceiptService,
+    private readonly loanService: LoanService,
   ) {}
 
   /**
@@ -370,6 +371,38 @@ export class ForeclosureService {
     const rebateReason = dto.rebateReason ?? foreclosure.rebate_reason ?? undefined;
     const rebateAuthorizedBy = dto.rebateAuthorizedBy ?? foreclosure.rebate_authorized_by ?? undefined;
 
+    // H16: Quote freshness check. The quote may be within its 24h validity
+    // window but the underlying loan state (a fresh collection landing,
+    // a penalty accruing) can shift the true settlement. Recompute the
+    // live components from the locked loan + pending penalties and reject
+    // execution if drift exceeds 100 paise (₹1). Compare using the QUOTE's
+    // rebate — not any execute-time override — so the staleness check
+    // measures loan-state drift, not operator policy.
+    const livePendingPenalties = await this.foreclosureRepository.getPendingPenalties(
+      foreclosure.loan_id,
+      tx,
+    );
+    const livePendingPenaltiesPaise = livePendingPenalties.reduce(
+      (sum, p) => sum + Number(p.amount_paise),
+      0,
+    );
+    const liveOutstandingPrincipalPaise = this.computeOutstandingPrincipal(loan.schedules);
+    const liveAccruedInterestPaise = this.computeAccruedInterest(loan, now);
+    const liveSettlementAmountPaise = calculateForeclosureSettlement({
+      outstandingPrincipalPaise: liveOutstandingPrincipalPaise,
+      accruedInterestPaise: liveAccruedInterestPaise,
+      pendingPenaltiesPaise: livePendingPenaltiesPaise,
+      rebatePaise: Number(foreclosure.rebate_paise),
+    }).settlementAmountPaise;
+    const quotedSettlementPaise = Number(foreclosure.settlement_amount_paise);
+    const QUOTE_DRIFT_TOLERANCE_PAISE = 100; // ₹1
+    if (Math.abs(liveSettlementAmountPaise - quotedSettlementPaise) > QUOTE_DRIFT_TOLERANCE_PAISE) {
+      throw new BusinessRuleError(
+        `Foreclosure quote is stale: quoted ${quotedSettlementPaise} paise but live settlement is ${liveSettlementAmountPaise} paise. Please regenerate the quote.`,
+        'QUOTE_STALE',
+      );
+    }
+
     // Recalculate settlement with potentially updated rebate
     const settlementResult = calculateForeclosureSettlement({
       outstandingPrincipalPaise: Number(foreclosure.outstanding_principal_paise),
@@ -474,17 +507,20 @@ export class ForeclosureService {
     // Step 5: Close all remaining schedule installments
     await this.foreclosureRepository.closeAllInstallments(foreclosure.loan_id, tx);
 
-    // Mark pending penalties as paid
-    const pendingPenalties = await this.foreclosureRepository.getPendingPenalties(
-      foreclosure.loan_id,
-      tx,
-    );
+    // Mark pending penalties as paid (reuse the live snapshot fetched for
+    // the H16 freshness check — avoids a second SELECT inside the same tx).
     await this.foreclosureRepository.markPenaltiesAsPaid(
-      pendingPenalties.map((p) => p.id),
+      livePendingPenalties.map((p) => p.id),
       tx,
     );
 
     // Step 6: Update loan status to foreclosed
+    // C6: Enforce the loan state machine. Re-validating the transition inside
+    // the transaction (after FOR UPDATE) catches concurrent state drift —
+    // e.g. another writer flipping the loan to 'closed' or 'defaulted'
+    // between the quote read and execute. validateTransition throws
+    // BusinessRuleError('INVALID_STATUS_TRANSITION') on illegal moves.
+    this.loanService.validateTransition(lockedLoan.status, 'foreclosed');
     await this.foreclosureRepository.updateLoan(
       foreclosure.loan_id,
       {
@@ -492,6 +528,10 @@ export class ForeclosureService {
         cached_outstanding_paise: 0,
         dpd: 0,
         overdue_bucket: 'bucket_0',
+        // C4: Move the accrual checkpoint forward so any subsequent quote
+        // (e.g. a reversal/re-foreclosure) computes interest from the right
+        // base, not from disbursement again.
+        last_interest_accrued_to: now,
       },
       tx,
     );
@@ -660,6 +700,7 @@ export class ForeclosureService {
       total_interest_paise: bigint | null;
       disbursement_date: Date | null;
       last_due_date: Date | null;
+      last_interest_accrued_to?: Date | null;
       product_version: {
         interest_type: string;
         annual_rate_bps: number;
@@ -698,29 +739,36 @@ export class ForeclosureService {
       return Math.max(0, proRataInterest - interestPaid);
     }
 
-    // Reducing balance: daily accrual on outstanding principal
+    // Reducing balance: daily accrual on outstanding principal.
+    // C4: Accrue from the latest of last_interest_accrued_to or disbursement
+    // (so a second quote after a prior accrual run does not double-count
+    // interest already capitalised). Do NOT subtract interest_paid here —
+    // that double-counts: prior payments already moved the accrual checkpoint
+    // forward via last_interest_accrued_to.
     const outstandingPrincipal = loan.schedules.reduce(
       (sum, s) => sum + Number(s.principal_paise) - Number(s.principal_paid_paise),
       0,
     );
 
-    // Use disbursement date as fallback for last payment date
-    const lastPaymentDate = loan.disbursement_date ?? new Date();
+    const lastAccruedTo = loan.last_interest_accrued_to ?? null;
+    const disbursement = loan.disbursement_date ?? null;
+    let baseDate: Date;
+    if (lastAccruedTo && disbursement) {
+      baseDate = lastAccruedTo.getTime() > disbursement.getTime()
+        ? lastAccruedTo
+        : disbursement;
+    } else {
+      baseDate = lastAccruedTo ?? disbursement ?? new Date();
+    }
 
     const dailyAccrual = calculateReducingBalanceAccruedInterest(
       outstandingPrincipal,
       loan.product_version.annual_rate_bps,
-      lastPaymentDate,
+      baseDate,
       settlementDate,
     );
 
-    // Subtract interest already paid
-    const interestPaid = loan.schedules.reduce(
-      (sum, s) => sum + Number(s.interest_paid_paise),
-      0,
-    );
-
-    return Math.max(0, dailyAccrual - interestPaid);
+    return Math.max(0, dailyAccrual);
   }
 
   /**

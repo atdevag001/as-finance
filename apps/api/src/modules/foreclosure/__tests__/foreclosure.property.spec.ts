@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
 import {
   calculateForeclosureSettlement,
-  ForeclosureSettlementInput,
+  type ForeclosureSettlementInput,
 } from '../foreclosure.service';
 
 /**

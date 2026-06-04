@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Param, Get, Req, HttpCode, HttpStatus, Query } from '@nestjs/common';
+import { Controller, Post, Body, Param, Get, Req, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { PenaltyService } from './penalty.service';
 import { CalculatePenaltyDto } from './dto/calculate-penalty.dto';

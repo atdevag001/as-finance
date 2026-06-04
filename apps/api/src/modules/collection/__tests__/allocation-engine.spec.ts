@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   allocate,
   AllocationParams,
-  InstallmentState,
-  PenaltyState,
+  type InstallmentState,
+  type PenaltyState,
 } from '../allocation-engine';
 import {
   buildInstallmentState,

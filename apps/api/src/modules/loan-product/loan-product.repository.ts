@@ -110,7 +110,7 @@ export class LoanProductRepository {
     productData: { name: string; created_by: string },
     versionData: Omit<CreateProductVersionData, 'product_id' | 'version_number'>,
   ) {
-    return this.prisma.$transaction(async (tx: any) => {
+    return this.prisma.$transaction(async (tx) => {
       // 1. Create the product (without current_version_id yet)
       const product = await tx.loan_products.create({
         data: {
@@ -151,7 +151,7 @@ export class LoanProductRepository {
     productId: string,
     versionData: Omit<CreateProductVersionData, 'product_id'>,
   ) {
-    return this.prisma.$transaction(async (tx: any) => {
+    return this.prisma.$transaction(async (tx) => {
       // 1. Create the new version
       const version = await tx.loan_product_versions.create({
         data: {

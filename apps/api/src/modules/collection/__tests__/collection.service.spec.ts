@@ -289,7 +289,7 @@ describe('CollectionService', () => {
 
   describe('validateLoanStatus()', () => {
     // Access private method for direct testing
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     function callValidate(status: string) {
       return (service as any)['validateLoanStatus'](status);
     }
@@ -355,7 +355,7 @@ describe('CollectionService', () => {
   // ── 5.3 computeOutstanding() ─────────────────────────────────────────────
 
   describe('computeOutstanding()', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     function callCompute(schedules: Array<{
       principal_paise: bigint;
       interest_paise: bigint;
@@ -397,7 +397,7 @@ describe('CollectionService', () => {
   // ── 5.4 buildJournalLines() ──────────────────────────────────────────────
 
   describe('buildJournalLines()', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     function callBuildJournalLines(
       allocationResult: AllocationResult,
       cashAccountId = 'acc-cash',
@@ -486,7 +486,7 @@ describe('CollectionService', () => {
   // ── 5.5 buildAllocationRecords() ────────────────────────────────────────
 
   describe('buildAllocationRecords()', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     function callBuildAllocationRecords(collectionId: string, allocationResult: AllocationResult) {
       return (service as any)['buildAllocationRecords'](collectionId, allocationResult);
     }
@@ -510,6 +510,7 @@ describe('CollectionService', () => {
       expect(inst1).toEqual({
         collection_id: 'coll-1',
         installment_id: 'inst-1',
+        penalty_id: null,
         penalty_paise: 0,
         interest_paise: 100000,
         principal_paise: 833333,
@@ -517,10 +518,13 @@ describe('CollectionService', () => {
       });
     });
 
-    it('should include penalty allocations with installmentId', () => {
+    it('should emit a separate penalty row when penalty has both penaltyId and installmentId', () => {
+      // After the H4 fix, penalty allocations are persisted on their own row
+      // (carrying both installment_id and penalty_id) — not merged into the
+      // interest/principal row for the same installment.
       const result: AllocationResult = {
         allocations: [
-          { installmentId: 'inst-1', component: 'penalty', amountPaise: 5000 },
+          { installmentId: 'inst-1', penaltyId: 'pen-1', component: 'penalty', amountPaise: 5000 },
           { installmentId: 'inst-1', component: 'interest', amountPaise: 100000 },
         ],
         totalPenaltyAllocated: 5000,
@@ -530,12 +534,26 @@ describe('CollectionService', () => {
       };
       const records = callBuildAllocationRecords('coll-1', result);
 
-      expect(records).toHaveLength(1);
-      expect(records[0]!.penalty_paise).toBe(5000);
-      expect(records[0]!.total_paise).toBe(105000);
+      // One installment row (interest) + one penalty row (penalty)
+      expect(records).toHaveLength(2);
+      const instRow = records.find((r: { penalty_id: string | null }) => r.penalty_id === null);
+      const penRow = records.find((r: { penalty_id: string | null }) => r.penalty_id === 'pen-1');
+      expect(instRow).toBeDefined();
+      expect(instRow!.installment_id).toBe('inst-1');
+      expect(instRow!.interest_paise).toBe(100000);
+      expect(instRow!.penalty_paise).toBe(0);
+      expect(instRow!.total_paise).toBe(100000);
+      expect(penRow).toBeDefined();
+      expect(penRow!.installment_id).toBe('inst-1');
+      expect(penRow!.penalty_paise).toBe(5000);
+      expect(penRow!.total_paise).toBe(5000);
     });
 
-    it('should skip penalty allocations without installmentId', () => {
+    it('should skip penalty allocations missing installmentId (NOT NULL constraint)', () => {
+      // collection_allocations.installment_id is NOT NULL in the schema, so a
+      // penalty allocation that arrived without a known parent installment
+      // (legacy/orphaned data) cannot be persisted. The penalties.paid_paise
+      // bookkeeping still records the payment.
       const result: AllocationResult = {
         allocations: [
           { penaltyId: 'pen-1', component: 'penalty', amountPaise: 5000 } as AllocationLine,
@@ -548,9 +566,10 @@ describe('CollectionService', () => {
       };
       const records = callBuildAllocationRecords('coll-1', result);
 
-      // Only inst-1 record, penalty without installmentId is skipped
+      // One installment row (interest only). The orphaned penalty row is dropped.
       expect(records).toHaveLength(1);
       expect(records[0]!.penalty_paise).toBe(0);
+      expect(records[0]!.interest_paise).toBe(100000);
     });
 
     it('should return empty array for empty allocations', () => {
@@ -569,7 +588,7 @@ describe('CollectionService', () => {
   // ── 5.6 updateInstallments() ─────────────────────────────────────────────
 
   describe('updateInstallments()', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     async function callUpdateInstallments(
       schedules: Array<{
         id: string;
@@ -718,7 +737,7 @@ describe('CollectionService', () => {
   // ── 5.7 computeDpdAndBucket() ────────────────────────────────────────────
 
   describe('computeDpdAndBucket()', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     function callComputeDpd(
       schedules: Array<{
         id: string;

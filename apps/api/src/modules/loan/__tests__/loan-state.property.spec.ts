@@ -39,7 +39,7 @@ const validTransitionArb = fc.constantFrom(...validTransitionPairs);
  */
 const invalidTransitionPairs: [string, string][] = [];
 for (const from of ALL_STATUSES) {
-  const allowed = new Set(allowedTransitions[from]!);
+  const allowed = new Set(allowedTransitions[from]);
   for (const to of ALL_STATUSES) {
     if (!allowed.has(to)) {
       invalidTransitionPairs.push([from, to]);
@@ -66,7 +66,7 @@ describe('Property 21: Loan State Machine Validity', () => {
     fc.assert(
       fc.property(validTransitionArb, ([fromStatus, toStatus]) => {
         // Should not throw for any allowed transition
-        expect(() => loanService.validateTransition(fromStatus, toStatus)).not.toThrow();
+        expect(() => { loanService.validateTransition(fromStatus, toStatus); }).not.toThrow();
       }),
       { numRuns: 100 },
     );

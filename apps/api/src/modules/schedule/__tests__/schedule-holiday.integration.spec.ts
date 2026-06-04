@@ -234,8 +234,8 @@ describe('Settings + Schedule Holiday Integration', () => {
       });
       const schedule = generateSchedule(params);
 
-      // Weekly for 1 month = 4 installments
-      expect(schedule).toHaveLength(4);
+      // Weekly for 1 month: ceil(1 × 52/12) = ceil(4.333) = 5 installments
+      expect(schedule).toHaveLength(5);
       // First due date shifted from 2024-01-08 to 2024-01-09
       expect(toDateKey(schedule[0].dueDate)).toBe('2024-01-09');
       // Others unaffected
@@ -259,14 +259,16 @@ describe('Settings + Schedule Holiday Integration', () => {
       });
       const schedule = generateSchedule(params);
 
-      // Daily for 1 month = 30 installments
-      expect(schedule).toHaveLength(30);
+      // Daily for 1 month: ceil(1 × 365.25/12) = ceil(30.4375) = 31 installments
+      expect(schedule).toHaveLength(31);
       // First due date: 2024-01-02 → holiday, 2024-01-03 → holiday → 2024-01-04
       expect(toDateKey(schedule[0].dueDate)).toBe('2024-01-04');
-      // Second due date: 2024-01-03 → holiday → 2024-01-04
-      expect(toDateKey(schedule[1].dueDate)).toBe('2024-01-04');
-      // Third due date: 2024-01-04 → not a holiday
-      expect(toDateKey(schedule[2].dueDate)).toBe('2024-01-04');
+      // Second due date: 2024-01-03 → holiday → 2024-01-04, but collides with
+      // schedule[0] → monotonicity rule pushes it to 2024-01-05.
+      expect(toDateKey(schedule[1].dueDate)).toBe('2024-01-05');
+      // Third due date: 2024-01-04 not a holiday, but ≤ schedule[1]=2024-01-05
+      // → pushed forward by monotonicity to 2024-01-06.
+      expect(toDateKey(schedule[2].dueDate)).toBe('2024-01-06');
     });
 
     it('should work with reducing balance interest type and holidays', async () => {

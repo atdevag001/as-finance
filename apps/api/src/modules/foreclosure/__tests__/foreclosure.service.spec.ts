@@ -219,6 +219,7 @@ describe('ForeclosureService', () => {
   let mockAuditService: any;
   let mockIdempotencyService: any;
   let mockReceiptService: any;
+  let mockLoanService: any;
   let mockTx: any;
 
   function buildLoan(overrides?: Record<string, any>) {
@@ -296,9 +297,13 @@ describe('ForeclosureService', () => {
         id: 'rcp-1', receipt_number: 'RCP-2024-001',
       }),
     };
+    mockLoanService = {
+      validateTransition: vi.fn(),
+    };
     service = new ForeclosureService(
       mockPrisma, mockForeclosureRepo, mockAccountingService,
       mockAuditService, mockIdempotencyService, mockReceiptService,
+      mockLoanService,
     );
   });
 
@@ -398,16 +403,21 @@ describe('ForeclosureService', () => {
   // ─── executeForeclosure ──────────────────────────────────────────────────
 
   describe('executeForeclosure', () => {
+    // Quote must match what the service would compute live from buildLoan()
+    // (H16 quote-staleness check rejects drift > 100 paise). buildLoan() has
+    // outstanding principal 100000 (no payments) and total_interest 12000,
+    // with last_due 2025-01-01 < now, so flat accrued = full 12000; pending
+    // penalties (500 + 300) = 800.  Quoted settlement = 100000+12000+800.
     function buildQuoteRecord(overrides?: Record<string, any>) {
       return {
         id: 'fc-1', loan_id: 'loan-1', status: 'quote',
         requested_by: 'user-1',
         quote_expires_at: new Date(Date.now() + 86400000),
         outstanding_principal_paise: 100000n,
-        accrued_interest_paise: 5000n,
+        accrued_interest_paise: 12000n,
         pending_penalties_paise: 800n,
         rebate_paise: 0n,
-        settlement_amount_paise: 105800n,
+        settlement_amount_paise: 112800n,
         rebate_reason: null,
         rebate_authorized_by: null,
         ...overrides,
@@ -709,19 +719,21 @@ describe('ForeclosureService', () => {
 
   describe('buildSettlementJournalLines (via executeForeclosure)', () => {
     function setupWithAccounts() {
+      // Quote matches live computed from buildLoan() (H16): 100000 outstanding
+      // + 12000 flat accrued (full, since settlement > last_due_date) + 0 penalties.
       mockForeclosureRepo.findById.mockResolvedValue({
         id: 'fc-1', loan_id: 'loan-1', status: 'quote',
         requested_by: 'user-1',
         quote_expires_at: new Date(Date.now() + 86400000),
-        outstanding_principal_paise: 80000n,
-        accrued_interest_paise: 4000n,
-        pending_penalties_paise: 1000n,
+        outstanding_principal_paise: 100000n,
+        accrued_interest_paise: 12000n,
+        pending_penalties_paise: 0n,
         rebate_paise: 0n,
-        settlement_amount_paise: 85000n,
+        settlement_amount_paise: 112000n,
         rebate_reason: null, rebate_authorized_by: null,
       });
       mockForeclosureRepo.lockLoanForUpdate.mockResolvedValue({
-        id: 'loan-1', status: 'active', cached_outstanding_paise: 85000n,
+        id: 'loan-1', status: 'active', cached_outstanding_paise: 112000n,
       });
       mockForeclosureRepo.getLoanForForeclosure.mockResolvedValue(buildLoan());
       mockForeclosureRepo.getPendingPenalties.mockResolvedValue([]);
@@ -790,23 +802,26 @@ describe('ForeclosureService', () => {
     });
 
     it('credits penalty income when penalties exist', async () => {
-      // Setup with penalties
+      // Setup with penalties — quote must match live (H16). Live = 100000
+      // principal + 12000 flat interest + 2000 penalties.
       mockForeclosureRepo.findById.mockResolvedValue({
         id: 'fc-1', loan_id: 'loan-1', status: 'quote',
         requested_by: 'user-1',
         quote_expires_at: new Date(Date.now() + 86400000),
-        outstanding_principal_paise: 80000n,
-        accrued_interest_paise: 4000n,
+        outstanding_principal_paise: 100000n,
+        accrued_interest_paise: 12000n,
         pending_penalties_paise: 2000n,
         rebate_paise: 0n,
-        settlement_amount_paise: 86000n,
+        settlement_amount_paise: 114000n,
         rebate_reason: null, rebate_authorized_by: null,
       });
       mockForeclosureRepo.lockLoanForUpdate.mockResolvedValue({
-        id: 'loan-1', status: 'active', cached_outstanding_paise: 86000n,
+        id: 'loan-1', status: 'active', cached_outstanding_paise: 114000n,
       });
       mockForeclosureRepo.getLoanForForeclosure.mockResolvedValue(buildLoan());
-      mockForeclosureRepo.getPendingPenalties.mockResolvedValue([]);
+      mockForeclosureRepo.getPendingPenalties.mockResolvedValue([
+        { id: 'pen-1', amount_paise: 2000n },
+      ]);
       mockForeclosureRepo.findAccountByCode.mockImplementation((code: string) => {
         const accts: Record<string, any> = {
           '1001': { id: 'acc-cash', code: '1001', name: 'Cash', category: 'asset' },
@@ -828,19 +843,21 @@ describe('ForeclosureService', () => {
     });
 
     it('books rebate as Discount Expense + credits full principal (not principal − rebate)', async () => {
+      // Quote matches live (no rebate): 100000 principal + 12000 interest.
+      // Execution applies a 10000 rebate override → settlement drops to 102000.
       mockForeclosureRepo.findById.mockResolvedValue({
         id: 'fc-1', loan_id: 'loan-1', status: 'quote',
         requested_by: 'user-1',
         quote_expires_at: new Date(Date.now() + 86400000),
-        outstanding_principal_paise: 80000n,
-        accrued_interest_paise: 4000n,
+        outstanding_principal_paise: 100000n,
+        accrued_interest_paise: 12000n,
         pending_penalties_paise: 0n,
         rebate_paise: 0n,
-        settlement_amount_paise: 84000n,
+        settlement_amount_paise: 112000n,
         rebate_reason: null, rebate_authorized_by: null,
       });
       mockForeclosureRepo.lockLoanForUpdate.mockResolvedValue({
-        id: 'loan-1', status: 'active', cached_outstanding_paise: 84000n,
+        id: 'loan-1', status: 'active', cached_outstanding_paise: 112000n,
       });
       mockForeclosureRepo.getLoanForForeclosure.mockResolvedValue(buildLoan());
       mockForeclosureRepo.getPendingPenalties.mockResolvedValue([]);
@@ -865,8 +882,8 @@ describe('ForeclosureService', () => {
       );
       const journalCall = mockAccountingService.createJournalEntry.mock.calls[0][0];
       const lrLine = journalCall.lines.find((l: any) => l.accountId === 'acc-lr');
-      // POST-FIX: credit FULL outstanding principal (80000), book rebate as Discount Expense
-      expect(lrLine.creditPaise).toBe(80000);
+      // POST-FIX: credit FULL outstanding principal (100000), book rebate as Discount Expense
+      expect(lrLine.creditPaise).toBe(100000);
       const discountLine = journalCall.lines.find((l: any) => l.accountId === 'acc-discount');
       expect(discountLine).toBeDefined();
       expect(discountLine.debitPaise).toBe(10000);

@@ -199,9 +199,11 @@ export class LoanRepository {
     status: string,
     extra?: Record<string, unknown>,
     expectedVersion?: number,
+    tx?: TxClient,
   ) {
+    const client = tx ?? this.prisma;
     if (expectedVersion !== undefined) {
-      const result = await this.prisma['loans'].updateMany({
+      const result = await client['loans'].updateMany({
         where: { id, version: expectedVersion },
         data: {
           status,
@@ -218,14 +220,14 @@ export class LoanRepository {
       }
 
       // Return the updated record
-      return this.prisma['loans'].findUnique({
+      return client['loans'].findUnique({
         where: { id },
         select: LOAN_SELECT,
       });
     }
 
     // Fallback: no version check (backward compatible)
-    return this.prisma['loans'].update({
+    return client['loans'].update({
       where: { id },
       data: { status, version: { increment: 1 }, ...extra } as never,
       select: LOAN_SELECT,
@@ -262,15 +264,19 @@ export class LoanRepository {
     });
   }
 
-  async createStatusHistory(data: {
-    loan_id: string;
-    from_status: string | null;
-    to_status: string;
-    changed_by: string;
-    reason?: string;
-    metadata?: unknown;
-  }) {
-    return this.prisma['loan_status_history'].create({
+  async createStatusHistory(
+    data: {
+      loan_id: string;
+      from_status: string | null;
+      to_status: string;
+      changed_by: string;
+      reason?: string;
+      metadata?: unknown;
+    },
+    tx?: TxClient,
+  ) {
+    const client = tx ?? this.prisma;
+    return client['loan_status_history'].create({
       data: data as never,
     });
   }
@@ -305,30 +311,38 @@ export class LoanRepository {
     }));
   }
 
-  async createApproval(data: {
-    loan_id: string;
-    action: string;
-    actor_id: string;
-    remarks?: string;
-  }) {
-    return this.prisma['loan_approvals'].create({
+  async createApproval(
+    data: {
+      loan_id: string;
+      action: string;
+      actor_id: string;
+      remarks?: string;
+    },
+    tx?: TxClient,
+  ) {
+    const client = tx ?? this.prisma;
+    return client['loan_approvals'].create({
       data: data as never,
     });
   }
 
-  async createAuditLog(data: {
-    action_type: string;
-    actor_id: string;
-    actor_role: string;
-    target_entity: string;
-    target_id: string;
-    ip_address?: string;
-    request_id?: string;
-    before_state?: unknown;
-    after_state?: unknown;
-    remarks?: string;
-  }) {
-    return this.prisma['audit_logs'].create({
+  async createAuditLog(
+    data: {
+      action_type: string;
+      actor_id: string;
+      actor_role: string;
+      target_entity: string;
+      target_id: string;
+      ip_address?: string;
+      request_id?: string;
+      before_state?: unknown;
+      after_state?: unknown;
+      remarks?: string;
+    },
+    tx?: TxClient,
+  ) {
+    const client = tx ?? this.prisma;
+    return client['audit_logs'].create({
       data: {
         ...data,
         ip_address: data.ip_address ?? '0.0.0.0',
@@ -349,9 +363,11 @@ export class LoanRepository {
       interestPaise: number;
       totalPaise: number;
     }>,
+    tx?: TxClient,
   ) {
+    const client = tx ?? this.prisma;
     for (const inst of installments) {
-      await this.prisma['loan_schedules'].create({
+      await client['loan_schedules'].create({
         data: {
           loan_id: loanId,
           installment_number: inst.installmentNumber,
@@ -371,8 +387,14 @@ export class LoanRepository {
   /**
    * Update loan with total interest and total payable amounts.
    */
-  async updateLoanTotals(loanId: string, totalInterestPaise: number, totalPayablePaise: number) {
-    return this.prisma['loans'].update({
+  async updateLoanTotals(
+    loanId: string,
+    totalInterestPaise: number,
+    totalPayablePaise: number,
+    tx?: TxClient,
+  ) {
+    const client = tx ?? this.prisma;
+    return client['loans'].update({
       where: { id: loanId },
       data: {
         total_interest_paise: totalInterestPaise,

@@ -37,7 +37,7 @@ describe('validateTransition — valid transitions', () => {
   it.each(validTransitions)(
     '%s → %s does not throw',
     (from, to) => {
-      expect(() => loanService.validateTransition(from, to)).not.toThrow();
+      expect(() => { loanService.validateTransition(from, to); }).not.toThrow();
     },
   );
 });
@@ -81,7 +81,7 @@ describe('validateTransition — invalid transitions', () => {
   it.each(invalidTransitions)(
     '%s → %s throws BusinessRuleError with INVALID_STATUS_TRANSITION',
     (from, to) => {
-      expect(() => loanService.validateTransition(from, to)).toThrow(BusinessRuleError);
+      expect(() => { loanService.validateTransition(from, to); }).toThrow(BusinessRuleError);
       try {
         loanService.validateTransition(from, to);
       } catch (err) {
@@ -91,7 +91,7 @@ describe('validateTransition — invalid transitions', () => {
   );
 
   it('unknown source status throws BusinessRuleError with INVALID_LOAN_STATUS', () => {
-    expect(() => loanService.validateTransition('nonexistent', 'active')).toThrow(
+    expect(() => { loanService.validateTransition('nonexistent', 'active'); }).toThrow(
       BusinessRuleError,
     );
     try {
@@ -116,7 +116,7 @@ describe('validateTransition — terminal states', () => {
       it.each(allStatuses)(
         `${terminal} → %s throws BusinessRuleError`,
         (target) => {
-          expect(() => loanService.validateTransition(terminal, target)).toThrow(
+          expect(() => { loanService.validateTransition(terminal, target); }).toThrow(
             BusinessRuleError,
           );
           try {

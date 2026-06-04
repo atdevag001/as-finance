@@ -10,6 +10,7 @@ import { WaivePenaltyDto } from './dto/waive-penalty.dto';
 import { BusinessRuleError, NotFoundError, ConflictError } from '../../common/errors';
 import { canBypassMakerChecker } from '../../common/constants/maker-checker';
 import { JournalSourceType } from '@as-finance/shared';
+import { calendarDaysDiff, parseDateIST } from '../../common/utils/date.util';
 
 /**
  * Prisma transaction client type.
@@ -55,9 +56,11 @@ export function calculateDpd(
     return 0;
   }
 
-  // Only count as overdue if the due date is in the past
-  const diffMs = referenceDate.getTime() - earliestUnpaidDate.getTime();
-  const dpd = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+  // (H6) Only count as overdue if the due date is in the past.
+  // Use IST calendar-day diff rather than `(ms / 86_400_000)` to avoid
+  // off-by-one errors across midnight and double-counting across DST
+  // boundaries in non-IST TZs.
+  const dpd = Math.max(0, calendarDaysDiff(earliestUnpaidDate, referenceDate));
   return dpd;
 }
 
@@ -188,9 +191,18 @@ export class PenaltyService {
       throw new NotFoundError(`Installment not found: ${dto.installmentId}`);
     }
 
-    const referenceDate = dto.referenceDate ? new Date(dto.referenceDate) : new Date();
-    const diffMs = referenceDate.getTime() - installment.due_date.getTime();
-    const daysPastDue = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+    // (H6) Parse YYYY-MM-DD DTO via parseDateIST (IST midnight), not `new Date()`
+    // which would interpret naked dates as UTC and silently shift the day in IST.
+    // ISO 8601 strings with explicit offset still go through `new Date()` so
+    // existing fixtures (e.g. 2024-02-15T...Z) continue to work.
+    const referenceDate = dto.referenceDate
+      ? /^\d{4}-\d{2}-\d{2}$/.test(dto.referenceDate)
+        ? parseDateIST(dto.referenceDate)
+        : new Date(dto.referenceDate)
+      : new Date();
+    // (H6) Calendar-day diff for DPD — replaces ms / 86_400_000 to avoid
+    // off-by-one across midnight / DST.
+    const daysPastDue = Math.max(0, calendarDaysDiff(installment.due_date, referenceDate));
 
     const graceDays = loan.product_version.penalty_grace_days ?? 0;
     if (daysPastDue <= graceDays) {
@@ -235,7 +247,17 @@ export class PenaltyService {
       );
     }
 
-    // Overdue amount = unpaid principal + unpaid interest for this installment
+    // (M16) Overdue amount = unpaid principal + unpaid interest for this installment.
+    //
+    // Policy: outstanding penalty is *excluded* from `overdueAmountPaise`, so
+    // penalties never compound on prior unpaid penalties — only on the original
+    // principal+interest shortfall. This is the current behavior by design.
+    //
+    // If a future `settings.penalty_compounding` flag is introduced, this is the
+    // line to toggle: when compounding is enabled, sum unpaid penalties for the
+    // same installment (via `getPendingPenalties`) into `overdueAmountPaise`
+    // before passing into `calculatePenaltyAmount`. Do NOT change behavior here
+    // without an explicit settings flag and product approval.
     const overdueAmountPaise = (principalDue - principalPaid) + (interestDue - interestPaid);
     const penaltyAmountPaise = calculatePenaltyAmount(penaltyType, penaltyValue, overdueAmountPaise);
 

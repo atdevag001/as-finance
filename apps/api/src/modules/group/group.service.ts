@@ -260,7 +260,7 @@ export class GroupService {
     }
 
     const member = await this.groupRepository.findMemberById(memberId);
-    if (!member || member.group_id !== groupId) {
+    if (member?.group_id !== groupId) {
       throw new NotFoundError(`Member not found in group: ${memberId}`);
     }
 
@@ -395,7 +395,13 @@ export class GroupService {
         // Generate a deterministic idempotency key for each member collection
         const memberIdempotencyKey = `${dto.idempotencyKey}__member__${item.loanId}`;
 
-        const collectionResult = await this.collectionService.postCollection(
+        // Use executeCollection (not postCollection) so we run on the
+        // outer transaction's tx client. Calling postCollection here would
+        // open a nested prisma.$transaction inside the same Prisma client,
+        // which is illegal and can deadlock / silently lose the outer tx
+        // semantics.
+        const collectionData = await this.collectionService.executeCollection(
+          tx,
           {
             loanId: item.loanId,
             amountPaise: item.amountPaise,
@@ -410,7 +416,7 @@ export class GroupService {
         individualResults.push({
           loanId: item.loanId,
           amountPaise: item.amountPaise,
-          collectionResult: collectionResult.data,
+          collectionResult: collectionData,
         });
       }
 

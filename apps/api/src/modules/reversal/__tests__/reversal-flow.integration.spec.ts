@@ -24,12 +24,18 @@ function createMockTx() {
     collection_allocations: {
       findMany: vi.fn().mockResolvedValue([
         {
-          id: 'alloc-1', installment_id: 's-1',
+          id: 'alloc-1', installment_id: 's-1', penalty_id: null,
           penalty_paise: 0n, interest_paise: 10000n,
           principal_paise: 40000n, total_paise: 50000n,
         },
       ]),
       create: vi.fn().mockResolvedValue({}),
+    },
+    // H4: reversal decrements paid_paise on the exact penalty row referenced
+    // by collection_allocations.penalty_id (or walks oldest-first when NULL).
+    penalties: {
+      findMany: vi.fn().mockResolvedValue([]),
+      update: vi.fn().mockResolvedValue({}),
     },
     journal_entries: {
       findUnique: vi.fn().mockResolvedValue({
@@ -76,6 +82,8 @@ function createMockDeps() {
       updateInstallment: vi.fn().mockResolvedValue(undefined),
       updateLoanOutstanding: vi.fn().mockResolvedValue(undefined),
       getOfficerName: vi.fn().mockResolvedValue('Officer Name'),
+      // M15: reversal recomputes cached_outstanding from schedule + pending penalties.
+      getPendingPenalties: vi.fn().mockResolvedValue([]),
     },
     accounting: {
       createJournalEntry: vi.fn().mockResolvedValue({ id: 'je-mirror-1' }),

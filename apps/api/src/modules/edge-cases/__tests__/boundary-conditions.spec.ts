@@ -113,9 +113,12 @@ describe('Boundary Conditions (Req 55)', () => {
   // ─── 55.6: Maximum installments ──────────────────────────────────────────
 
   describe('55.6 — Maximum installments (360 months daily)', () => {
-    it('daily frequency for 360 months produces ~10800 installments', () => {
+    it('daily frequency for 360 months produces calendar-accurate installment count', () => {
+      // Audit C1: deriveInstallmentCount uses calendar-accurate 365.25/12 days per month
+      // (Julian year average) instead of the 30-day approximation. For 360 months:
+      // ceil(360 × 365.25 / 12) = ceil(10957.5) = 10958
       const count = deriveInstallmentCount(360, Frequency.DAILY as never);
-      expect(count).toBe(360 * 30); // 10800
+      expect(count).toBe(Math.ceil((360 * 365.25) / 12)); // 10958
     });
 
     it('flat schedule with many installments still reconciles', () => {

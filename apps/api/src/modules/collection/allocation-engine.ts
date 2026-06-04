@@ -21,6 +21,16 @@ export interface PenaltyState {
   penaltyId: string;
   amountPaise: number;
   paidPaise: number;
+  /**
+   * Parent installment this penalty was levied against.
+   *
+   * Optional in the type to keep unit-test fixtures (which historically omitted it)
+   * compatible, but in production it is always populated — penalties.installment_id
+   * is NOT NULL in the schema. When present, the allocation engine threads it onto
+   * the penalty AllocationLine so the persistence layer can satisfy
+   * collection_allocations.installment_id (NOT NULL) on penalty rows.
+   */
+  installmentId?: string;
 }
 
 export interface AllocationParams {
@@ -50,6 +60,10 @@ export interface AllocationResult {
 /**
  * Allocate penalties in order (oldest first).
  * Mutates `remaining` Decimal in place and returns allocation lines.
+ *
+ * Each line carries the parent installment_id (sourced from penalty.installmentId)
+ * so the persistence layer can satisfy the NOT NULL installment_id constraint on
+ * collection_allocations while still scoping the row to its penalty via penalty_id.
  */
 function allocatePenalties(
   penalties: PenaltyState[],
@@ -70,6 +84,7 @@ function allocatePenalties(
     if (toAllocate > 0) {
       lines.push({
         penaltyId: penalty.penaltyId,
+        installmentId: penalty.installmentId,
         component: 'penalty',
         amountPaise: toAllocate,
       });
@@ -231,10 +246,77 @@ export function allocate(params: AllocationParams): AllocationResult {
     }
   }
 
-  const totalAllocated = totalPenalty.plus(totalInterest).plus(totalPrincipal);
-  const excessAmount = new Decimal(amountPaise).minus(totalAllocated)
+  let totalAllocated = totalPenalty.plus(totalInterest).plus(totalPrincipal);
+  let excessAmount = new Decimal(amountPaise).minus(totalAllocated)
     .toDecimalPlaces(0, Decimal.ROUND_HALF_UP)
     .toNumber();
+
+  // (C5) Keep the journal balanced under rounding.
+  //
+  // When `amountPaise <= totalOutstanding`, the user paid only what was owed,
+  // so excess MUST be zero — otherwise the DR Cash side will not equal the
+  // CR side and the journal entry is unbalanced. Per-line ROUND_HALF_UP can
+  // strand 1 paisa under (e.g. allocating 5555 across components rounded to
+  // 5554), leaving a stray excess. Fold the stray paise into the LAST
+  // principal line so all money lands somewhere and totals reconcile.
+  //
+  // We do NOT do this for true overpayments (amount > outstanding) — those
+  // legitimately produce excess.
+  if (excessAmount > 0) {
+    // Did the caller pay at most what was owed? If so, the stray excess
+    // is rounding — not a true overpayment.
+    let totalOutstanding = new Decimal(0);
+    for (const p of pendingPenalties) {
+      const out = new Decimal(p.amountPaise).minus(p.paidPaise);
+      if (out.gt(0)) totalOutstanding = totalOutstanding.plus(out);
+    }
+    for (const inst of installments) {
+      const prinOut = new Decimal(inst.principalPaise).minus(inst.principalPaidPaise);
+      const intOut = new Decimal(inst.interestPaise).minus(inst.interestPaidPaise);
+      if (prinOut.gt(0)) totalOutstanding = totalOutstanding.plus(prinOut);
+      if (intOut.gt(0)) totalOutstanding = totalOutstanding.plus(intOut);
+    }
+
+    if (new Decimal(amountPaise).lte(totalOutstanding)) {
+      // Find the LAST principal line (insertion order) and fold the stray
+      // paise into it. If no principal line exists (rare — only penalty or
+      // interest allocations), fall back to the last allocation line of any
+      // component so totals still reconcile.
+      let lastIdx = -1;
+      for (let i = allLines.length - 1; i >= 0; i--) {
+        if (allLines[i]!.component === 'principal') {
+          lastIdx = i;
+          break;
+        }
+      }
+      if (lastIdx === -1) {
+        for (let i = allLines.length - 1; i >= 0; i--) {
+          if (allLines[i]!.component === 'interest' || allLines[i]!.component === 'penalty') {
+            lastIdx = i;
+            break;
+          }
+        }
+      }
+      if (lastIdx !== -1) {
+        const last = allLines[lastIdx]!;
+        last.amountPaise += excessAmount;
+        // Update component totals to reflect the folded paise.
+        switch (last.component) {
+          case 'principal':
+            totalPrincipal = totalPrincipal.plus(excessAmount);
+            break;
+          case 'interest':
+            totalInterest = totalInterest.plus(excessAmount);
+            break;
+          case 'penalty':
+            totalPenalty = totalPenalty.plus(excessAmount);
+            break;
+        }
+        totalAllocated = totalAllocated.plus(excessAmount);
+        excessAmount = 0;
+      }
+    }
+  }
 
   return {
     allocations: allLines,

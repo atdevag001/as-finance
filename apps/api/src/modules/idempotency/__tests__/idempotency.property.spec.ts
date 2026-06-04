@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import * as fc from 'fast-check';
 import { Prisma } from '@prisma/client';
 import { IdempotencyService } from '../idempotency.service';
-import { PrismaService } from '../../../database/prisma.service';
+import type { PrismaService } from '../../../database/prisma.service';
 
 /**
  * Property 20: Idempotency
@@ -114,7 +114,7 @@ function createServiceWithInMemoryStore() {
   );
 
   // Neutralize the 100ms retry delay to avoid test timeouts
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   (service as any).delay = () => Promise.resolve();
 
   return { service, store, mockPrisma };

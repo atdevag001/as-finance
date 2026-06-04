@@ -67,7 +67,7 @@ export class ReceiptRepository {
    */
   async generateReceiptNumber(tx?: TxClient): Promise<string> {
     const client = tx ?? this.prisma;
-    const result = await (client as TxClient).$queryRaw<
+    const result = await (client).$queryRaw<
       { nextval: bigint }[]
     >`SELECT nextval('receipt_number_seq')`;
     const seq = Number(result[0]!.nextval);
@@ -82,7 +82,7 @@ export class ReceiptRepository {
    */
   async create(data: CreateReceiptData, tx?: TxClient) {
     const client = tx ?? this.prisma;
-    return (client as TxClient).receipts.create({
+    return (client).receipts.create({
       data: {
         receipt_number: data.receipt_number,
         collection_id: data.collection_id,
@@ -125,7 +125,7 @@ export class ReceiptRepository {
     tx?: TxClient,
   ) {
     const client = tx ?? this.prisma;
-    return (client as TxClient).receipts.update({
+    return (client).receipts.update({
       where: { id: receiptId },
       data: {
         status: 'reversed',

@@ -21,6 +21,12 @@ export interface CreateCollectionData {
 export interface CreateAllocationData {
   collection_id: string;
   installment_id: string;
+  /**
+   * Optional FK to penalties — set only on rows that allocate to a penalty,
+   * so reversals/reports can join collection_allocations → penalties without
+   * round-tripping through installments. Null on pure interest/principal rows.
+   */
+  penalty_id?: string | null;
   penalty_paise: bigint | number;
   interest_paise: bigint | number;
   principal_paise: bigint | number;
@@ -191,6 +197,11 @@ export class CollectionRepository {
           data: {
             collection_id: alloc.collection_id,
             installment_id: alloc.installment_id,
+            // penalty_id is only set on rows that allocate to a penalty.
+            // Cast as never to dodge the conditional types issue when the
+            // Prisma client may have a partially-stale type while the
+            // generated client is regenerated post-migration.
+            penalty_id: (alloc.penalty_id ?? null) as never,
             penalty_paise: alloc.penalty_paise,
             interest_paise: alloc.interest_paise,
             principal_paise: alloc.principal_paise,

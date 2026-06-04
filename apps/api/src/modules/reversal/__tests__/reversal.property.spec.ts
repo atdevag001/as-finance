@@ -228,6 +228,7 @@ function createMockDeps() {
       updateInstallment: vi.fn(),
       updateLoanOutstanding: vi.fn(),
       getOfficerName: vi.fn().mockResolvedValue('Officer'),
+      getPendingPenalties: vi.fn().mockResolvedValue([]),
     },
     accountingService: {
       createJournalEntry: vi.fn().mockResolvedValue({ id: 'je-mirror' }),
@@ -670,7 +671,7 @@ const installmentRestorationArb = fc
       const allocCount = Math.min(installmentCount, 3);
       const allocsArb = fc.tuple(
         ...Array.from({ length: allocCount }, (_, i) => {
-          const inst = (installments as typeof installments)[i]!;
+          const inst = (installments)[i]!;
           const maxPrincipal = Number(inst.principal_paid_paise);
           const maxInterest = Number(inst.interest_paid_paise);
           const maxPenalty = Number(inst.penalty_paid_paise);
@@ -691,13 +692,13 @@ const installmentRestorationArb = fc
       );
 
       return allocsArb.map((allocations) => {
-        const totalCollectionAmount = (allocations as typeof allocations).reduce(
+        const totalCollectionAmount = (allocations).reduce(
           (s, a) => s + Number(a.total_paise),
           0,
         );
         return {
-          installments: installments as typeof installments,
-          allocations: allocations as typeof allocations,
+          installments: installments,
+          allocations: allocations,
           totalCollectionAmount,
         };
       });

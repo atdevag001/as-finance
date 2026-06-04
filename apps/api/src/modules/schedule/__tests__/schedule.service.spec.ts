@@ -21,36 +21,42 @@ describe('Schedule Service — Unit Tests', () => {
       expect(deriveInstallmentCount(12, Frequency.MONTHLY)).toBe(12);
     });
 
-    it('weekly: N = tenureMonths × 4', () => {
-      expect(deriveInstallmentCount(6, Frequency.WEEKLY)).toBe(24);
+    it('weekly: N = ceil(tenureMonths × 52 / 12) — 6 months → 26', () => {
+      // Calendar-accurate: 6 × 52/12 = 26 weeks
+      expect(deriveInstallmentCount(6, Frequency.WEEKLY)).toBe(26);
     });
 
-    it('daily: N = tenureMonths × 30', () => {
-      expect(deriveInstallmentCount(3, Frequency.DAILY)).toBe(90);
+    it('daily: N = ceil(tenureMonths × 365.25 / 12) — 3 months → 92', () => {
+      // Calendar-accurate: 3 × 365.25/12 = 91.3125 → ceil(91.3125) = 92
+      expect(deriveInstallmentCount(3, Frequency.DAILY)).toBe(92);
     });
 
     it('single month monthly = 1 installment', () => {
       expect(deriveInstallmentCount(1, Frequency.MONTHLY)).toBe(1);
     });
 
-    it('single month weekly = 4 installments', () => {
-      expect(deriveInstallmentCount(1, Frequency.WEEKLY)).toBe(4);
+    it('single month weekly = ceil(52/12) = 5 installments', () => {
+      // 1 × 52/12 = 4.333... → ceil = 5
+      expect(deriveInstallmentCount(1, Frequency.WEEKLY)).toBe(5);
     });
 
-    it('single month daily = 30 installments', () => {
-      expect(deriveInstallmentCount(1, Frequency.DAILY)).toBe(30);
+    it('single month daily = ceil(365.25/12) = 31 installments', () => {
+      // 1 × 365.25/12 = 30.4375 → ceil = 31
+      expect(deriveInstallmentCount(1, Frequency.DAILY)).toBe(31);
     });
 
     it('max tenure 360 months monthly = 360 installments', () => {
       expect(deriveInstallmentCount(360, Frequency.MONTHLY)).toBe(360);
     });
 
-    it('max tenure 360 months weekly = 1440 installments', () => {
-      expect(deriveInstallmentCount(360, Frequency.WEEKLY)).toBe(1440);
+    it('max tenure 360 months weekly = 1560 installments', () => {
+      // 360 × 52/12 = 1560 exactly
+      expect(deriveInstallmentCount(360, Frequency.WEEKLY)).toBe(1560);
     });
 
-    it('max tenure 360 months daily = 10800 installments', () => {
-      expect(deriveInstallmentCount(360, Frequency.DAILY)).toBe(10800);
+    it('max tenure 360 months daily = 10958 installments', () => {
+      // 360 × 365.25/12 = 10957.5 → ceil = 10958
+      expect(deriveInstallmentCount(360, Frequency.DAILY)).toBe(10958);
     });
   });
 
@@ -114,14 +120,18 @@ describe('Schedule Service — Unit Tests', () => {
       const totalInterest = result.installments.reduce((s, i) => s + i.interestPaise, 0);
       expect(totalInterest).toBe(1_200_000);
 
-      for (let i = 0; i < 11; i++) {
+      // H18: floor(10_000_000 / 12) = 833_333, remainder = 4.
+      // First 4 installments get 833_334 (the +1 paisa adjustment), the rest get 833_333.
+      // Interest divides evenly: floor(1_200_000 / 12) = 100_000 with no remainder,
+      // so every installment has 100_000 paise of interest.
+      for (let i = 0; i < 4; i++) {
+        expect(result.installments[i]!.principalPaise).toBe(833334);
+        expect(result.installments[i]!.interestPaise).toBe(100000);
+      }
+      for (let i = 4; i < 12; i++) {
         expect(result.installments[i]!.principalPaise).toBe(833333);
         expect(result.installments[i]!.interestPaise).toBe(100000);
       }
-
-      // Last installment absorbs rounding: 10000000 - 833333 × 11 = 833337
-      expect(result.installments[11]!.principalPaise).toBe(833337);
-      expect(result.installments[11]!.interestPaise).toBe(100000);
     });
 
     it('handles single installment (tenure = 1 month, monthly)', () => {
@@ -134,22 +144,24 @@ describe('Schedule Service — Unit Tests', () => {
     });
 
     it('weekly frequency produces correct installment count', () => {
+      // Updated: 3 × 52/12 = 13 weekly installments (calendar-accurate)
       const result = calculateFlatEMI(1_000_000, 1200, 3, Frequency.WEEKLY);
-      expect(result.numberOfInstallments).toBe(12);
+      expect(result.numberOfInstallments).toBe(13);
       expect(result.totalInterestPaise).toBe(30_000);
     });
 
     it('daily frequency produces correct installment count', () => {
+      // Updated: ceil(2 × 365.25 / 12) = ceil(60.875) = 61 daily installments
       const result = calculateFlatEMI(1_000_000, 1200, 2, Frequency.DAILY);
-      expect(result.numberOfInstallments).toBe(60);
+      expect(result.numberOfInstallments).toBe(61);
     });
 
     it('daily frequency — known expected output', () => {
-      // 1,000,000 paise, 1200 bps, 2 months daily → 60 installments
-      // total_interest = 1000000 × 0.12 × 2/12 = 20000
+      // 1,000,000 paise, 1200 bps, 2 months daily → 61 installments
+      // total_interest = 1000000 × 0.12 × 2/12 = 20000 (frequency-independent)
       const result = calculateFlatEMI(1_000_000, 1200, 2, Frequency.DAILY);
       expect(result.totalInterestPaise).toBe(20_000);
-      expect(result.numberOfInstallments).toBe(60);
+      expect(result.numberOfInstallments).toBe(61);
 
       const totalP = result.installments.reduce((s, i) => s + i.principalPaise, 0);
       const totalI = result.installments.reduce((s, i) => s + i.interestPaise, 0);
@@ -200,15 +212,17 @@ describe('Schedule Service — Unit Tests', () => {
     });
 
     it('weekly frequency reducing balance', () => {
+      // 3 × 52/12 = 13 weekly installments
       const result = calculateReducingBalanceEMI(1_000_000, 1200, 3, Frequency.WEEKLY);
-      expect(result.numberOfInstallments).toBe(12);
+      expect(result.numberOfInstallments).toBe(13);
       const totalPrincipal = result.installments.reduce((s, i) => s + i.principalPaise, 0);
       expect(totalPrincipal).toBe(1_000_000);
     });
 
     it('daily frequency reducing balance — known expected output', () => {
+      // ceil(2 × 365.25 / 12) = 61 daily installments
       const result = calculateReducingBalanceEMI(1_000_000, 1200, 2, Frequency.DAILY);
-      expect(result.numberOfInstallments).toBe(60);
+      expect(result.numberOfInstallments).toBe(61);
       const totalPrincipal = result.installments.reduce((s, i) => s + i.principalPaise, 0);
       expect(totalPrincipal).toBe(1_000_000);
 
@@ -640,7 +654,8 @@ describe('Schedule Service — Unit Tests', () => {
       };
 
       const schedule = generateSchedule(params);
-      expect(schedule).toHaveLength(24);
+      // Updated: 6 × 52/12 = 26 weekly installments
+      expect(schedule).toHaveLength(26);
 
       const totalP = schedule.reduce((s, i) => s + i.principalPaise, 0);
       expect(totalP).toBe(5_000_000);
@@ -680,7 +695,8 @@ describe('Schedule Service — Unit Tests', () => {
         interestType: InterestType.REDUCING_BALANCE,
       });
       const schedule = generateSchedule(params);
-      expect(schedule).toHaveLength(24); // 6 months × 4
+      // Updated: 6 × 52/12 = 26 weekly installments (calendar-accurate)
+      expect(schedule).toHaveLength(26);
       const totalP = schedule.reduce((s, i) => s + i.principalPaise, 0);
       expect(totalP).toBe(5_000_000);
     });
@@ -692,7 +708,8 @@ describe('Schedule Service — Unit Tests', () => {
         frequency: Frequency.DAILY,
       });
       const schedule = generateSchedule(params);
-      expect(schedule).toHaveLength(30); // 1 month × 30
+      // Updated: ceil(1 × 365.25 / 12) = ceil(30.4375) = 31 daily installments
+      expect(schedule).toHaveLength(31);
       const totalP = schedule.reduce((s, i) => s + i.principalPaise, 0);
       expect(totalP).toBe(300_000);
     });

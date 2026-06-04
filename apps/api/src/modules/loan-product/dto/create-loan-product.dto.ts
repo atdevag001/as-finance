@@ -8,7 +8,6 @@ import {
   Min,
   Max,
   MaxLength,
-  ValidateIf,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 

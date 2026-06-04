@@ -116,14 +116,17 @@ describe('Property 28: Model Conformance', () => {
         expect(totalPrincipal).toBe(principalPaise);
 
         // 3. Interest type conformance:
-        //    - Flat: all non-last installments have equal interest (fixed interest per period)
+        //    - Flat: every installment's interest is within 1 paisa of every other.
+        //      H18 distributes the totalInterest rounding remainder across the
+        //      first `remainder` installments, so any two installments differ
+        //      by at most 1 paisa rather than being byte-identical.
         //    - Reducing balance: interest is non-increasing across non-last installments
         //      (as outstanding principal decreases, interest decreases)
         if (product.interestType === InterestType.FLAT && schedule.length > 1) {
-          const firstInterest = schedule[0]!.interestPaise;
-          for (let i = 1; i < schedule.length - 1; i++) {
-            expect(schedule[i]!.interestPaise).toBe(firstInterest);
-          }
+          const interests = schedule.map((i) => i.interestPaise);
+          const iMax = Math.max(...interests);
+          const iMin = Math.min(...interests);
+          expect(iMax - iMin).toBeLessThanOrEqual(1);
         } else if (product.interestType === InterestType.REDUCING_BALANCE && schedule.length > 2) {
           for (let i = 1; i < schedule.length - 1; i++) {
             expect(schedule[i]!.interestPaise).toBeLessThanOrEqual(
@@ -327,16 +330,21 @@ describe('Cross-Frequency: Reducing balance total payable divergence is bounded'
 // ─── Cross-Frequency Conformance: Installment Count Consistency ─────────────
 
 /**
- * Cross-Frequency Conformance: Installment Count Ratios
+ * Cross-Frequency Conformance: Installment Count Calendar Accuracy
  *
- * For the same tenure, the installment counts across frequencies must follow
- * the defined ratios: weekly = monthly × 4, daily = monthly × 30.
- * This ensures deriveInstallmentCount is consistent across frequencies.
+ * For the same tenure, the installment counts across frequencies must match
+ * the calendar-accurate derivation in `deriveInstallmentCount`:
+ *   weekly = ceil(tenureMonths × 52 / 12)   (~4.33 weeks per month)
+ *   daily  = ceil(tenureMonths × 365.25 / 12) (~30.44 days per month)
+ *
+ * The previous test asserted exact 4× and 30× ratios, but those approximations
+ * under-count installments for longer tenures (a year has 52 weeks / 365.25
+ * days, not 48 / 360). This test now mirrors the actual derivation formula.
  *
  * **Validates: Requirements 2.1**
  */
-describe('Cross-Frequency: Installment count ratios are consistent', () => {
-  it('weekly has 4× and daily has 30× the monthly installment count', () => {
+describe('Cross-Frequency: Installment counts follow calendar-accurate derivation', () => {
+  it('weekly = ceil(months × 52/12) and daily = ceil(months × 365.25/12)', () => {
     const interestTypes = [InterestType.FLAT, InterestType.REDUCING_BALANCE];
 
     fc.assert(
@@ -349,9 +357,12 @@ describe('Cross-Frequency: Installment count ratios are consistent', () => {
             return generateSchedule(params).length;
           });
 
-          const monthlyCount = counts[0]!;
-          expect(counts[1]).toBe(monthlyCount * 4);  // weekly
-          expect(counts[2]).toBe(monthlyCount * 30); // daily
+          // Monthly: N = tenureMonths
+          expect(counts[0]).toBe(base.tenureMonths);
+          // Weekly: ceil(tenureMonths × 52 / 12)
+          expect(counts[1]).toBe(Math.ceil((base.tenureMonths * 52) / 12));
+          // Daily: ceil(tenureMonths × 365.25 / 12)
+          expect(counts[2]).toBe(Math.ceil((base.tenureMonths * 365.25) / 12));
         },
       ),
       { numRuns: 1000 },

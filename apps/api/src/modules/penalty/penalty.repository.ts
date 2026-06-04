@@ -279,6 +279,52 @@ export class PenaltyRepository {
   }
 
   /**
+   * (M8) Apply a partial/full payment to a penalty's `paid_paise` with a
+   * defensive overflow guard. Atomically:
+   *   1. Increments `paid_paise` by `deltaPaise`.
+   *   2. Flips `is_paid` to true when the new total reaches `amount_paise`.
+   *   3. REFUSES the write if `paid_paise + delta > amount_paise` (via the
+   *      `WHERE paid_paise + delta <= amount_paise` clause).
+   *
+   * Rowcount is asserted to be exactly 1; a 0-row result means either the
+   * penalty does not exist OR the guard tripped (would overpay). A clear
+   * error is thrown so the caller can react.
+   *
+   * NOTE on concurrency: this guard is a *defence in depth*. The primary
+   * concurrency control is the outer `SELECT ... FOR UPDATE` lock on the
+   * loans row (taken via `lockLoanForUpdate`) — concurrent collections
+   * against the same loan serialize on that lock, so two writers can never
+   * race to over-pay the same penalty. The WHERE-clause guard catches any
+   * caller that forgets to take the loan lock, plus logic bugs where the
+   * caller mis-computes the allocation.
+   */
+  async applyPenaltyPaymentGuarded(
+    penaltyId: string,
+    deltaPaise: bigint,
+    tx: TxClient,
+  ): Promise<void> {
+    if (deltaPaise <= 0n) {
+      throw new Error(
+        `applyPenaltyPaymentGuarded: deltaPaise must be positive (got ${deltaPaise})`,
+      );
+    }
+    const rowcount = await tx.$executeRaw`
+      UPDATE penalties
+         SET paid_paise = paid_paise + ${deltaPaise}::bigint,
+             is_paid = (paid_paise + ${deltaPaise}::bigint >= amount_paise)
+       WHERE id = ${penaltyId}::uuid
+         AND paid_paise + ${deltaPaise}::bigint <= amount_paise
+    `;
+    if (rowcount !== 1) {
+      throw new Error(
+        `applyPenaltyPaymentGuarded: expected rowcount=1, got ${rowcount} ` +
+          `(penalty ${penaltyId}, delta ${deltaPaise}). Either the penalty ` +
+          `does not exist or the payment would exceed amount_paise.`,
+      );
+    }
+  }
+
+  /**
    * Get pending (unpaid, unwaived) penalties for a loan within a transaction.
    */
   async getPendingPenalties(loanId: string, tx: TxClient) {
