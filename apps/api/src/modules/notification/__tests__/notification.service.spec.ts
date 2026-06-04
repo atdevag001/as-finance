@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NotificationService } from '../notification.service';
 import { NotificationRepository } from '../notification.repository';
 import { OutboxProcessor } from '../outbox-processor';
-import { MockSmsProvider, SmsProvider } from '../sms-provider';
+import { MockSmsProvider, type SmsProvider } from '../sms-provider';
 import { NotFoundError } from '../../../common/errors/not-found.error';
 import { BusinessRuleError } from '../../../common/errors/business-rule.error';
 

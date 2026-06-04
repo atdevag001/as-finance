@@ -53,7 +53,7 @@ export class NotificationRepository {
    */
   async create(data: CreateOutboxMessageData, tx?: TxClient) {
     const client = tx ?? this.prisma;
-    return (client as TxClient)['outbox_messages'].create({
+    return (client)['outbox_messages'].create({
       data: {
         event_type: data.event_type as never,
         recipient_mobile: data.recipient_mobile,

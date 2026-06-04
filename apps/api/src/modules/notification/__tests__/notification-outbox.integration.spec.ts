@@ -1,6 +1,6 @@
 ﻿import { describe, it, expect, vi } from 'vitest';
 import { NotificationService } from '../notification.service';
-import { NotificationRepository } from '../notification.repository';
+import type { NotificationRepository } from '../notification.repository';
 import { MockSmsProvider } from '../sms-provider';
 import { CollectionService } from '../../collection/collection.service';
 

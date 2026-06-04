@@ -3,6 +3,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { AccountingRepository } from './accounting.repository';
 import { CreateJournalEntryDto } from './dto/create-journal-entry.dto';
 import { BusinessRuleError } from '../../common/errors';
+import { parseDateIST } from '../../common/utils/date.util';
 
 /**
  * Prisma transaction client type — a subset of PrismaService used within
@@ -51,14 +52,16 @@ export class AccountingService {
    */
   async createJournalEntry(dto: CreateJournalEntryDto, tx?: TxClient) {
     // Reject entries dated into a closed accounting period.
-    // Derive YYYY-MM in IST (business calendar) — NOT UTC.
-    // UTC May 31 23:59 in IST → June 1 05:29 — we want the IST month.
-    const entryDate = new Date(dto.date);
-    const istMs = entryDate.getTime() + (5 * 60 + 30) * 60 * 1000;
-    const istDate = new Date(istMs);
-    const period = `${istDate.getUTCFullYear()}-${String(istDate.getUTCMonth() + 1).padStart(2, '0')}`;
+    // Derive YYYY-MM from the IST-anchored entry date (business calendar).
+    // parseDateIST handles 'YYYY-MM-DD' as IST midnight so the period reflects
+    // the business day, not the server-local interpretation of the input.
+    const entryDate = parseDateIST(dto.date);
+    // Convert back to IST-wall components by re-adding the IST offset, so
+    // getUTC* yields the IST calendar fields regardless of host TZ.
+    const istWall = new Date(entryDate.getTime() + (5 * 60 + 30) * 60 * 1000);
+    const period = `${istWall.getUTCFullYear()}-${String(istWall.getUTCMonth() + 1).padStart(2, '0')}`;
     const client = tx ?? this.prisma;
-    const closed = await (client as TxClient).accounting_periods.findUnique({
+    const closed = await (client).accounting_periods.findUnique({
       where: { period },
       select: { closed_at: true },
     });
@@ -119,7 +122,7 @@ export class AccountingService {
 
     const entry = await this.accountingRepository.createJournalEntry(
       {
-        entry_date: new Date(dto.date),
+        entry_date: entryDate,
         description: dto.description,
         source_type: dto.sourceType,
         source_id: dto.sourceId,
@@ -162,7 +165,7 @@ export class AccountingService {
     tx?: TxClient,
   ): Promise<void> {
     const client = tx ?? this.prisma;
-    const cashAccounts = await (client as TxClient).chart_of_accounts.findMany({
+    const cashAccounts = await (client).chart_of_accounts.findMany({
       where: { code: { in: ['1001', '1002'] } },
       select: { id: true, code: true },
     });
@@ -200,7 +203,7 @@ export class AccountingService {
     const category = categoryMap[dto.sourceType] ?? 'collection';
 
     const baseData = {
-      transaction_date: new Date(dto.date),
+      transaction_date: parseDateIST(dto.date),
       category: category as never,
       description: dto.description,
       source_type: 'journal_entry',
@@ -209,21 +212,21 @@ export class AccountingService {
     };
 
     if (netDebit > netCredit) {
-      await (client as TxClient).cash_transactions.create({
+      await (client).cash_transactions.create({
         data: { ...baseData, type: 'inflow' as never, amount_paise: netDebit - netCredit },
       });
     } else if (netCredit > netDebit) {
-      await (client as TxClient).cash_transactions.create({
+      await (client).cash_transactions.create({
         data: { ...baseData, type: 'outflow' as never, amount_paise: netCredit - netDebit },
       });
     } else {
       // Internal transfer (e.g. cash → bank): netDebit == netCredit > 0.
       // Record both legs so the cashbook reflects the movement.
       if (netDebit > 0n) {
-        await (client as TxClient).cash_transactions.create({
+        await (client).cash_transactions.create({
           data: { ...baseData, type: 'inflow' as never, amount_paise: netDebit, description: `${dto.description} (transfer in)` },
         });
-        await (client as TxClient).cash_transactions.create({
+        await (client).cash_transactions.create({
           data: { ...baseData, type: 'outflow' as never, amount_paise: netCredit, description: `${dto.description} (transfer out)` },
         });
       }

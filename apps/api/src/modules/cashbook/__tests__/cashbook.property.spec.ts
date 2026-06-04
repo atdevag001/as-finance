@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
-import { computeDailySummary, DailySummaryInput } from '../cashbook.service';
+import { computeDailySummary, type DailySummaryInput } from '../cashbook.service';
 
 // ---------------------------------------------------------------------------
 // Shared generators

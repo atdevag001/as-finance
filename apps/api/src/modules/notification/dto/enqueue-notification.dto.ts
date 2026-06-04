@@ -1,4 +1,4 @@
-import { IsEnum, IsString, IsObject, IsOptional, IsInt, Min } from 'class-validator';
+import { IsString, IsObject, IsOptional, IsInt, Min } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class EnqueueNotificationDto {

@@ -243,7 +243,7 @@ export class CashbookService {
   /**
    * Verify a cash handover, optionally flagging discrepancies.
    */
-  async verifyHandover(handoverId: string, dto: VerifyHandoverDto, actorId: string, actorRole: string) {
+  async verifyHandover(handoverId: string, dto: VerifyHandoverDto, _actorId: string, _actorRole: string) {
     const existing = await this.cashbookRepository.findHandoverById(handoverId);
     if (!existing) {
       throw new NotFoundError('Cash handover not found');

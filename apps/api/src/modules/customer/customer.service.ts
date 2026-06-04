@@ -13,6 +13,7 @@ import {
   ValidationError,
 } from '../../common/errors';
 import { UNRESTRICTED_ROLES } from '../../common/constants/roles';
+import { parseDateIST } from '../../common/utils/date.util';
 
 /** Extract last 4 characters from a string. */
 function lastFour(value: string): string {
@@ -92,7 +93,7 @@ export class CustomerService {
       aadhaar_last_four: aadhaarLastFour,
       pan_number_encrypted: panEncrypted,
       pan_last_four: panLastFour,
-      dob: dto.dob ? new Date(dto.dob) : undefined,
+      dob: dto.dob ? parseDateIST(dto.dob) : undefined,
       age: dto.age,
       gender: dto.gender,
       occupation: dto.occupation,
@@ -195,7 +196,7 @@ export class CustomerService {
       updateData.pan_number_encrypted = this.crypto.encrypt(dto.panNumber);
       updateData.pan_last_four = lastFour(dto.panNumber);
     }
-    if (dto.dob !== undefined) updateData.dob = new Date(dto.dob);
+    if (dto.dob !== undefined) updateData.dob = parseDateIST(dto.dob);
     if (dto.age !== undefined) updateData.age = dto.age;
     if (dto.occupation !== undefined) updateData.occupation = dto.occupation;
     if (dto.monthlyIncomePaise !== undefined) updateData.monthly_income_paise = dto.monthlyIncomePaise;

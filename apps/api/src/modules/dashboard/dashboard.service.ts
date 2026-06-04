@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
+import { todayISTDate } from '../../common/utils/date.util';
 
 export interface DashboardKPIs {
   totalCustomers: number;
@@ -17,12 +18,11 @@ export class DashboardService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getKPIs(): Promise<DashboardKPIs> {
-    // Get today's date range in IST
-    const now = new Date();
-    const todayStart = new Date(now);
-    todayStart.setHours(0, 0, 0, 0);
-    const todayEnd = new Date(now);
-    todayEnd.setHours(23, 59, 59, 999);
+    // Get today's date range anchored to IST midnight (business calendar).
+    // Using server-local setHours(0,0,0,0) shifts the boundary by the host TZ,
+    // bleeding records from neighboring IST days into today's KPIs.
+    const todayStart = todayISTDate();
+    const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000 - 1);
 
     // Run all queries in parallel for performance
     const [

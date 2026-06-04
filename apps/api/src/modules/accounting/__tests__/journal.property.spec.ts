@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import * as fc from 'fast-check';
 import { AccountingService } from '../accounting.service';
 import { AccountingRepository } from '../accounting.repository';
-import { CreateJournalEntryDto, JournalLineDto } from '../dto/create-journal-entry.dto';
+import { CreateJournalEntryDto, type JournalLineDto } from '../dto/create-journal-entry.dto';
 import { JournalSourceType } from '@as-finance/shared';
 import { BusinessRuleError } from '../../../common/errors';
 import { journalEntryArb } from '@as-finance/testing';

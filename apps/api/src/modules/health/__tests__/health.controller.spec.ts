@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ServiceUnavailableException } from '@nestjs/common';
 import { HealthController } from '../health.controller';
-import { PrismaService } from '../../../database/prisma.service';
+import type { PrismaService } from '../../../database/prisma.service';
 import { IS_PUBLIC_KEY } from '../../../common/guards/jwt-auth.guard';
 
 describe('HealthController', () => {

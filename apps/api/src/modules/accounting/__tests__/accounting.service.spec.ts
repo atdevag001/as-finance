@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AccountingService } from '../accounting.service';
-import { AccountingRepository } from '../accounting.repository';
+import type { AccountingRepository } from '../accounting.repository';
 import { CreateJournalEntryDto } from '../dto/create-journal-entry.dto';
 import { JournalSourceType } from '@as-finance/shared';
 import { BusinessRuleError } from '../../../common/errors';
+import { parseDateIST } from '../../../common/utils/date.util';
 
 function makeDto(overrides: Partial<CreateJournalEntryDto> = {}): CreateJournalEntryDto {
   const dto = new CreateJournalEntryDto();
@@ -84,7 +85,8 @@ describe('AccountingService', () => {
       await service.createJournalEntry(dto);
       expect(repo.createJournalEntry).toHaveBeenCalledWith(
         expect.objectContaining({
-          entry_date: new Date('2024-06-15'),
+          // entry_date is now IST-anchored midnight (business calendar).
+          entry_date: parseDateIST('2024-06-15'),
           description: 'Test entry',
           source_type: JournalSourceType.DISBURSEMENT,
           source_id: '00000000-0000-0000-0000-000000000001',

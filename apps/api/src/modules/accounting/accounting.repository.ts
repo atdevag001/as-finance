@@ -71,7 +71,7 @@ export class AccountingRepository {
    */
   async createJournalEntry(data: CreateJournalEntryData, tx?: TxClient) {
     const client = tx ?? this.prisma;
-    return (client as TxClient).journal_entries.create({
+    return (client).journal_entries.create({
       data: {
         entry_date: data.entry_date,
         description: data.description,
