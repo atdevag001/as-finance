@@ -4,6 +4,11 @@ import { Throttle } from '@nestjs/throttler';
 import { Request, Response } from 'express';
 import { ReportService, REPORT_TYPES } from './report.service';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
+import {
+  ReportExportQueryDto,
+  ReportQueryDto,
+} from './dto/report-query.dto';
+import { buildContentDisposition } from '../../common/utils/filename.util';
 
 interface AuthenticatedRequest extends Request {
   user: { sub: string; role: string };
@@ -63,10 +68,17 @@ export class ReportController {
   @ApiResponse({ status: 404, description: 'Unknown report type' })
   async generateReport(
     @Param('reportType') reportType: string,
-    @Query() query: Record<string, string>,
+    @Query() query: ReportQueryDto,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.reportService.generateReport(reportType, query, req.user);
+    // H10c — query is validated/normalised via ReportQueryDto before being
+    // handed to the service (the service signature still accepts an untyped
+    // bag, so we forward as-is).
+    return this.reportService.generateReport(
+      reportType,
+      query as unknown as Record<string, string>,
+      req.user,
+    );
   }
 
   /**
@@ -86,23 +98,30 @@ export class ReportController {
   @ApiResponse({ status: 404, description: 'Unknown report type or format' })
   async exportReport(
     @Param('reportType') reportType: string,
-    @Query('format') format: string,
-    @Query() query: Record<string, string>,
+    @Query() query: ReportExportQueryDto,
     @Req() req: AuthenticatedRequest,
     @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile> {
+    // H10c — `format` is validated by ReportExportQueryDto BEFORE it ever
+    // reaches the service or gets interpolated into the download filename.
+    // This prevents path traversal / header injection via the format param.
     const { buffer, mimeType, filename } = await this.reportService.exportReport(
       reportType,
-      format,
-      query,
+      query.format,
+      query as unknown as Record<string, string>,
       req.user,
     );
 
     res.set({
       'Content-Type': mimeType,
-      'Content-Disposition': `attachment; filename="${filename}"`,
       'Content-Length': buffer.length,
     });
+    // Use the sanitised filename helper so non-ASCII characters in
+    // reportType/dateStr never escape the header.
+    res.setHeader(
+      'Content-Disposition',
+      buildContentDisposition('attachment', filename),
+    );
 
     return new StreamableFile(buffer);
   }

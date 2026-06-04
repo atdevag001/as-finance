@@ -1,6 +1,28 @@
-import { IsOptional, IsString, IsInt, Min, Max, IsUUID, Matches } from 'class-validator';
+import { IsOptional, IsString, IsInt, Min, Max, IsUUID, Matches, IsEnum } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+
+/**
+ * M12 — loan status filter is now constrained to the canonical LoanStatus
+ * enum values (mirrors `LoanStatus` in @as-finance/shared). Kept as a local
+ * const array so class-validator's @IsEnum can use it as an allowlist
+ * without pulling the full enum into the query DTO.
+ */
+export const LOAN_STATUS_FILTER_VALUES = [
+  'draft',
+  'submitted',
+  'under_review',
+  'approved',
+  'rejected',
+  'disbursed',
+  'active',
+  'overdue',
+  'defaulted',
+  'foreclosed',
+  'closed',
+] as const;
+
+export type LoanStatusFilter = (typeof LOAN_STATUS_FILTER_VALUES)[number];
 
 export class LoanQueryDto {
   @ApiPropertyOptional({ description: 'Number of records to skip' })
@@ -18,10 +40,15 @@ export class LoanQueryDto {
   @Max(100)
   take?: number;
 
-  @ApiPropertyOptional({ description: 'Filter by loan status' })
+  @ApiPropertyOptional({
+    description: 'Filter by loan status',
+    enum: LOAN_STATUS_FILTER_VALUES,
+  })
   @IsOptional()
-  @IsString()
-  status?: string;
+  @IsEnum(LOAN_STATUS_FILTER_VALUES, {
+    message: `status must be one of: ${LOAN_STATUS_FILTER_VALUES.join(', ')}`,
+  })
+  status?: LoanStatusFilter;
 
   @ApiPropertyOptional({ description: 'Filter by customer ID' })
   @IsOptional()

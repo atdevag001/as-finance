@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { SettingsService } from '../settings.service';
-import { SettingsRepository } from '../settings.repository';
+import type { SettingsRepository } from '../settings.repository';
 import { ValidationError } from '../../../common/errors';
 
 /**
@@ -21,7 +21,7 @@ describe('SettingsService', () => {
 
   beforeEach(() => {
     repo = createMockRepo();
-    service = new SettingsService(repo as SettingsRepository);
+    service = new SettingsService(repo);
   });
 
   /**

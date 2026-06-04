@@ -139,7 +139,7 @@ export class ReportExportService {
       const doc = new PDFDocument({ margin: 40, size: 'A4', layout: 'landscape', bufferPages: true });
 
       doc.on('data', (chunk: Uint8Array) => chunks.push(chunk));
-      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('end', () => { resolve(Buffer.concat(chunks)); });
       doc.on('error', reject);
 
       // Title
@@ -210,7 +210,7 @@ export class ReportExportService {
           let value = row[col.key];
 
           if (col.type === 'currency' || col.key.includes('Paise') || col.key.includes('paise')) {
-            const numVal = typeof value === 'string' ? parseInt(value as string, 10) : (value as number);
+            const numVal = typeof value === 'string' ? parseInt(value, 10) : (value as number);
             value = `₹${(numVal / 100).toFixed(2)}`;
           }
 

@@ -19,6 +19,40 @@ import { Request, Response } from 'express';
 import { DocumentService, UploadDocumentDto } from './document.service';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 import { JwtPayload } from '../../common/guards/jwt-auth.guard';
+import { buildContentDisposition } from '../../common/utils/filename.util';
+
+/**
+ * H8 — Multer guardrails for document uploads.
+ *
+ * Enforces a 5 MB hard cap, a single-file ceiling, and a mimetype allowlist
+ * BEFORE the file reaches DocumentService. This prevents oversized payloads
+ * from being buffered into memory and stops disallowed types (executables,
+ * archives, HTML) at the controller boundary.
+ */
+const DOCUMENT_UPLOAD_ALLOWED_MIMES: ReadonlySet<string> = new Set([
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'application/pdf',
+]);
+
+const DOCUMENT_UPLOAD_OPTIONS = {
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5 MB
+    files: 1,
+  },
+  fileFilter: (
+    _req: Request,
+    file: Express.Multer.File,
+    cb: (err: Error | null, accept: boolean) => void,
+  ) => {
+    if (!DOCUMENT_UPLOAD_ALLOWED_MIMES.has(file.mimetype)) {
+      cb(new Error('INVALID_MIME_TYPE'), false);
+      return;
+    }
+    cb(null, true);
+  },
+};
 
 @ApiTags('documents')
 @Controller('documents')
@@ -28,7 +62,7 @@ export class DocumentController {
   @Post('upload')
   @RequirePermission('customer.upload_doc')
   @Throttle({ default: { ttl: 60_000, limit: 20 } }) // 20 uploads/min per user
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', DOCUMENT_UPLOAD_OPTIONS))
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: 'Upload a document (JPEG, PNG, or PDF, max 5MB)' })
   @ApiResponse({ status: 201, description: 'Document uploaded' })
@@ -67,12 +101,19 @@ export class DocumentController {
   ) {
     const { stream, metadata } = await this.documentService.getFileStream(id, req.user.sub, req.user.role);
 
+    // H9 — original_filename is user-controlled. Interpolating it directly into
+    // the Content-Disposition header allows CRLF / quote injection and filename
+    // smuggling. Build the header via the central sanitizer so non-ASCII names
+    // round-trip via RFC 5987 and dangerous characters are stripped.
     res.set({
       'Content-Type': metadata.mime_type,
-      'Content-Disposition': `inline; filename="${metadata.original_filename}"`,
       'Content-Length': metadata.size_bytes.toString(),
       'Cache-Control': 'private, max-age=900',
     });
+    res.setHeader(
+      'Content-Disposition',
+      buildContentDisposition('inline', metadata.original_filename),
+    );
 
     stream.on('error', (err) => {
       if (!res.headersSent) {

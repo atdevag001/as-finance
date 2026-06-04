@@ -118,7 +118,7 @@ export class DocumentService {
     }
 
     // Validate prefix
-    if (!VALID_PREFIXES.includes(dto.prefix as DocumentPrefix)) {
+    if (!VALID_PREFIXES.includes(dto.prefix)) {
       throw new ValidationError(
         `Invalid prefix "${dto.prefix}". Must be one of: ${VALID_PREFIXES.join(', ')}`,
       );
@@ -152,7 +152,7 @@ export class DocumentService {
 
     // If this is a KYC document for a customer, create the link
     if (dto.prefix === 'kyc' && dto.customerId && dto.documentType) {
-      if (!VALID_DOC_TYPES.includes(dto.documentType as DocumentType)) {
+      if (!VALID_DOC_TYPES.includes(dto.documentType)) {
         throw new ValidationError(
           `Invalid document type "${dto.documentType}". Must be one of: ${VALID_DOC_TYPES.join(', ')}`,
         );
@@ -251,7 +251,7 @@ export class DocumentService {
       },
     });
 
-    if (!metadata || !metadata.is_active) {
+    if (!metadata?.is_active) {
       throw new NotFoundError('Document not found');
     }
 

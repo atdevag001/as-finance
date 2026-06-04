@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ReportRepository } from './report.repository';
 import { ReportExportService, ExportData, ExportColumn } from './report-export.service';
 import { NotFoundError } from '../../common/errors';
+import { parseDateIST, todayISTDate } from '../../common/utils/date.util';
 
 /**
  * All 20 supported report types.
@@ -298,7 +299,7 @@ export class ReportService {
     // Build journal line map keyed by journal_entry_id
     const journalMap = new Map<string, { totalDebit: bigint; totalCredit: bigint }>();
     for (const line of journalLines) {
-      const entryId = line.journal_entry_id as string;
+      const entryId = line.journal_entry_id;
       const existing = journalMap.get(entryId) ?? { totalDebit: BigInt(0), totalCredit: BigInt(0) };
       existing.totalDebit += BigInt(line.debit_paise ?? 0);
       existing.totalCredit += BigInt(line.credit_paise ?? 0);
@@ -538,7 +539,7 @@ export class ReportService {
 
     for (const line of lines) {
       const category = line.account.category as string;
-      const name = line.account.name as string;
+      const name = line.account.name;
       const credit = BigInt(line.credit_paise ?? 0);
       const debit = BigInt(line.debit_paise ?? 0);
 
@@ -641,8 +642,9 @@ export class ReportService {
       loanIdScope: filter.loanIdScope,
     });
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Anchor "today" to IST midnight so the overdue computation lines up with
+    // the business calendar regardless of server TZ.
+    const today = todayISTDate();
 
     let totalEmiPaise = BigInt(0);
     let totalPaidPaise = BigInt(0);
@@ -741,9 +743,14 @@ export class ReportService {
   // ─── Helpers ─────────────────────────────────────────────────────────────
 
   private parseDateRange(query: ReportQuery): { startDate: Date; endDate: Date } {
-    const now = new Date();
-    const startDate = query.startDate ? new Date(query.startDate) : new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const endDate = query.endDate ? new Date(query.endDate) : now;
+    // Default range = today (IST midnight) → now. Explicit YYYY-MM-DD inputs
+    // parsed as IST midnight so the report window matches business days, not
+    // server-local days.
+    const todayIstMidnight = todayISTDate();
+    const startDate = query.startDate
+      ? parseDateIST(query.startDate)
+      : todayIstMidnight;
+    const endDate = query.endDate ? parseDateIST(query.endDate) : new Date();
     return { startDate, endDate };
   }
 }

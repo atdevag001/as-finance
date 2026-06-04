@@ -16,6 +16,8 @@ import { Request } from 'express';
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { AddAreaAssignmentDto } from './dto/area-assignment.dto';
+import { UserQueryDto } from './dto/user-query.dto';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 import { JwtPayload } from '../../common/guards/jwt-auth.guard';
 
@@ -43,15 +45,13 @@ export class UserController {
   @ApiQuery({ name: 'skip', required: false, type: Number })
   @ApiQuery({ name: 'take', required: false, type: Number })
   @ApiQuery({ name: 'role', required: false, type: String })
-  async findAll(
-    @Query('skip') skip?: string,
-    @Query('take') take?: string,
-    @Query('role') role?: string,
-  ) {
+  @ApiQuery({ name: 'search', required: false, type: String })
+  async findAll(@Query() query: UserQueryDto) {
+    // H10b — pagination + role + search are now validated by UserQueryDto.
     return this.userService.findAll({
-      skip: skip ? parseInt(skip, 10) : undefined,
-      take: take ? parseInt(take, 10) : undefined,
-      role,
+      skip: query.skip,
+      take: query.take,
+      role: query.role,
     });
   }
 
@@ -85,10 +85,11 @@ export class UserController {
   @ApiResponse({ status: 404, description: 'User not found' })
   async addAreaAssignment(
     @Param('id') userId: string,
-    @Body('areaName') areaName: string,
+    @Body() dto: AddAreaAssignmentDto,
     @Req() req: Request & { user: JwtPayload },
   ) {
-    return this.userService.addAreaAssignment(userId, areaName, req.user.sub);
+    // H10a — areaName is validated by AddAreaAssignmentDto (charset, length).
+    return this.userService.addAreaAssignment(userId, dto.areaName, req.user.sub);
   }
 
   @Delete(':id/area-assignments/:areaId')

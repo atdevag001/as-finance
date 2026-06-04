@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Get,
   Patch,
@@ -11,7 +12,11 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { SettingsService } from './settings.service';
-import { UpdateSettingDto, UpdateHolidaysDto } from './dto/update-setting.dto';
+import {
+  UpdateSettingDto,
+  UpdateHolidaysDto,
+  hasPrototypePollutionKey,
+} from './dto/update-setting.dto';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 
 @ApiTags('settings')
@@ -36,6 +41,17 @@ export class SettingsController {
     @Body() dto: UpdateSettingDto,
     @Req() req: { user: { sub: string } },
   ) {
+    // M11 — settings are persisted as JSONB and may be re-hydrated into
+    // arbitrary in-memory objects. Reject any payload that contains
+    // __proto__ / constructor / prototype keys at any depth so the
+    // assignment cannot mutate the prototype chain.
+    if (hasPrototypePollutionKey(dto.value)) {
+      throw new BadRequestException({
+        code: 'PROTOTYPE_POLLUTION',
+        message:
+          'Setting value contains a reserved key (__proto__, constructor, or prototype).',
+      });
+    }
     return this.settingsService.updateByKey(key, dto.value, req.user.sub, dto.description);
   }
 

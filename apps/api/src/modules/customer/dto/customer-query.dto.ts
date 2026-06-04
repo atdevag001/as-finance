@@ -1,6 +1,24 @@
-import { IsOptional, IsString, IsInt, Min, Max } from 'class-validator';
+import { IsOptional, IsString, IsInt, Min, Max, IsEnum } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+
+/**
+ * M12 — customer query filters are now constrained to canonical enums so the
+ * controller cannot accept arbitrary status / risk strings that bypass
+ * downstream service logic.
+ */
+export const CUSTOMER_STATUS_FILTER_VALUES = [
+  'active',
+  'blacklisted',
+  'inactive',
+] as const;
+
+export type CustomerStatusFilter =
+  (typeof CUSTOMER_STATUS_FILTER_VALUES)[number];
+
+export const CUSTOMER_RISK_LEVEL_VALUES = ['low', 'medium', 'high'] as const;
+
+export type CustomerRiskLevel = (typeof CUSTOMER_RISK_LEVEL_VALUES)[number];
 
 export class CustomerQueryDto {
   @ApiPropertyOptional({ description: 'Number of records to skip' })
@@ -18,18 +36,28 @@ export class CustomerQueryDto {
   @Max(100)
   take?: number;
 
-  @ApiPropertyOptional({ description: 'Filter by status (active, blacklisted, inactive)' })
+  @ApiPropertyOptional({
+    description: 'Filter by status',
+    enum: CUSTOMER_STATUS_FILTER_VALUES,
+  })
   @IsOptional()
-  @IsString()
-  status?: string;
+  @IsEnum(CUSTOMER_STATUS_FILTER_VALUES, {
+    message: `status must be one of: ${CUSTOMER_STATUS_FILTER_VALUES.join(', ')}`,
+  })
+  status?: CustomerStatusFilter;
 
   @ApiPropertyOptional({ description: 'Search by name, mobile, or Aadhaar last 4' })
   @IsOptional()
   @IsString()
   search?: string;
 
-  @ApiPropertyOptional({ description: 'Filter by risk level (low, medium, high)' })
+  @ApiPropertyOptional({
+    description: 'Filter by risk level',
+    enum: CUSTOMER_RISK_LEVEL_VALUES,
+  })
   @IsOptional()
-  @IsString()
-  riskLevel?: string;
+  @IsEnum(CUSTOMER_RISK_LEVEL_VALUES, {
+    message: `riskLevel must be one of: ${CUSTOMER_RISK_LEVEL_VALUES.join(', ')}`,
+  })
+  riskLevel?: CustomerRiskLevel;
 }

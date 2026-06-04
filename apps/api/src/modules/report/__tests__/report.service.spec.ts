@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ReportService, REPORT_TYPES } from '../report.service';
-import { ReportRepository } from '../report.repository';
-import { ReportExportService } from '../report-export.service';
+import type { ReportRepository } from '../report.repository';
+import type { ReportExportService } from '../report-export.service';
 
 /**
  * Unit tests for ReportService.
@@ -35,9 +35,9 @@ function createMockExportService() {
 
 describe('ReportService', () => {
   let service: ReportService;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   let mockRepo: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   let mockExportService: any;
 
   beforeEach(() => {
@@ -502,7 +502,28 @@ describe('ReportService', () => {
   describe('parseDateRange defaults', () => {
     const user = { sub: 'u1', role: 'super_admin' };
 
-    it('should use provided startDate and endDate', async () => {
+    // Per audit: dates are parsed as IST (Asia/Kolkata) midnight, so 'YYYY-MM-DD'
+    // → UTC 18:30 of previous day. Assertions below check IST semantics, not
+    // system-local time.
+    const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000;
+
+    // Returns the IST calendar components (Y-M-D, H, M, S) for a given Date.
+    function istParts(d: Date): {
+      ymd: string;
+      hours: number;
+      minutes: number;
+      seconds: number;
+    } {
+      const istShifted = new Date(d.getTime() + IST_OFFSET_MS);
+      return {
+        ymd: istShifted.toISOString().slice(0, 10),
+        hours: istShifted.getUTCHours(),
+        minutes: istShifted.getUTCMinutes(),
+        seconds: istShifted.getUTCSeconds(),
+      };
+    }
+
+    it('should use provided startDate and endDate (IST-anchored)', async () => {
       mockRepo.getDisbursements.mockResolvedValue([]);
 
       const result: any = await service.generateReport(
@@ -511,8 +532,10 @@ describe('ReportService', () => {
         user,
       );
 
-      expect(result.filters.startDate).toContain('2024-06-01');
-      expect(result.filters.endDate).toContain('2024-06-30');
+      // Per audit: input 'YYYY-MM-DD' is IST midnight.
+      // 2024-06-01 IST 00:00 == 2024-05-31T18:30:00.000Z (UTC).
+      expect(istParts(new Date(result.filters.startDate)).ymd).toBe('2024-06-01');
+      expect(istParts(new Date(result.filters.endDate)).ymd).toBe('2024-06-30');
     });
 
     it('should default startDate to today and endDate to now when not provided', async () => {
@@ -522,13 +545,14 @@ describe('ReportService', () => {
       const result: any = await service.generateReport('daily-collection', {}, user);
       const after = new Date();
 
-      // startDate should be start of today (midnight)
+      // startDate should be IST midnight today
       const startDate = new Date(result.filters.startDate);
-      expect(startDate.getHours()).toBe(0);
-      expect(startDate.getMinutes()).toBe(0);
-      expect(startDate.getSeconds()).toBe(0);
+      const parts = istParts(startDate);
+      expect(parts.hours).toBe(0);
+      expect(parts.minutes).toBe(0);
+      expect(parts.seconds).toBe(0);
 
-      // endDate should be approximately now
+      // endDate should be approximately now (UTC instant, no timezone change)
       const endDate = new Date(result.filters.endDate);
       expect(endDate.getTime()).toBeGreaterThanOrEqual(before.getTime());
       expect(endDate.getTime()).toBeLessThanOrEqual(after.getTime() + 1000);
@@ -543,8 +567,9 @@ describe('ReportService', () => {
         user,
       );
 
-      expect(result.filters.startDate).toContain('2024-01-01');
-      // endDate defaults to now
+      // Provided startDate parsed as IST midnight.
+      expect(istParts(new Date(result.filters.startDate)).ymd).toBe('2024-01-01');
+      // endDate defaults to now (UTC instant)
       const endDate = new Date(result.filters.endDate);
       const now = new Date();
       expect(Math.abs(endDate.getTime() - now.getTime())).toBeLessThan(5000);
@@ -559,11 +584,12 @@ describe('ReportService', () => {
         user,
       );
 
-      // startDate defaults to start of today
+      // startDate defaults to IST midnight today.
       const startDate = new Date(result.filters.startDate);
-      expect(startDate.getHours()).toBe(0);
-      expect(startDate.getMinutes()).toBe(0);
-      expect(result.filters.endDate).toContain('2024-12-31');
+      const startParts = istParts(startDate);
+      expect(startParts.hours).toBe(0);
+      expect(startParts.minutes).toBe(0);
+      expect(istParts(new Date(result.filters.endDate)).ymd).toBe('2024-12-31');
     });
   });
 
