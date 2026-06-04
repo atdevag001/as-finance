@@ -24,6 +24,18 @@ export function decToPaise(dec: Decimal): number {
 }
 
 /**
+ * Convert a BigInt paise value to a Decimal without precision loss.
+ *
+ * Prefer this over `Number(bigint)` when the value enters Decimal arithmetic,
+ * since `Number()` silently truncates above 2^53.
+ *
+ *   bigIntToDecimal(9_007_199_254_740_993n)  // exact, not truncated
+ */
+export function bigIntToDecimal(value: bigint | number): Decimal {
+  return new Decimal(value.toString());
+}
+
+/**
  * Formats paise as INR with Indian comma grouping.
  * Indian grouping: last 3 digits, then groups of 2.
  * Example: 12345678 paise → "₹1,23,456.78"

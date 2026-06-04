@@ -282,6 +282,7 @@ model users {
   audit_logs                 audit_logs[]
   settings_updated           settings[]
   journal_entries_created    journal_entries[]
+  password_history           password_history[]
 
   @@index([role], name: "idx_users_role")
 }
@@ -295,6 +296,8 @@ model password_history {
   user_id       String   @db.Uuid
   password_hash String   @db.VarChar(255)
   created_at    DateTime @default(now()) @db.Timestamptz()
+
+  user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@index([user_id, created_at(sort: Desc)], name: "idx_password_history_user")
 }
@@ -518,6 +521,7 @@ model loans {
   disbursement_date        DateTime?      @db.Date
   first_due_date           DateTime?      @db.Date
   last_due_date            DateTime?      @db.Date
+  last_interest_accrued_to DateTime?      @db.Date
   dpd                      Int            @default(0)
   overdue_bucket           OverdueBucket?
   created_by               String         @db.Uuid
@@ -672,6 +676,7 @@ model collection_allocations {
   id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   collection_id   String   @db.Uuid
   installment_id  String   @db.Uuid
+  penalty_id      String?  @db.Uuid
   penalty_paise   BigInt   @default(0)
   interest_paise  BigInt   @default(0)
   principal_paise BigInt   @default(0)
@@ -680,9 +685,11 @@ model collection_allocations {
 
   collection  collections    @relation(fields: [collection_id], references: [id])
   installment loan_schedules @relation(fields: [installment_id], references: [id])
+  penalty     penalties?     @relation(fields: [penalty_id], references: [id])
 
   @@index([collection_id], name: "idx_allocations_collection_id")
   @@index([installment_id], name: "idx_allocations_installment_id")
+  @@index([penalty_id], name: "idx_allocations_penalty_id")
 }
 
 /// Immutable receipt snapshots — content never modified after creation
@@ -740,11 +747,12 @@ model penalties {
   version             Int      @default(1)
   created_at          DateTime @default(now()) @db.Timestamptz()
 
-  loan            loans           @relation(fields: [loan_id], references: [id])
-  installment     loan_schedules  @relation(fields: [installment_id], references: [id])
-  waiver_user     users?          @relation("penalty_waived_by", fields: [waived_by], references: [id])
-  waiver_approver users?          @relation("penalty_waiver_approved_by", fields: [waiver_approved_by], references: [id])
-  journal_entry   journal_entries @relation(fields: [journal_entry_id], references: [id])
+  loan            loans                    @relation(fields: [loan_id], references: [id])
+  installment     loan_schedules           @relation(fields: [installment_id], references: [id])
+  waiver_user     users?                   @relation("penalty_waived_by", fields: [waived_by], references: [id])
+  waiver_approver users?                   @relation("penalty_waiver_approved_by", fields: [waiver_approved_by], references: [id])
+  journal_entry   journal_entries          @relation(fields: [journal_entry_id], references: [id])
+  allocations     collection_allocations[]
 
   @@unique([loan_id, installment_id, penalty_period], name: "idx_penalties_unique_period")
   @@index([loan_id], name: "idx_penalties_loan_id")

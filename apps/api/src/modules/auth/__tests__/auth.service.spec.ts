@@ -201,8 +201,13 @@ describe('AuthService', () => {
       );
     });
 
-    /** Validates: Requirements 17.5 — locked account = 403 AuthorizationError */
-    it('should throw AuthorizationError for locked account', async () => {
+    /**
+     * Validates: Requirements 17.5 — locked account masked as generic
+     * INVALID_CREDENTIALS (audit anti-enumeration). The client must NOT be
+     * able to distinguish "locked" from "wrong password" by response code or
+     * message; lock state is logged internally only.
+     */
+    it('should throw UnauthorizedError (masked as invalid credentials) for locked account', async () => {
       const futureDate = new Date();
       futureDate.setMinutes(futureDate.getMinutes() + 10);
 
@@ -210,10 +215,12 @@ describe('AuthService', () => {
         ...mockUser,
         locked_until: futureDate,
       });
+      // Decoy bcrypt compare is invoked to equalize timing — return false.
+      (bcrypt.compare as ReturnType<typeof vi.fn>).mockResolvedValue(false);
 
       await expect(
         service.login({ username: 'testuser', password: 'pass' }),
-      ).rejects.toThrow(AuthorizationError);
+      ).rejects.toThrow(UnauthorizedError);
     });
 
     /** Validates: Requirements 17.5 */

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
 import * as crypto from 'crypto';
@@ -6,12 +6,34 @@ import { PrismaService } from '../../database/prisma.service';
 import { LoginDto } from './dto/login.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { AuthorizationError, BusinessRuleError, UnauthorizedError } from '../../common/errors';
+import { isCommonPassword } from '../../common/utils/common-passwords';
 
 // Use lower bcrypt cost in test/dev for faster hashing (still secure enough for tests)
 const BCRYPT_COST = process.env['BCRYPT_COST'] ? parseInt(process.env['BCRYPT_COST'], 10) : 12;
 const REFRESH_TOKEN_DAYS = 7;
 const PASSWORD_HISTORY_DEPTH = 5;
 const PASSWORD_HISTORY_RETAIN = 10; // keep last N hashes per user (prune older)
+
+/**
+ * Fixed bcrypt hash used as a constant-time decoy when the username does not
+ * exist or the account is inactive. Performing a bcrypt.compare against this
+ * value equalizes timing so an attacker cannot enumerate valid usernames.
+ * Cost factor 12 matches BCRYPT_COST. Hash value is irrelevant — it just has
+ * to be a valid bcrypt string. Generated from the literal string "decoy".
+ */
+const DECOY_HASH =
+  '$2a$12$CwTycUXWue0Thq9StjUM0uJ8.GYI8oBu3JxqMxXr9F6lvJqkTUvWy';
+
+/** Optional request context passed by controllers for audit log fidelity. */
+export interface AuthRequestContext {
+  ipAddress: string;
+  requestId: string;
+}
+
+const DEFAULT_CTX: AuthRequestContext = {
+  ipAddress: '0.0.0.0',
+  requestId: '00000000-0000-0000-0000-000000000000',
+};
 
 export interface LoginResult {
   accessToken: string;
@@ -31,31 +53,40 @@ export class AuthService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async login(dto: LoginDto): Promise<LoginResult> {
+  async login(dto: LoginDto, ctx: AuthRequestContext = DEFAULT_CTX): Promise<LoginResult> {
     const user = await this.prisma['users'].findUnique({
       where: { username: dto.username },
     });
 
-    if (!user || !user.is_active) {
+    if (!user?.is_active) {
+      // Constant-time decoy: equalize timing so an attacker can't enumerate
+      // valid usernames by measuring response time. We compare against a
+      // fixed valid bcrypt hash so the bcrypt cost is paid either way.
+      await bcrypt.compare(dto.password, DECOY_HASH);
       throw new UnauthorizedError('Invalid credentials', 'INVALID_CREDENTIALS');
     }
 
-    // Lockout check BEFORE bcrypt — prevents timing-side-channel and credential stuffing
+    // Lockout check BEFORE bcrypt — prevents timing-side-channel and credential stuffing.
+    // Do NOT expose ACCOUNT_LOCKED to the client (avoids account enumeration);
+    // return the same generic INVALID_CREDENTIALS code. Lock state is still
+    // logged internally for ops/audit visibility.
     if (user.locked_until && user.locked_until > new Date()) {
-      const minutes = Math.ceil(
-        (user.locked_until.getTime() - Date.now()) / 60_000,
-      );
-      throw new AuthorizationError(
-        `Account locked due to too many failed login attempts. Try again in ${minutes} minute(s).`,
-        'ACCOUNT_LOCKED',
-      );
+      this.logger.warn({
+        msg: 'Login attempt against locked account',
+        userId: user.id,
+        lockedUntil: user.locked_until.toISOString(),
+        requestId: ctx.requestId,
+      });
+      // Pay the bcrypt cost so timing matches the success path.
+      await bcrypt.compare(dto.password, DECOY_HASH);
+      throw new UnauthorizedError('Invalid credentials', 'INVALID_CREDENTIALS');
     }
 
     // Compare password
     const passwordValid = await bcrypt.compare(dto.password, user.password_hash);
 
     if (!passwordValid) {
-      await this.handleFailedLogin(user.id);
+      await this.handleFailedLogin(user.id, ctx);
       throw new UnauthorizedError('Invalid credentials', 'INVALID_CREDENTIALS');
     }
 
@@ -72,7 +103,7 @@ export class AuthService {
     const accessToken = this.issueAccessToken(user.id, user.role, user.token_version);
     const refreshToken = await this.createRefreshToken(user.id);
 
-    await this.logAuditEvent(user.id, user.role, 'login_success', 'users', user.id);
+    await this.logAuditEvent(user.id, user.role, 'login_success', 'users', user.id, ctx);
 
     return {
       accessToken,
@@ -86,7 +117,10 @@ export class AuthService {
     };
   }
 
-  async refreshToken(currentRefreshToken: string): Promise<RefreshResult> {
+  async refreshToken(
+    currentRefreshToken: string,
+    ctx: AuthRequestContext = DEFAULT_CTX,
+  ): Promise<RefreshResult> {
     const selector = currentRefreshToken.slice(0, 32);
     const validator = currentRefreshToken.slice(32);
 
@@ -131,6 +165,7 @@ export class AuthService {
         'refresh_token_replay_detected',
         'refresh_tokens',
         token.id,
+        ctx,
       );
       throw new UnauthorizedError(
         'Refresh token replay detected. All sessions revoked.',
@@ -180,16 +215,20 @@ export class AuthService {
     };
   }
 
-  async logout(userId: string): Promise<void> {
+  async logout(userId: string, ctx: AuthRequestContext = DEFAULT_CTX): Promise<void> {
     await this.prisma['refresh_tokens'].updateMany({
       where: { user_id: userId, is_revoked: false },
       data: { is_revoked: true },
     });
 
-    await this.logAuditEvent(userId, undefined, 'logout', 'users', userId);
+    await this.logAuditEvent(userId, undefined, 'logout', 'users', userId, ctx);
   }
 
-  async changePassword(userId: string, dto: ChangePasswordDto): Promise<void> {
+  async changePassword(
+    userId: string,
+    dto: ChangePasswordDto,
+    ctx: AuthRequestContext = DEFAULT_CTX,
+  ): Promise<void> {
     const user = await this.prisma['users'].findUnique({
       where: { id: userId },
     });
@@ -208,6 +247,15 @@ export class AuthService {
         'Current password is incorrect',
         'INVALID_CURRENT_PASSWORD',
       );
+    }
+
+    // Reject common/breached passwords (complexity is enforced by DTO validators).
+    if (isCommonPassword(dto.newPassword)) {
+      throw new BadRequestException({
+        message:
+          'This password appears in common breach lists. Choose a less predictable one.',
+        code: 'COMMON_PASSWORD',
+      });
     }
 
     // Reject re-use of current password
@@ -276,6 +324,7 @@ export class AuthService {
       'password_changed',
       'users',
       userId,
+      ctx,
     );
   }
 
@@ -371,7 +420,10 @@ export class AuthService {
     });
   }
 
-  private async handleFailedLogin(userId: string): Promise<void> {
+  private async handleFailedLogin(
+    userId: string,
+    ctx: AuthRequestContext = DEFAULT_CTX,
+  ): Promise<void> {
     // Atomically increment failed counter
     const updated = await this.prisma['users'].update({
       where: { id: userId },
@@ -379,7 +431,7 @@ export class AuthService {
       select: { failed_login_attempts: true },
     });
 
-    await this.logAuditEvent(userId, undefined, 'login_failed', 'users', userId);
+    await this.logAuditEvent(userId, undefined, 'login_failed', 'users', userId, ctx);
 
     // Lock the account after 5 consecutive failed attempts
     if (updated.failed_login_attempts >= 5) {
@@ -388,7 +440,7 @@ export class AuthService {
         where: { id: userId },
         data: { locked_until: lockedUntil },
       });
-      await this.logAuditEvent(userId, undefined, 'account_locked', 'users', userId);
+      await this.logAuditEvent(userId, undefined, 'account_locked', 'users', userId, ctx);
       this.logger.warn({
         msg: 'Account locked after 5 failed login attempts',
         userId,
@@ -403,6 +455,7 @@ export class AuthService {
     actionType: string,
     targetEntity: string,
     targetId: string,
+    ctx: AuthRequestContext = DEFAULT_CTX,
   ): Promise<void> {
     try {
       await this.prisma['audit_logs'].create({
@@ -412,8 +465,8 @@ export class AuthService {
           actor_role: (actorRole ?? 'viewer_auditor') as never,
           target_entity: targetEntity,
           target_id: targetId,
-          ip_address: '0.0.0.0',
-          request_id: '00000000-0000-0000-0000-000000000000',
+          ip_address: ctx.ipAddress,
+          request_id: ctx.requestId,
         },
       });
     } catch (error) {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ExecutionContext } from '@nestjs/common';
+import type { ExecutionContext } from '@nestjs/common';
 import { ThrottlerException } from '@nestjs/throttler';
 import { Reflector } from '@nestjs/core';
 import { CustomThrottlerGuard } from '../throttler.guard';
@@ -37,21 +37,21 @@ describe('CustomThrottlerGuard', () => {
     const guard = createGuard();
     const req = { user: { sub: 'user-abc-123' }, ip: '192.168.1.1' };
     const tracker = await callGetTracker(guard, req);
-    expect(tracker).toBe('user-abc-123');
+    expect(tracker).toBe('user:user-abc-123');
   });
 
   it('returns user sub regardless of IP being present', async () => {
     const guard = createGuard();
     const req = { user: { sub: 'u-42' }, ip: '10.0.0.1' };
     const tracker = await callGetTracker(guard, req);
-    expect(tracker).toBe('u-42');
+    expect(tracker).toBe('user:u-42');
   });
 
   it('returns user sub when IP is missing', async () => {
     const guard = createGuard();
     const req = { user: { sub: 'user-no-ip' } };
     const tracker = await callGetTracker(guard, req);
-    expect(tracker).toBe('user-no-ip');
+    expect(tracker).toBe('user:user-no-ip');
   });
 
   // --- Validates: Requirement 69.2 — getTracker falls back to IP when no user ---
@@ -60,28 +60,28 @@ describe('CustomThrottlerGuard', () => {
     const guard = createGuard();
     const req = { ip: '203.0.113.50' };
     const tracker = await callGetTracker(guard, req);
-    expect(tracker).toBe('203.0.113.50');
+    expect(tracker).toBe('ip:203.0.113.50');
   });
 
   it('falls back to IP when user object exists but has no sub', async () => {
     const guard = createGuard();
     const req = { user: {}, ip: '10.20.30.40' };
     const tracker = await callGetTracker(guard, req);
-    expect(tracker).toBe('10.20.30.40');
+    expect(tracker).toBe('ip:10.20.30.40');
   });
 
   it('falls back to IP when user is undefined', async () => {
     const guard = createGuard();
     const req = { user: undefined, ip: '127.0.0.1' };
     const tracker = await callGetTracker(guard, req);
-    expect(tracker).toBe('127.0.0.1');
+    expect(tracker).toBe('ip:127.0.0.1');
   });
 
   it('falls back to IP when user.sub is empty string', async () => {
     const guard = createGuard();
     const req = { user: { sub: '' }, ip: '172.16.0.1' };
     const tracker = await callGetTracker(guard, req);
-    expect(tracker).toBe('172.16.0.1');
+    expect(tracker).toBe('ip:172.16.0.1');
   });
 
   // --- Validates: Requirement 69.3 — getTracker returns 'unknown' when neither available ---

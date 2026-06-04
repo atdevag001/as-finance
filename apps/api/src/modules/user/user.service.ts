@@ -188,7 +188,7 @@ export class UserService {
     }
 
     const assignment = await this.userRepository.findAreaAssignment(areaId);
-    if (!assignment || assignment.user_id !== userId) {
+    if (assignment?.user_id !== userId) {
       throw new NotFoundError(
         'Area assignment not found',
         'AREA_ASSIGNMENT_NOT_FOUND',

@@ -271,7 +271,7 @@ describe('Property 17: Audit Log Append-Only', () => {
           target_id: input.target_id,
         });
 
-        const readBack = readEntry(created.id as string);
+        const readBack = readEntry(created.id);
 
         expect(readBack).toBeDefined();
         expect(readBack!['action_type']).toBe(created.action_type);

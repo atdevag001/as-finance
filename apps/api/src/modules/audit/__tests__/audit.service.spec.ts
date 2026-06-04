@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AuditService } from '../audit.service';
-import { AuditRepository } from '../audit.repository';
-import { CreateAuditLogDto } from '../dto/create-audit-log.dto';
+import type { AuditRepository } from '../audit.repository';
+import type { CreateAuditLogDto } from '../dto/create-audit-log.dto';
 
 /**
  * Validates: Requirements 33.1, 33.2, 33.3, 33.4

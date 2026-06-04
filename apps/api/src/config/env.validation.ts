@@ -48,6 +48,10 @@ export const envSchema = z
       .enum(['development', 'test', 'staging', 'production'])
       .default('development'),
     PORT: z.coerce.number().int().positive().default(3001),
+
+    // CORS allowlist (comma-separated origins). Optional — empty means no
+    // cross-origin browsers are allowed (server-to-server / same-origin only).
+    CORS_ORIGINS: z.string().optional(),
   })
   .superRefine((env, ctx) => {
     if (LEAKED_JWT_SECRETS.has(env.JWT_SECRET)) {

@@ -1,6 +1,5 @@
-import { Injectable, ExecutionContext } from '@nestjs/common';
+import { Injectable, type ExecutionContext } from '@nestjs/common';
 import { ThrottlerGuard, ThrottlerException } from '@nestjs/throttler';
-import { Reflector } from '@nestjs/core';
 
 /**
  * Custom throttler guard that uses authenticated user ID when available,
@@ -14,28 +13,28 @@ import { Reflector } from '@nestjs/core';
  */
 @Injectable()
 export class CustomThrottlerGuard extends ThrottlerGuard {
-  constructor(
-    options: ConstructorParameters<typeof ThrottlerGuard>[0],
-    storageService: ConstructorParameters<typeof ThrottlerGuard>[1],
-    reflector: Reflector,
-  ) {
-    super(options, storageService, reflector);
-  }
+  // Constructor inherited from ThrottlerGuard — Nest DI resolves it.
 
-  protected override async getTracker(req: Record<string, unknown>): Promise<string> {
-    // Use authenticated user ID if available, otherwise fall back to IP
-    const user = req['user'] as { sub?: string } | undefined;
-    if (user?.sub) {
-      return user.sub;
+  protected override getTracker(req: Record<string, unknown>): Promise<string> {
+    // Use authenticated user id when available so per-user limits actually
+    // throttle a single account regardless of IP rotation. Falls back to the
+    // request IP for unauthenticated requests (e.g., login).
+    // Accepts either `userId` or `sub` (JWT subject claim) — both refer to the
+    // authenticated user's id.
+    const user = req['user'] as { sub?: string; userId?: string } | undefined;
+    const userId = user?.userId ?? user?.sub;
+    if (userId) {
+      return Promise.resolve(`user:${userId}`);
     }
-    return (req['ip'] as string) ?? 'unknown';
+    const ip = req['ip'] as string | undefined;
+    return Promise.resolve(ip ? `ip:${ip}` : 'unknown');
   }
 
-  protected override async throwThrottlingException(
+  protected override throwThrottlingException(
     _context: ExecutionContext,
   ): Promise<void> {
-    throw new ThrottlerException(
-      'Too many requests. Please try again later.',
+    return Promise.reject(
+      new ThrottlerException('Too many requests. Please try again later.'),
     );
   }
 }

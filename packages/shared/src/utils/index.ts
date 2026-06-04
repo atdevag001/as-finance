@@ -1,2 +1,2 @@
 export { maskAadhaar, maskPan, maskMobile } from './masking.js';
-export { paiseToDec, decToPaise, formatINR } from './money.js';
+export { paiseToDec, decToPaise, formatINR, bigIntToDecimal } from './money.js';

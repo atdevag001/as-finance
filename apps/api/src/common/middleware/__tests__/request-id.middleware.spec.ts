@@ -47,7 +47,7 @@ describe('RequestIdMiddleware', () => {
     }
 
     // All should be valid UUIDs
-    ids.forEach((id) => expect(id).toMatch(UUID_REGEX));
+    ids.forEach((id) => { expect(id).toMatch(UUID_REGEX); });
     // All should be unique
     expect(new Set(ids).size).toBe(ids.length);
   });

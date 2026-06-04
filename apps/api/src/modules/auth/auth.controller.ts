@@ -49,9 +49,15 @@ export class AuthController {
   @ApiResponse({ status: 429, description: 'Too many login attempts' })
   async login(
     @Body() dto: LoginDto,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const result = await this.authService.login(dto);
+    const result = await this.authService.login(dto, {
+      ipAddress: req.ip ?? '0.0.0.0',
+      requestId:
+        (req as Request & { requestId?: string }).requestId ??
+        '00000000-0000-0000-0000-000000000000',
+    });
 
     // Access token: HttpOnly cookie (XSS-resistant); JwtAuthGuard reads it
     res.cookie(ACCESS_COOKIE_NAME, result.accessToken, accessCookieOptions());
@@ -75,6 +81,7 @@ export class AuthController {
 
   @Post('refresh')
   @SetMetadata(IS_PUBLIC_KEY, true)
+  @Throttle({ refresh: { ttl: 60_000, limit: 10 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Refresh access token using refresh token cookie' })
   @ApiResponse({ status: 200, description: 'Token refreshed' })
@@ -92,7 +99,12 @@ export class AuthController {
       );
     }
 
-    const result = await this.authService.refreshToken(currentRefreshToken);
+    const result = await this.authService.refreshToken(currentRefreshToken, {
+      ipAddress: req.ip ?? '0.0.0.0',
+      requestId:
+        (req as Request & { requestId?: string }).requestId ??
+        '00000000-0000-0000-0000-000000000000',
+    });
 
     // Rotate access cookie
     res.cookie(ACCESS_COOKIE_NAME, result.accessToken, accessCookieOptions());
@@ -115,10 +127,13 @@ export class AuthController {
   @ApiOperation({ summary: 'Logout and revoke refresh token' })
   @ApiResponse({ status: 200, description: 'Logged out successfully' })
   async logout(
-    @Req() req: Request & { user: JwtPayload },
+    @Req() req: Request & { user: JwtPayload; requestId?: string },
     @Res({ passthrough: true }) res: Response,
   ) {
-    await this.authService.logout(req.user.sub);
+    await this.authService.logout(req.user.sub, {
+      ipAddress: req.ip ?? '0.0.0.0',
+      requestId: req.requestId ?? '00000000-0000-0000-0000-000000000000',
+    });
 
     // Clear both cookies
     res.clearCookie(ACCESS_COOKIE_NAME, accessCookieOptions());
@@ -134,16 +149,20 @@ export class AuthController {
 
   @Post('change-password')
   @UseGuards(JwtAuthGuard)
+  @Throttle({ changePassword: { ttl: 60_000, limit: 5 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Change password and invalidate all sessions' })
   @ApiResponse({ status: 200, description: 'Password changed successfully' })
   @ApiResponse({ status: 403, description: 'Current password incorrect' })
   async changePassword(
-    @Req() req: Request & { user: JwtPayload },
+    @Req() req: Request & { user: JwtPayload; requestId?: string },
     @Body() dto: ChangePasswordDto,
     @Res({ passthrough: true }) res: Response,
   ) {
-    await this.authService.changePassword(req.user.sub, dto);
+    await this.authService.changePassword(req.user.sub, dto, {
+      ipAddress: req.ip ?? '0.0.0.0',
+      requestId: req.requestId ?? '00000000-0000-0000-0000-000000000000',
+    });
 
     // Clear refresh token cookie since all sessions are invalidated
     res.clearCookie(REFRESH_COOKIE_NAME, {

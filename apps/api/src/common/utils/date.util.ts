@@ -61,5 +61,29 @@ export function parseDateIST(dateStr: string): Date {
     throw new Error(`Invalid date components: ${dateStr}`);
   }
   // IST midnight = UTC 18:30 previous day
-  return new Date(Date.UTC(y!, m! - 1, d!, -5, -30));
+  return new Date(Date.UTC(y!, m! - 1, d, -5, -30));
+}
+
+/**
+ * Calendar-day difference between two Dates, in IST.
+ * Floor-rounds; ignores time-of-day. Returns negative if b < a.
+ *
+ *   calendarDaysDiff(2026-03-31T23:59:59 IST, 2026-04-01T00:00:01 IST) === 1
+ *
+ * Prefer over (b - a) / 86_400_000 for DPD/penalty math, which is off-by-one
+ * across midnight and may double-count across DST boundaries in non-IST TZs.
+ */
+export function calendarDaysDiff(a: Date, b: Date): number {
+  const aIST = new Date(a.getTime() + IST_OFFSET_MS);
+  const bIST = new Date(b.getTime() + IST_OFFSET_MS);
+  return Math.floor(
+    (Date.UTC(bIST.getUTCFullYear(), bIST.getUTCMonth(), bIST.getUTCDate()) -
+      Date.UTC(aIST.getUTCFullYear(), aIST.getUTCMonth(), aIST.getUTCDate())) /
+      86_400_000,
+  );
+}
+
+/** IST-midnight Date for "today" (system clock). */
+export function todayISTDate(): Date {
+  return parseDateIST(todayIST());
 }

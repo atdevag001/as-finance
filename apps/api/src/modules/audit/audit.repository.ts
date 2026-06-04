@@ -61,7 +61,7 @@ export class AuditRepository {
    */
   async create(data: CreateAuditLogData, tx?: TxClient) {
     const client = tx ?? this.prisma;
-    return (client as TxClient)['audit_logs'].create({
+    return (client)['audit_logs'].create({
       data: data as never,
       select: AUDIT_LOG_SELECT,
     });

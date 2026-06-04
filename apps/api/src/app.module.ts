@@ -4,6 +4,7 @@ import { LoggerModule } from 'nestjs-pino';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { CustomThrottlerGuard } from './common/guards/throttler.guard';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { CsrfGuard } from './common/guards/csrf.guard';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
 import { DatabaseModule } from './database/database.module';
@@ -42,6 +43,16 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
       },
       {
         name: 'login',
+        ttl: 60_000,
+        limit: process.env['NODE_ENV'] === 'test' ? 1000 : 5,
+      },
+      {
+        name: 'refresh',
+        ttl: 60_000,
+        limit: process.env['NODE_ENV'] === 'test' ? 1000 : 10,
+      },
+      {
+        name: 'changePassword',
         ttl: 60_000,
         limit: process.env['NODE_ENV'] === 'test' ? 1000 : 5,
       },
@@ -108,10 +119,15 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
   ],
   providers: [
     { provide: APP_FILTER, useClass: GlobalExceptionFilter },
-    { provide: APP_GUARD, useClass: CustomThrottlerGuard },
     // Global JWT guard — forces every endpoint to require authentication unless
     // explicitly opted out with @Public(). Closes "auth opt-in" gap.
+    // MUST run before CustomThrottlerGuard so req.user is populated for
+    // per-user throttling (otherwise throttler degrades to IP-only).
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    // CSRF double-submit-cookie defense — registered AFTER JwtAuthGuard so
+    // the @Public() check on auth endpoints continues to work.
+    { provide: APP_GUARD, useClass: CsrfGuard },
+    { provide: APP_GUARD, useClass: CustomThrottlerGuard },
   ],
 })
 export class AppModule implements NestModule {

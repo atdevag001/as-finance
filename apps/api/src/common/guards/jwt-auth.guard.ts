@@ -24,7 +24,7 @@ export interface JwtPayload {
 // Hard size cap prevents memory leak — evicts oldest entries (FIFO) when full.
 type UserCacheEntry = { role: string; is_active: boolean; token_version: number; expiresAt: number };
 const USER_CACHE = new Map<string, UserCacheEntry>();
-const USER_CACHE_TTL_MS = 60_000; // 60 seconds
+const USER_CACHE_TTL_MS = 5_000; // 5 seconds — short window for revoked/role-changed admittance
 const USER_CACHE_MAX_SIZE = 10_000;
 
 function evictOldestIfFull() {
@@ -91,11 +91,20 @@ export class JwtAuthGuard implements CanActivate {
     if (!fresh.is_active) {
       throw new UnauthorizedException('User account is inactive');
     }
-    if (
-      typeof payload.tv === 'number' &&
-      payload.tv !== fresh.token_version
-    ) {
-      throw new UnauthorizedException('Token revoked by password change');
+    // Fail-closed token-version check: a missing or non-numeric `tv` claim
+    // means the token was minted before tv enforcement (or by an attacker
+    // crafting a payload). Either way, reject it — clients must re-login.
+    if (typeof payload.tv !== 'number' || Number.isNaN(payload.tv)) {
+      throw new UnauthorizedException({
+        message: 'Token revoked',
+        code: 'TOKEN_REVOKED',
+      });
+    }
+    if (payload.tv !== fresh.token_version) {
+      throw new UnauthorizedException({
+        message: 'Token revoked by password change',
+        code: 'TOKEN_REVOKED',
+      });
     }
     // Trust the DB role over the JWT claim (handles role changes mid-session)
     payload.role = fresh.role;

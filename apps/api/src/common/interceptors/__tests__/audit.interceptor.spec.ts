@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { CallHandler, ExecutionContext, Logger } from '@nestjs/common';
+import { type CallHandler, type ExecutionContext, Logger } from '@nestjs/common';
 import { of, throwError, lastValueFrom } from 'rxjs';
 import { AuditInterceptor } from '../audit.interceptor';
 
