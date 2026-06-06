@@ -51,6 +51,8 @@ export function useCreateExpense() {
       apiClient.post('/cashbook/expenses', data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['cashbook'] });
+      // Expense posts a journal entry; refresh accounting reports.
+      qc.invalidateQueries({ queryKey: ['accounting'] });
     },
   });
 }
@@ -66,11 +68,23 @@ export function useCreateHandover() {
   });
 }
 
+export interface VerifyHandoverInput {
+  id: string;
+  verificationStatus: 'verified' | 'discrepancy';
+  // Required by backend when verificationStatus === 'discrepancy' (MISSING_DISCREPANCY_AMOUNT otherwise).
+  discrepancyAmountPaise?: number;
+  discrepancyNotes?: string;
+}
+
 export function useVerifyHandover() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, verificationStatus }: { id: string; verificationStatus: 'verified' | 'discrepancy' }) =>
-      apiClient.patch(`/cashbook/handovers/${id}/verify`, { verificationStatus }),
+    mutationFn: ({ id, verificationStatus, discrepancyAmountPaise, discrepancyNotes }: VerifyHandoverInput) =>
+      apiClient.patch(`/cashbook/handovers/${id}/verify`, {
+        verificationStatus,
+        ...(discrepancyAmountPaise !== undefined ? { discrepancyAmountPaise } : {}),
+        ...(discrepancyNotes !== undefined ? { discrepancyNotes } : {}),
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['cashbook'] });
     },

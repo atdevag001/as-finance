@@ -403,16 +403,26 @@ describe('useCashbook Hook', () => {
       expect(mockPatch).toHaveBeenCalledWith('/cashbook/handovers/ho-1/verify', { verificationStatus: 'verified' });
     });
 
-    it('marks a handover as discrepancy', async () => {
+    it('marks a handover as discrepancy with amount and notes', async () => {
       mockPatch.mockResolvedValueOnce({ id: 'ho-1', verification_status: 'discrepancy' });
 
       const { result } = renderHook(() => useVerifyHandover(), { wrapper });
 
-      result.current.mutate({ id: 'ho-1', verificationStatus: 'discrepancy' });
+      result.current.mutate({
+        id: 'ho-1',
+        verificationStatus: 'discrepancy',
+        discrepancyAmountPaise: 5000,
+        discrepancyNotes: 'Short by ₹50',
+      });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(mockPatch).toHaveBeenCalledWith('/cashbook/handovers/ho-1/verify', { verificationStatus: 'discrepancy' });
+      // Backend requires discrepancyAmountPaise when verificationStatus is 'discrepancy'.
+      expect(mockPatch).toHaveBeenCalledWith('/cashbook/handovers/ho-1/verify', {
+        verificationStatus: 'discrepancy',
+        discrepancyAmountPaise: 5000,
+        discrepancyNotes: 'Short by ₹50',
+      });
     });
 
     it('invalidates cashbook queries on success', async () => {

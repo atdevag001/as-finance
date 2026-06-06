@@ -39,6 +39,16 @@ interface PaginatedResult<T> {
   total: number;
 }
 
+export interface DuplicateWarning {
+  field: 'aadhaar' | 'mobile';
+  matchedCustomers: Array<{ id: string; fullName: string }>;
+}
+
+export interface CreateCustomerResponse {
+  customer: { id: string } & Record<string, unknown>;
+  duplicateWarnings?: DuplicateWarning[];
+}
+
 export function useCustomers(params: { page?: number; search?: string; status?: string } = {}) {
   const { page = 1, search, status } = params;
   const pageSize = 20;
@@ -63,9 +73,13 @@ export function useCustomer(id: string) {
 
 export function useCreateCustomer() {
   const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: Record<string, unknown>) => apiClient.post('/customers', data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['customers'] }); },
+  return useMutation<CreateCustomerResponse, Error, Record<string, unknown>>({
+    mutationFn: (data) => apiClient.post<CreateCustomerResponse>('/customers', data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['customers'] });
+      // Total Customers KPI must reflect the new record.
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+    },
   });
 }
 
@@ -77,6 +91,8 @@ export function useUpdateCustomer() {
     onSuccess: (_, { id }) => {
       qc.invalidateQueries({ queryKey: ['customers', id] });
       qc.invalidateQueries({ queryKey: ['customers'] });
+      // Status/blacklist changes can shift the Total Customers KPI counted on the dashboard.
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
     },
   });
 }

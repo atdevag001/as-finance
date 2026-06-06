@@ -11,14 +11,15 @@ import { useAuth } from '@/providers/auth-provider';
 import { hasPermission } from '@/lib/permissions';
 import { useHandovers, useCreateHandover, useVerifyHandover } from '@/hooks/useCashbook';
 import { useToast } from '@/providers/toast-provider';
-import { useUsers } from '@/hooks/useUsers';
+import { useApprovers } from '@/hooks/useUsers';
 import { todayIST } from '@/lib/date-utils';
 
 export default function HandoversPage() {
   const { user } = useAuth();
   const role = user?.role ?? '';
 
-  if (!hasPermission(role, 'accounting.manage_cashbook')) {
+  // Collection officers initiate handovers; verifiers (accountants/managers) approve them — admit either.
+  if (!hasPermission(role, 'handover.create') && !hasPermission(role, 'accounting.manage_cashbook')) {
     return <AccessDenied />;
   }
 
@@ -28,7 +29,7 @@ export default function HandoversPage() {
 function HandoversContent() {
   const { showToast } = useToast();
   const { data: handovers, isLoading, error } = useHandovers();
-  const { data: usersData } = useUsers({ page: 1 });
+  const { data: usersData } = useApprovers();
   const createHandover = useCreateHandover();
   const verifyHandover = useVerifyHandover();
 
@@ -36,6 +37,11 @@ function HandoversContent() {
   const [receivingOfficerId, setReceivingOfficerId] = useState('');
   const [handoverDate, setHandoverDate] = useState(() => todayIST());
   const [formError, setFormError] = useState('');
+  // Backend rejects discrepancy verification without an amount; collect it before mutating.
+  const [discrepancyForId, setDiscrepancyForId] = useState<string | null>(null);
+  const [discrepancyAmountRupees, setDiscrepancyAmountRupees] = useState('');
+  const [discrepancyNotes, setDiscrepancyNotes] = useState('');
+  const [discrepancyError, setDiscrepancyError] = useState('');
 
   const totalAmountPaise = Math.round(parseFloat(amountRupees || '0') * 100);
 
@@ -70,11 +76,42 @@ function HandoversContent() {
   }
 
   async function handleVerify(id: string, verificationStatus: 'verified' | 'discrepancy') {
+    if (verificationStatus === 'discrepancy') {
+      setDiscrepancyForId(id);
+      setDiscrepancyAmountRupees('');
+      setDiscrepancyNotes('');
+      setDiscrepancyError('');
+      return;
+    }
     try {
       await verifyHandover.mutateAsync({ id, verificationStatus });
-      showToast({ message: verificationStatus === 'verified' ? 'Handover verified.' : 'Handover marked with discrepancy.' });
+      showToast({ message: 'Handover verified.' });
     } catch (err) {
       showToast({ message: (err as Error).message, variant: 'error' });
+    }
+  }
+
+  async function submitDiscrepancy() {
+    if (!discrepancyForId) return;
+    const paise = Math.round(parseFloat(discrepancyAmountRupees || '0') * 100);
+    if (!Number.isFinite(paise) || paise <= 0) {
+      setDiscrepancyError('Enter a discrepancy amount greater than zero.');
+      return;
+    }
+    try {
+      await verifyHandover.mutateAsync({
+        id: discrepancyForId,
+        verificationStatus: 'discrepancy',
+        discrepancyAmountPaise: paise,
+        discrepancyNotes: discrepancyNotes.trim() || undefined,
+      });
+      showToast({ message: 'Handover marked with discrepancy.' });
+      setDiscrepancyForId(null);
+      setDiscrepancyAmountRupees('');
+      setDiscrepancyNotes('');
+      setDiscrepancyError('');
+    } catch (err) {
+      setDiscrepancyError((err as Error).message);
     }
   }
 
@@ -87,52 +124,54 @@ function HandoversContent() {
         <h1 className="text-2xl font-bold">Cash Handovers</h1>
       </div>
 
-      <Card>
-        <CardHeader><CardTitle className="text-base">Initiate Handover</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
-          {formError && (
-            <div role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{formError}</div>
-          )}
-          <div className="space-y-1">
-            <label className="text-sm font-medium">Amount (₹)</label>
-            <Input
-              type="number"
-              inputMode="decimal"
-              min="0"
-              step="0.01"
-              placeholder="0.00"
-              value={amountRupees}
-              onChange={(e) => setAmountRupees(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-sm font-medium">Receiving Officer</label>
-            <select
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              value={receivingOfficerId}
-              onChange={(e) => setReceivingOfficerId(e.target.value)}
-            >
-              <option value="">Select receiving officer...</option>
-              {receivingOfficers.map((officer) => (
-                <option key={officer.id} value={officer.id}>
-                  {officer.full_name} ({officer.role})
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-1">
-            <label className="text-sm font-medium">Handover Date</label>
-            <Input
-              type="date"
-              value={handoverDate}
-              onChange={(e) => setHandoverDate(e.target.value)}
-            />
-          </div>
-          <Button onClick={handleInitiate} disabled={createHandover.isPending} className="w-full min-h-[48px] sm:w-auto sm:min-h-[40px]">
-            {createHandover.isPending ? 'Submitting…' : 'Initiate Handover'}
-          </Button>
-        </CardContent>
-      </Card>
+      <PermissionGate permission="handover.create">
+        <Card>
+          <CardHeader><CardTitle className="text-base">Initiate Handover</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            {formError && (
+              <div role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{formError}</div>
+            )}
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Amount (₹)</label>
+              <Input
+                type="number"
+                inputMode="decimal"
+                min="0"
+                step="0.01"
+                placeholder="0.00"
+                value={amountRupees}
+                onChange={(e) => setAmountRupees(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Receiving Officer</label>
+              <select
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                value={receivingOfficerId}
+                onChange={(e) => setReceivingOfficerId(e.target.value)}
+              >
+                <option value="">Select receiving officer...</option>
+                {receivingOfficers.map((officer) => (
+                  <option key={officer.id} value={officer.id}>
+                    {officer.full_name} ({officer.role})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Handover Date</label>
+              <Input
+                type="date"
+                value={handoverDate}
+                onChange={(e) => setHandoverDate(e.target.value)}
+              />
+            </div>
+            <Button onClick={handleInitiate} disabled={createHandover.isPending} className="w-full min-h-[48px] sm:w-auto sm:min-h-[40px]">
+              {createHandover.isPending ? 'Submitting…' : 'Initiate Handover'}
+            </Button>
+          </CardContent>
+        </Card>
+      </PermissionGate>
 
       <h2 className="text-lg font-semibold">Pending Handovers</h2>
 
@@ -174,6 +213,54 @@ function HandoversContent() {
               </div>
             </PermissionGate>
           </CardContent>
+          {discrepancyForId === h.id && (
+            <CardContent className="space-y-3 border-t pt-4">
+              {discrepancyError && (
+                <div role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{discrepancyError}</div>
+              )}
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Discrepancy Amount (₹)</label>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={discrepancyAmountRupees}
+                  onChange={(e) => setDiscrepancyAmountRupees(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Notes (optional)</label>
+                <Input
+                  type="text"
+                  placeholder="e.g. Short by ₹50"
+                  value={discrepancyNotes}
+                  onChange={(e) => setDiscrepancyNotes(e.target.value)}
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={submitDiscrepancy}
+                  disabled={verifyHandover.isPending}
+                  className="min-h-[44px] sm:min-h-[36px]"
+                >
+                  {verifyHandover.isPending ? 'Submitting…' : 'Submit Discrepancy'}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => { setDiscrepancyForId(null); setDiscrepancyError(''); }}
+                  disabled={verifyHandover.isPending}
+                  className="min-h-[44px] sm:min-h-[36px]"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </CardContent>
+          )}
         </Card>
       ))}
     </div>

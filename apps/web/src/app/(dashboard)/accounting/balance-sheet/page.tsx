@@ -29,9 +29,13 @@ function BalanceSheetContent() {
 
   const { data, isLoading, error } = useBalanceSheet({ endDate });
 
-  const totalAssets = data?.assets.reduce((sum, a) => sum + a.totalPaise, 0) ?? 0;
-  const totalLiabilities = data?.liabilities.reduce((sum, l) => sum + l.totalPaise, 0) ?? 0;
-  const totalEquity = data?.equity.reduce((sum, e) => sum + e.totalPaise, 0) ?? 0;
+  // Trust backend-computed totals so retained earnings (P&L impact) is included.
+  const totalAssets = data?.totalAssetsPaise ?? 0;
+  const totalLiabilities = data?.totalLiabilitiesPaise ?? 0;
+  const totalEquityWithRetained = (data?.totalEquityPaise ?? 0) + (data?.retainedEarningsPaise ?? 0);
+  const equityItems = data
+    ? [...data.equity, { name: 'Retained Earnings', totalPaise: data.retainedEarningsPaise }]
+    : [];
 
   return (
     <div className="space-y-4">
@@ -51,11 +55,27 @@ function BalanceSheetContent() {
       {error && <ErrorMessage message={(error as Error).message} />}
 
       {data && (
-        <div className="grid gap-4 md:grid-cols-3">
-          <SectionCard title="Assets" items={data.assets} total={totalAssets} />
-          <SectionCard title="Liabilities" items={data.liabilities} total={totalLiabilities} />
-          <SectionCard title="Equity" items={data.equity} total={totalEquity} />
-        </div>
+        <>
+          <div
+            className={`rounded-md border px-3 py-2 text-sm ${
+              data.isBalanced
+                ? 'border-green-300 bg-green-50 text-green-800'
+                : 'border-red-300 bg-red-50 text-red-800'
+            }`}
+          >
+            {data.isBalanced
+              ? 'Balanced: Assets = Liabilities + Equity + Retained Earnings'
+              : 'Imbalanced: Assets do not equal Liabilities + Equity + Retained Earnings'}
+            <span className="ml-2 text-xs">
+              (A: <MoneyDisplay paise={data.totalAssetsPaise} /> vs L+E+RE: <MoneyDisplay paise={data.totalLiabilitiesAndEquityPaise} />)
+            </span>
+          </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            <SectionCard title="Assets" items={data.assets} total={totalAssets} />
+            <SectionCard title="Liabilities" items={data.liabilities} total={totalLiabilities} />
+            <SectionCard title="Equity" items={equityItems} total={totalEquityWithRetained} />
+          </div>
+        </>
       )}
     </div>
   );

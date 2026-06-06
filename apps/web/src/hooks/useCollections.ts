@@ -72,6 +72,10 @@ export function usePostCollection() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['collections'] });
       qc.invalidateQueries({ queryKey: ['loans'] });
+      // Collection posts a journal entry; refresh accounting reports.
+      qc.invalidateQueries({ queryKey: ['accounting'] });
+      // Today's Collections / Outstanding KPIs are affected by every posted payment.
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
     },
   });
 }

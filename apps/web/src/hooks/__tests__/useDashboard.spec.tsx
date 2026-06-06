@@ -54,7 +54,6 @@ describe('useDashboard Hook', () => {
       totalOutstandingPaise: 2250000000,
       todayCollectionsPaise: 15500000,
       todayDisbursementsPaise: 25000000,
-      cashInHandPaise: 5000000,
       pendingApprovals: 12,
     };
 
@@ -69,7 +68,7 @@ describe('useDashboard Hook', () => {
       expect(result.current.data).toEqual(mockDashboardKPIs);
     });
 
-    it('returns all 8 KPI fields', async () => {
+    it('returns all 7 KPI fields', async () => {
       mockGet.mockResolvedValueOnce(mockDashboardKPIs);
 
       const { result } = renderHook(() => useDashboard(), { wrapper });
@@ -83,7 +82,6 @@ describe('useDashboard Hook', () => {
       expect(kpis.totalOutstandingPaise).toBeDefined();
       expect(kpis.todayCollectionsPaise).toBeDefined();
       expect(kpis.todayDisbursementsPaise).toBeDefined();
-      expect(kpis.cashInHandPaise).toBeDefined();
       expect(kpis.pendingApprovals).toBeDefined();
     });
 
@@ -98,7 +96,6 @@ describe('useDashboard Hook', () => {
       expect(Number.isInteger(kpis.totalOutstandingPaise)).toBe(true);
       expect(Number.isInteger(kpis.todayCollectionsPaise)).toBe(true);
       expect(Number.isInteger(kpis.todayDisbursementsPaise)).toBe(true);
-      expect(Number.isInteger(kpis.cashInHandPaise)).toBe(true);
     });
 
     it('count fields are non-negative integers', async () => {
@@ -151,7 +148,6 @@ describe('useDashboard Hook', () => {
         totalOutstandingPaise: 0,
         todayCollectionsPaise: 0,
         todayDisbursementsPaise: 0,
-        cashInHandPaise: 0,
         pendingApprovals: 0,
       };
       mockGet.mockResolvedValueOnce(zeroKPIs);
@@ -171,7 +167,6 @@ describe('useDashboard Hook', () => {
         totalOutstandingPaise: Number.MAX_SAFE_INTEGER,
         todayCollectionsPaise: 999999999999,
         todayDisbursementsPaise: 888888888888,
-        cashInHandPaise: 77777777777,
         pendingApprovals: 10000,
       };
       mockGet.mockResolvedValueOnce(largeKPIs);
@@ -190,7 +185,6 @@ describe('useDashboard Hook', () => {
       { field: 'totalOutstandingPaise', description: 'total outstanding in paise' },
       { field: 'todayCollectionsPaise', description: 'today collections in paise' },
       { field: 'todayDisbursementsPaise', description: 'today disbursements in paise' },
-      { field: 'cashInHandPaise', description: 'cash in hand in paise' },
       { field: 'pendingApprovals', description: 'pending approvals count' },
     ];
 

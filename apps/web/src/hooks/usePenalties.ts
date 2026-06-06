@@ -43,6 +43,10 @@ export function useWaivePenalty() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['penalties'] });
       qc.invalidateQueries({ queryKey: ['loans'] });
+      // Waiver posts a journal entry; refresh accounting reports.
+      qc.invalidateQueries({ queryKey: ['accounting'] });
+      // Waiver reduces Total Outstanding KPI shown on the dashboard.
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
     },
   });
 }

@@ -87,7 +87,11 @@ export function useCreateLoan() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: Record<string, unknown>) => apiClient.post('/loans', data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['loans'] }); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['loans'] });
+      // New loan increments Pending Approvals KPI.
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+    },
   });
 }
 
@@ -103,6 +107,10 @@ export function useLoanAction() {
       qc.invalidateQueries({ queryKey: ['penalties'] });
       qc.invalidateQueries({ queryKey: ['foreclosures'] });
       qc.invalidateQueries({ queryKey: ['status-history'] });
+      // Approve/disburse post journal entries; refresh daybook/TB/P&L/balance-sheet.
+      qc.invalidateQueries({ queryKey: ['accounting'] });
+      // Approve/disburse/close shift Active Loans, Pending Approvals, and Today's Disbursements KPIs.
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
     },
   });
 }

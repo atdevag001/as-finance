@@ -65,6 +65,8 @@ function ReceiptViewContent({ id }: { id: string }) {
   }
 
   const isReversed = receipt.status === 'reversed';
+  const isReversal = receipt.is_reversal === true;
+  const linkedReceiptId = receipt.compensating_receipt_id ?? receipt.original_receipt_id;
 
   return (
     <>
@@ -169,10 +171,21 @@ function ReceiptViewContent({ id }: { id: string }) {
           )}
 
           <CardHeader className="text-center border-b pb-4">
-            <CardTitle className="text-lg">Payment Receipt</CardTitle>
+            <CardTitle className="text-lg">{isReversal ? 'Reversal Receipt' : 'Payment Receipt'}</CardTitle>
             <p className="text-sm text-muted-foreground">{receipt.receipt_number}</p>
             {isReversed && (
               <StatusBadge status="reversed" type="collection" className="mx-auto mt-1" />
+            )}
+            {isReversal && (
+              <StatusBadge status="reversal" type="collection" label="Reversal Entry" className="mx-auto mt-1" />
+            )}
+            {linkedReceiptId && (
+              <p className="text-xs text-muted-foreground mt-1">
+                {isReversal ? 'Reverses receipt: ' : 'Reversed by receipt: '}
+                <Link href={`/receipts/${linkedReceiptId}`} className="underline font-medium">
+                  {linkedReceiptId}
+                </Link>
+              </p>
             )}
           </CardHeader>
 

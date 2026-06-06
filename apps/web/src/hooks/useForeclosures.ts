@@ -83,9 +83,16 @@ export function useExecuteForeclosure() {
     mutationFn: (input: ExecuteForeclosureInput) =>
       apiClient.post('/foreclosures', input),
     onSuccess: () => {
+      // Foreclosure marks penalties paid, writes receipt + status-history; invalidate those caches too.
       qc.invalidateQueries({ queryKey: ['loans'] });
+      qc.invalidateQueries({ queryKey: ['loan'] });
       qc.invalidateQueries({ queryKey: ['collections'] });
       qc.invalidateQueries({ queryKey: ['foreclosures'] });
+      qc.invalidateQueries({ queryKey: ['penalties'] });
+      qc.invalidateQueries({ queryKey: ['receipts'] });
+      qc.invalidateQueries({ queryKey: ['status-history'] });
+      // Foreclosure settlement posts journal entries; refresh accounting reports.
+      qc.invalidateQueries({ queryKey: ['accounting'] });
     },
   });
 }

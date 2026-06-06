@@ -1,9 +1,15 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from '@/providers/auth-provider';
 import { hasPermission } from '@/lib/permissions';
-import { getChangedSettings } from '@/lib/settings-utils';
+import {
+  getChangedSettings,
+  classifySettingValue,
+  parseSettingValue,
+  stringifySettingValue,
+  type SettingValueKind,
+} from '@/lib/settings-utils';
 import {
   useSettings,
   useUpdateSetting,
@@ -42,6 +48,12 @@ export default function SettingsPage() {
   );
 }
 
+/**
+ * Settings managed by a dedicated editor section (HolidaySection) — hide from
+ * the generic scalar editor so a string round-trip can't corrupt them.
+ */
+const SPECIALIZED_SETTING_KEYS = new Set<string>(['holiday_calendar']);
+
 function SettingsSection() {
   const { data: settings, isLoading, error } = useSettings();
   const updateSetting = useUpdateSetting();
@@ -49,21 +61,37 @@ function SettingsSection() {
   const [serverError, setServerError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Original values from server
+  // Track the original JSON type per key so we can coerce edited strings back
+  // on save (otherwise numeric/boolean settings are silently stringified).
+  const [kinds, setKinds] = useState<Record<string, SettingValueKind>>({});
+  // Original values from server (stringified for the text input)
   const [originalValues, setOriginalValues] = useState<Record<string, string>>({});
   // Current edited values
   const [currentValues, setCurrentValues] = useState<Record<string, string>>({});
 
+  // Hydrate state from the first server response only. Re-running on every
+  // refetch would wipe unsaved edits when React Query revalidates in the
+  // background.
+  const hydratedRef = useRef(false);
   useEffect(() => {
-    if (settings) {
-      const vals: Record<string, string> = {};
-      for (const s of settings) {
-        vals[s.key] = String(s.value ?? '');
-      }
-      setOriginalValues(vals);
-      setCurrentValues(vals);
+    if (!settings || hydratedRef.current) return;
+    const vals: Record<string, string> = {};
+    const ks: Record<string, SettingValueKind> = {};
+    for (const s of settings) {
+      const kind = classifySettingValue(s.value);
+      ks[s.key] = kind;
+      vals[s.key] = stringifySettingValue(s.value, kind);
     }
+    setKinds(ks);
+    setOriginalValues(vals);
+    setCurrentValues(vals);
+    hydratedRef.current = true;
   }, [settings]);
+
+  const editableSettings = useMemo(
+    () => (settings ?? []).filter((s) => !SPECIALIZED_SETTING_KEYS.has(s.key)),
+    [settings],
+  );
 
   const changedSettings = useMemo(
     () => getChangedSettings(originalValues, currentValues),
@@ -80,15 +108,20 @@ function SettingsSection() {
     setServerError(null);
     setIsSaving(true);
     try {
-      // Update each changed setting individually
-      for (const [key, value] of Object.entries(changedSettings)) {
-        await updateSetting.mutateAsync({ key, value });
+      const nextOriginals: Record<string, string> = { ...originalValues };
+      for (const [key, raw] of Object.entries(changedSettings)) {
+        const kind = kinds[key] ?? 'string';
+        const parsed = parseSettingValue(raw, kind);
+        await updateSetting.mutateAsync({ key, value: parsed });
+        nextOriginals[key] = raw;
       }
-      setOriginalValues({ ...currentValues });
+      setOriginalValues(nextOriginals);
       showToast({ message: 'Settings saved successfully', variant: 'success' });
     } catch (err) {
       if (err instanceof ApiClientError) {
         setServerError(err.body.message || 'Failed to save settings.');
+      } else if (err instanceof Error) {
+        setServerError(err.message);
       } else {
         setServerError('Unable to connect to server. Please check your connection.');
       }
@@ -117,23 +150,30 @@ function SettingsSection() {
       <CardContent className="space-y-4">
         {serverError && <ErrorMessage message={serverError} />}
 
-        {settings?.map((setting) => (
-          <div key={setting.key} className="grid gap-1.5">
-            <Label htmlFor={`setting-${setting.key}`}>
-              {setting.key}
-              {setting.description && (
+        {editableSettings.map((setting) => {
+          const kind = kinds[setting.key] ?? 'string';
+          return (
+            <div key={setting.key} className="grid gap-1.5">
+              <Label htmlFor={`setting-${setting.key}`}>
+                {setting.key}
                 <span className="ml-2 text-xs font-normal text-muted-foreground">
-                  {setting.description}
+                  ({kind})
                 </span>
-              )}
-            </Label>
-            <Input
-              id={`setting-${setting.key}`}
-              value={currentValues[setting.key] ?? ''}
-              onChange={(e) => handleChange(setting.key, e.target.value)}
-            />
-          </div>
-        ))}
+                {setting.description && (
+                  <span className="ml-2 text-xs font-normal text-muted-foreground">
+                    {setting.description}
+                  </span>
+                )}
+              </Label>
+              <Input
+                id={`setting-${setting.key}`}
+                inputMode={kind === 'number' ? 'decimal' : undefined}
+                value={currentValues[setting.key] ?? ''}
+                onChange={(e) => handleChange(setting.key, e.target.value)}
+              />
+            </div>
+          );
+        })}
 
         <div className="flex justify-end pt-2">
           <Button

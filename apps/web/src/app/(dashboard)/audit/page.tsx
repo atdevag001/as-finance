@@ -23,8 +23,9 @@ function AuditContent() {
   const [entity, setEntity] = useState('');
   const [action, setAction] = useState('');
   const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
-  const { data, isLoading, error } = useAuditLogs({ page, entity: entity || undefined, action: action || undefined, startDate: startDate || undefined });
+  const { data, isLoading, error } = useAuditLogs({ page, entity: entity || undefined, action: action || undefined, startDate: startDate || undefined, endDate: endDate || undefined });
 
   function handleFilterChange(setter: (v: string) => void) {
     return (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -40,7 +41,8 @@ function AuditContent() {
       <div className="flex flex-wrap gap-2">
         <Input placeholder="Filter by entity…" value={entity} onChange={handleFilterChange(setEntity)} className="w-48" />
         <Input placeholder="Filter by action…" value={action} onChange={handleFilterChange(setAction)} className="w-48" />
-        <Input type="date" value={startDate} onChange={handleFilterChange(setStartDate)} className="w-40" />
+        <Input type="date" value={startDate} onChange={handleFilterChange(setStartDate)} className="w-40" aria-label="Start date" />
+        <Input type="date" value={endDate} onChange={handleFilterChange(setEndDate)} className="w-40" aria-label="End date" />
       </div>
 
       {isLoading && <div className="flex justify-center py-8"><LoadingSpinner size="lg" /></div>}

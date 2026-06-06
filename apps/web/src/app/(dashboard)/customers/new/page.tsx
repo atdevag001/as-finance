@@ -10,7 +10,7 @@ import { z } from 'zod';
 import { createCustomerSchema } from '@as-finance/shared/validation';
 // Note: aadhaarSchema, panSchema, mobileSchema, pincodeSchema are composed
 // into createCustomerSchema — field-level validation uses the shared schemas.
-import { useCreateCustomer } from '@/hooks/useCustomers';
+import { useCreateCustomer, type DuplicateWarning } from '@/hooks/useCustomers';
 import { useToast } from '@/providers/toast-provider';
 import { ApiClientError } from '@/lib/api-client';
 import { ErrorMessage } from '@/components/shared';
@@ -18,6 +18,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 /**
  * Form schema extends the shared createCustomerSchema but uses a rupee string
@@ -36,6 +44,10 @@ export default function NewCustomerPage() {
   const createCustomer = useCreateCustomer();
   const { showToast } = useToast();
   const [serverError, setServerError] = useState<string | null>(null);
+  // Backend returns duplicateWarnings on create — surface them so the manager can review matches.
+  const [duplicateInfo, setDuplicateInfo] = useState<
+    { customerId: string; warnings: DuplicateWarning[] } | null
+  >(null);
 
   const {
     register,
@@ -76,7 +88,17 @@ export default function NewCustomerPage() {
     }
 
     try {
-      await createCustomer.mutateAsync(payload);
+      const result = await createCustomer.mutateAsync(payload);
+      const warnings = result.duplicateWarnings ?? [];
+      if (warnings.length > 0) {
+        // Hold navigation until the manager acknowledges the matched customers.
+        showToast({
+          message: 'Customer registered — possible duplicates detected. Please review.',
+          variant: 'warning',
+        });
+        setDuplicateInfo({ customerId: result.customer.id, warnings });
+        return;
+      }
       showToast({ message: 'Customer registered successfully', variant: 'success' });
       router.push('/customers');
     } catch (err) {
@@ -229,6 +251,65 @@ export default function NewCustomerPage() {
           </Button>
         </div>
       </form>
+
+      <Dialog
+        open={!!duplicateInfo}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDuplicateInfo(null);
+            router.push('/customers');
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Possible duplicate customer</DialogTitle>
+            <DialogDescription>
+              The customer was created, but the following existing customers share key identifiers.
+              Please review before continuing.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 max-h-72 overflow-y-auto">
+            {duplicateInfo?.warnings.map((w) => (
+              <div key={w.field} className="rounded-md border p-3">
+                <p className="text-sm font-medium capitalize">Matched on {w.field}</p>
+                <ul className="mt-2 space-y-1">
+                  {w.matchedCustomers.map((m) => (
+                    <li key={m.id} className="text-sm">
+                      <Link
+                        href={`/customers/${m.id}`}
+                        className="text-primary underline underline-offset-2"
+                      >
+                        {m.fullName}
+                      </Link>
+                      <span className="text-muted-foreground"> ({m.id})</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (duplicateInfo) router.push(`/customers/${duplicateInfo.customerId}`);
+                setDuplicateInfo(null);
+              }}
+            >
+              View new customer
+            </Button>
+            <Button
+              onClick={() => {
+                setDuplicateInfo(null);
+                router.push('/customers');
+              }}
+            >
+              Acknowledge &amp; continue
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

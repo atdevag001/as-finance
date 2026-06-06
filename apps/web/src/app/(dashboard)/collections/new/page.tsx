@@ -17,12 +17,16 @@ import { useQueryClient } from '@tanstack/react-query';
 
 type PaymentMode = 'cash' | 'bank_transfer' | 'online';
 
+// Backend wraps the response as { statusCode, data: {...} } with no global unwrap interceptor.
 interface CollectionResponse {
-  collectionId: string;
-  receiptId: string;
-  receiptNumber: string;
-  loanNumber: string;
-  amountPaise: number;
+  statusCode: number;
+  data: {
+    collectionId: string;
+    receiptId: string;
+    receiptNumber: string;
+    loanNumber: string;
+    amountPaise: number;
+  };
 }
 
 const PAYMENT_MODES: { value: PaymentMode; label: string; icon: typeof Banknote }[] = [
@@ -52,6 +56,9 @@ export default function NewCollectionPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+
+  // Persist idempotency key across retries so server-side dedupe actually matches on retry.
+  const idempotencyKeyRef = useRef<string>(crypto.randomUUID());
 
   // Validation errors
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -129,7 +136,6 @@ export default function NewCollectionPage() {
     setServerError(null);
 
     const amountPaise = Math.round(parseFloat(amountRupees) * 100);
-    const idempotencyKey = crypto.randomUUID();
 
     try {
       const result = await apiClient.post<CollectionResponse>(
@@ -139,7 +145,7 @@ export default function NewCollectionPage() {
           amountPaise,
           paymentDate,
           paymentMode,
-          idempotencyKey,
+          idempotencyKey: idempotencyKeyRef.current,
         },
       );
 
@@ -150,9 +156,13 @@ export default function NewCollectionPage() {
       showToast({ message: 'Collection posted successfully', variant: 'success' });
       setShowConfirm(false);
 
-      // Navigate to receipt view
-      if (result?.receiptId) {
-        router.push(`/receipts/${result.receiptId}`);
+      // Rotate key now that the submission has succeeded so any subsequent post starts fresh.
+      idempotencyKeyRef.current = crypto.randomUUID();
+
+      // Backend returns { statusCode, data: {...} } — unwrap to reach receiptId.
+      const receiptId = result?.data?.receiptId;
+      if (receiptId) {
+        router.push(`/receipts/${receiptId}`);
       } else {
         router.push('/collections');
       }

@@ -83,13 +83,13 @@ export default function DashboardPage() {
                 </CardContent>
               </Card>
             </Link>
-            <Link href="/collections">
+            <Link href="/loans">
               <Card className="transition-colors hover:bg-muted/30 col-span-2 lg:col-span-1">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm text-muted-foreground">Cash in Hand</CardTitle>
+                  <CardTitle className="text-sm text-muted-foreground">Today&apos;s Disbursements</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <MoneyDisplay paise={data.cashInHandPaise} className="text-xl font-semibold" />
+                  <MoneyDisplay paise={data.todayDisbursementsPaise} className="text-xl font-semibold" />
                 </CardContent>
               </Card>
             </Link>

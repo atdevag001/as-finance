@@ -68,12 +68,18 @@ export default function LoanProductsPage() {
                 <div key={p.id} className="rounded-lg border p-4">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
-                      <Link
-                        href={`/loan-products/${p.id}`}
-                        className="font-medium text-primary hover:underline"
+                      {/* No detail page exists; link to edit when permitted, plain text otherwise. */}
+                      <PermissionGate
+                        permission="loan_product.update"
+                        fallback={<span className="font-medium">{p.name}</span>}
                       >
-                        {p.name}
-                      </Link>
+                        <Link
+                          href={`/loan-products/${p.id}/edit`}
+                          className="font-medium text-primary hover:underline"
+                        >
+                          {p.name}
+                        </Link>
+                      </PermissionGate>
                       <span className="ml-1 text-xs text-muted-foreground">v{v?.version_number ?? 1}</span>
                       <p className="text-sm text-muted-foreground mt-1">
                         {v?.interest_type?.replace(/_/g, ' ') ?? '-'} @ {annualRate.toFixed(2)}% p.a.
@@ -142,12 +148,18 @@ export default function LoanProductsPage() {
                   return (
                     <tr key={p.id} className="border-b last:border-0 hover:bg-muted/30">
                       <td className="px-4 py-3">
-                        <Link
-                          href={`/loan-products/${p.id}`}
-                          className="font-medium text-primary hover:underline"
+                        {/* No detail page exists; link to edit when permitted, plain text otherwise. */}
+                        <PermissionGate
+                          permission="loan_product.update"
+                          fallback={<span className="font-medium">{p.name}</span>}
                         >
-                          {p.name}
-                        </Link>
+                          <Link
+                            href={`/loan-products/${p.id}/edit`}
+                            className="font-medium text-primary hover:underline"
+                          >
+                            {p.name}
+                          </Link>
+                        </PermissionGate>
                         <span className="ml-1 text-xs text-muted-foreground">v{v?.version_number ?? 1}</span>
                       </td>
                       <td className="px-4 py-3 capitalize">

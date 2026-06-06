@@ -66,7 +66,7 @@ function ReportDetailContent() {
   const [exporting, setExporting] = useState(false);
 
   const queryParams = type === 'emi-schedule'
-    ? { startDate, endDate, status }
+    ? { startDate, endDate, scheduleStatus: status }
     : { startDate, endDate };
   const { data, isLoading, error } = useReport(type, queryParams);
 
@@ -78,7 +78,7 @@ function ReportDetailContent() {
       // Backend expects 'xlsx' not 'excel'
       const exportFormat = format === 'excel' ? 'xlsx' : format;
       const params: Record<string, string> = { startDate, endDate, format: exportFormat };
-      if (type === 'emi-schedule') params['status'] = status;
+      if (type === 'emi-schedule') params['scheduleStatus'] = status;
       const qs = new URLSearchParams(params).toString();
       const blob = await apiClient.getBlob(`/reports/${type}/export?${qs}`);
       const ext = format === 'pdf' ? 'pdf' : 'xlsx';

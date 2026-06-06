@@ -2,8 +2,10 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { apiClient, ApiClientError } from '@/lib/api-client';
+import { useAuth } from '@/providers/auth-provider';
 import { useToast } from '@/providers/toast-provider';
 import { ErrorMessage } from '@/components/shared';
 import { Button } from '@/components/ui/button';
@@ -13,6 +15,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 
 export default function ChangePasswordPage() {
   const { showToast } = useToast();
+  const { logout } = useAuth();
+  const router = useRouter();
 
   const [formData, setFormData] = useState({
     currentPassword: '',
@@ -80,8 +84,12 @@ export default function ChangePasswordPage() {
         currentPassword: formData.currentPassword,
         newPassword: formData.newPassword,
       });
-      showToast({ message: 'Password changed successfully.' });
+      showToast({ message: 'Password changed successfully. Please log in again.' });
       setFormData({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      // Backend revokes all sessions (bumps token_version + clears refresh cookie); force re-auth so the UI matches.
+      await logout();
+      router.replace('/login?reason=password_changed');
+      return;
     } catch (err) {
       if (err instanceof ApiClientError) {
         switch (err.body?.code) {

@@ -26,6 +26,25 @@ export function getAccessToken(): string | null {
   return accessToken;
 }
 
+/**
+ * Read csrf_token cookie. Set by the API on safe (GET) responses via CsrfGuard.
+ * Backend rejects state-changing requests without a matching x-csrf-token header,
+ * so we attach it on every non-GET below.
+ */
+function readCsrfCookie(): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/);
+  return match ? decodeURIComponent(match[1]!) : null;
+}
+
+/**
+ * Determine if the HTTP method requires a CSRF token (i.e. is state-changing).
+ */
+function methodNeedsCsrf(method: string | undefined): boolean {
+  const m = (method ?? 'GET').toUpperCase();
+  return m !== 'GET' && m !== 'HEAD' && m !== 'OPTIONS';
+}
+
 function generateRequestId(): string {
   // Use crypto.randomUUID if available (requires secure context),
   // otherwise fall back to a random string
@@ -117,6 +136,13 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     headers.set('Authorization', `Bearer ${token}`);
   }
 
+  // Double-submit-cookie CSRF: echo csrf_token cookie value in header for
+  // mutating requests. Backend CsrfGuard rejects mismatches with 403.
+  if (methodNeedsCsrf(init.method)) {
+    const csrf = readCsrfCookie();
+    if (csrf) headers.set('x-csrf-token', csrf);
+  }
+
   const res = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     headers,
@@ -170,6 +196,10 @@ async function postFormData<T>(
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
   }
+
+  // POST is always state-changing, attach CSRF if cookie is present.
+  const csrf = readCsrfCookie();
+  if (csrf) headers.set('x-csrf-token', csrf);
 
   const res = await fetch(`${API_BASE_URL}${path}`, {
     method: 'POST',

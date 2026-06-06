@@ -7,7 +7,7 @@ import { useLoan, useLoanAction } from '@/hooks/useLoans';
 import { useCollections, type Collection } from '@/hooks/useCollections';
 import { useReceipts } from '@/hooks/useReceipts';
 import { usePenalties, useWaivePenalty, getPenaltyStatus, type Penalty } from '@/hooks/usePenalties';
-import { useUsers } from '@/hooks/useUsers';
+import { useApprovers } from '@/hooks/useUsers';
 import { useGenerateForeclosureQuote, useExecuteForeclosure, usePendingForeclosure, type ForeclosureQuote } from '@/hooks/useForeclosures';
 import { useToast } from '@/providers/toast-provider';
 import { todayIST } from '@/lib/date-utils';
@@ -71,7 +71,7 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
   const generateQuote = useGenerateForeclosureQuote();
   const executeForeclosure = useExecuteForeclosure();
   const { data: pendingForeclosure } = usePendingForeclosure(id, !!loan && ['active', 'overdue'].includes(loan.status));
-  const { data: usersData } = useUsers();
+  const { data: usersData } = useApprovers();
   const { showToast } = useToast();
 
   // Status history query

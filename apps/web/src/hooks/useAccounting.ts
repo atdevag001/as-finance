@@ -46,6 +46,13 @@ export interface BalanceSheet {
   assets: { name: string; totalPaise: number }[];
   liabilities: { name: string; totalPaise: number }[];
   equity: { name: string; totalPaise: number }[];
+  // Retained earnings (income - expenses since inception) lives outside equity[] and must be surfaced so totals balance.
+  retainedEarningsPaise: number;
+  totalAssetsPaise: number;
+  totalLiabilitiesPaise: number;
+  totalEquityPaise: number;
+  totalLiabilitiesAndEquityPaise: number;
+  isBalanced: boolean;
 }
 
 interface DateRangeParams {
@@ -191,9 +198,12 @@ export function useBalanceSheet(params: DateRangeParams = {}) {
         assets: BackendBalanceSheetItem[];
         liabilities: BackendBalanceSheetItem[];
         equity: BackendBalanceSheetItem[];
+        retainedEarningsPaise: string;
         totalAssetsPaise: string;
         totalLiabilitiesPaise: string;
         totalEquityPaise: string;
+        totalLiabilitiesAndEquityPaise: string;
+        isBalanced: boolean;
       }
 
       const response = await apiClient.get<BackendBalanceSheetResponse>(url);
@@ -210,6 +220,12 @@ export function useBalanceSheet(params: DateRangeParams = {}) {
           name: item.name,
           totalPaise: Number(item.balancePaise),
         })),
+        retainedEarningsPaise: Number(response.retainedEarningsPaise),
+        totalAssetsPaise: Number(response.totalAssetsPaise),
+        totalLiabilitiesPaise: Number(response.totalLiabilitiesPaise),
+        totalEquityPaise: Number(response.totalEquityPaise),
+        totalLiabilitiesAndEquityPaise: Number(response.totalLiabilitiesAndEquityPaise),
+        isBalanced: response.isBalanced,
       };
     },
   });

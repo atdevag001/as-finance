@@ -461,9 +461,12 @@ describe('useAccounting Hook', () => {
         { name: 'Capital', balancePaise: '7000000' },
         { name: 'Retained Earnings', balancePaise: '3000000' },
       ],
+      retainedEarningsPaise: '0',
       totalAssetsPaise: '16000000',
       totalLiabilitiesPaise: '6000000',
       totalEquityPaise: '10000000',
+      totalLiabilitiesAndEquityPaise: '16000000',
+      isBalanced: true,
     };
 
     it('fetches balance sheet', async () => {
@@ -491,7 +494,7 @@ describe('useAccounting Hook', () => {
       expect(mockGet).toHaveBeenCalledWith('/accounting/balance-sheet?asOfDate=2024-01-31');
     });
 
-    it('assets = liabilities + equity', async () => {
+    it('assets = liabilities + equity + retained earnings', async () => {
       mockGet.mockResolvedValueOnce(mockBackendBalanceSheet);
 
       const { result } = renderHook(() => useBalanceSheet(), { wrapper });
@@ -499,10 +502,9 @@ describe('useAccounting Hook', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       const bs = result.current.data!;
-      const totalAssets = bs.assets.reduce((sum, a) => sum + a.totalPaise, 0);
-      const totalLiabilities = bs.liabilities.reduce((sum, l) => sum + l.totalPaise, 0);
-      const totalEquity = bs.equity.reduce((sum, e) => sum + e.totalPaise, 0);
-      expect(totalAssets).toBe(totalLiabilities + totalEquity);
+      expect(bs.totalAssetsPaise).toBe(bs.totalLiabilitiesAndEquityPaise);
+      expect(bs.totalAssetsPaise).toBe(bs.totalLiabilitiesPaise + bs.totalEquityPaise + bs.retainedEarningsPaise);
+      expect(bs.isBalanced).toBe(true);
     });
 
     it('returns assets list', async () => {

@@ -98,6 +98,8 @@ export function usePostGroupCollection() {
       qc.invalidateQueries({ queryKey: ['groups'] });
       qc.invalidateQueries({ queryKey: ['collections'] });
       qc.invalidateQueries({ queryKey: ['loans'] });
+      // Group collection posts per-loan journal entries; refresh accounting reports.
+      qc.invalidateQueries({ queryKey: ['accounting'] });
     },
   });
 }

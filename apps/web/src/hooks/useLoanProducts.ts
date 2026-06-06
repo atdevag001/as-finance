@@ -47,7 +47,8 @@ export function useLoanProducts(params: { page?: number; includeInactive?: boole
   const pageSize = 20;
   const skip = (page - 1) * pageSize;
   const query = new URLSearchParams({ skip: String(skip), take: String(pageSize) });
-  if (includeInactive) query.set('includeInactive', 'true');
+  // Backend filters via `isActive`; omit when including inactive so both are returned.
+  if (!includeInactive) query.set('isActive', 'true');
 
   return useQuery<PaginatedResult<LoanProduct>>({
     queryKey: ['loan-products', page, includeInactive],
