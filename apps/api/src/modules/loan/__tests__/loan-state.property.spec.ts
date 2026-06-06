@@ -4,7 +4,7 @@ import { LoanService } from '../loan.service';
 import { BusinessRuleError } from '../../../common/errors';
 
 // Instantiate LoanService with null repository — validateTransition is pure
-const loanService = new LoanService(null as any);
+const loanService = new LoanService(null as any, null as any, null as any);
 
 // Get the allowed transitions map from the service
 const allowedTransitions = loanService.getAllowedTransitions();

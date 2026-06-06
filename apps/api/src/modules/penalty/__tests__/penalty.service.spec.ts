@@ -234,6 +234,7 @@ describe('calculatePenaltyAmount', () => {
 function createMockPenaltyRepo() {
   return {
     lockLoanForUpdate: vi.fn(),
+    lockPenaltyForUpdate: vi.fn(),
     getLoanForPenalty: vi.fn(),
     getLoanById: vi.fn(),
     penaltyExists: vi.fn(),
@@ -636,6 +637,15 @@ describe('PenaltyService', () => {
         id: 'penalty-1',
         loan_id: 'loan-1',
         amount_paise: 500n,
+        paid_paise: 0n,
+        is_waived: false,
+        is_paid: false,
+      });
+      mockPenaltyRepo.lockPenaltyForUpdate.mockResolvedValue({
+        id: 'penalty-1',
+        loan_id: 'loan-1',
+        amount_paise: 500n,
+        paid_paise: 0n,
         is_waived: false,
         is_paid: false,
       });
@@ -676,10 +686,11 @@ describe('PenaltyService', () => {
     });
 
     it('rejects waiver for already waived penalty', async () => {
-      mockPenaltyRepo.findByIdTx.mockResolvedValue({
+      mockPenaltyRepo.lockPenaltyForUpdate.mockResolvedValue({
         id: 'penalty-1',
         loan_id: 'loan-1',
         amount_paise: 500n,
+        paid_paise: 0n,
         is_waived: true,
         is_paid: false,
       });
@@ -690,10 +701,11 @@ describe('PenaltyService', () => {
     });
 
     it('rejects waiver for already paid penalty', async () => {
-      mockPenaltyRepo.findByIdTx.mockResolvedValue({
+      mockPenaltyRepo.lockPenaltyForUpdate.mockResolvedValue({
         id: 'penalty-1',
         loan_id: 'loan-1',
         amount_paise: 500n,
+        paid_paise: 500n,
         is_waived: false,
         is_paid: true,
       });
@@ -776,6 +788,15 @@ describe('PenaltyService', () => {
         id: 'penalty-1',
         loan_id: 'loan-1',
         amount_paise: 500n,
+        paid_paise: 0n,
+        is_waived: false,
+        is_paid: false,
+      });
+      mockPenaltyRepo.lockPenaltyForUpdate.mockResolvedValue({
+        id: 'penalty-1',
+        loan_id: 'loan-1',
+        amount_paise: 500n,
+        paid_paise: 0n,
         is_waived: false,
         is_paid: false,
       });
@@ -853,6 +874,16 @@ describe('PenaltyService', () => {
         is_waived: false,
         is_paid: false,
       });
+      // After the concurrency fix, executeWaivePenalty re-reads the penalty
+      // inside the FOR UPDATE lock to defeat double-deduction races.
+      mockPenaltyRepo.lockPenaltyForUpdate.mockResolvedValue({
+        id: 'penalty-1',
+        loan_id: 'loan-1',
+        amount_paise: 500n,
+        paid_paise: 0n,
+        is_waived: false,
+        is_paid: false,
+      });
 
       await service.waivePenalty(
         'penalty-1',
@@ -893,6 +924,14 @@ describe('PenaltyService', () => {
         id: 'penalty-1',
         loan_id: 'loan-1',
         amount_paise: 500n,
+        is_waived: false,
+        is_paid: false,
+      });
+      mockPenaltyRepo.lockPenaltyForUpdate.mockResolvedValue({
+        id: 'penalty-1',
+        loan_id: 'loan-1',
+        amount_paise: 500n,
+        paid_paise: 0n,
         is_waived: false,
         is_paid: false,
       });

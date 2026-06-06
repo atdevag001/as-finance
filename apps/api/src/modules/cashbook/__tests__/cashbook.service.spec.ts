@@ -236,7 +236,10 @@ describe('CashbookService', () => {
       expect(result.journalEntry).toBeDefined();
       expect(accountingService.createJournalEntry).toHaveBeenCalledOnce();
       expect(cashbookRepository.createExpense).toHaveBeenCalledOnce();
-      expect(cashbookRepository.createCashTransaction).toHaveBeenCalledOnce();
+      // cashbook NO LONGER writes cash_transactions directly — accounting
+      // mirrors it automatically inside createJournalEntry, so an explicit
+      // write here would double-count the outflow.
+      expect(cashbookRepository.createCashTransaction).not.toHaveBeenCalled();
       expect(auditService.createAuditLog).toHaveBeenCalledOnce();
     });
 
@@ -261,8 +264,8 @@ describe('CashbookService', () => {
       );
     });
 
-    it('should create cash transaction as outflow', async () => {
-      const { service, cashbookRepository } = createMocks();
+    it('should send the journal entry with sourceType=EXPENSE so the accounting layer auto-mirrors a single outflow', async () => {
+      const { service, accountingService, cashbookRepository } = createMocks();
 
       await service.createExpense(
         { category: 'office', amountPaise: 7500, date: '2024-02-01', description: 'Supplies' },
@@ -270,16 +273,17 @@ describe('CashbookService', () => {
         'accountant',
       );
 
-      expect(cashbookRepository.createCashTransaction).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'outflow',
-          category: 'expense',
-          amount_paise: 7500n,
-          source_type: 'expense',
-          recorded_by: 'user-1',
-        }),
-        expect.anything(),
-      );
+      // sourceType must be uppercase to match AccountingService.maybeWriteCashTransaction's
+      // categoryMap; otherwise the auto-write falls back to 'collection' and the
+      // cashbook miscounts the expense.
+      const jeArg = accountingService.createJournalEntry.mock.calls[0]![0];
+      expect(jeArg.sourceType).toBe('EXPENSE');
+      // sourceId must be a real UUID (was 'pending' before — would have thrown
+      // on the @db.Uuid cast in production).
+      expect(jeArg.sourceId).toMatch(/^[0-9a-f-]{36}$/);
+
+      // Cashbook no longer writes cash_transactions explicitly.
+      expect(cashbookRepository.createCashTransaction).not.toHaveBeenCalled();
     });
 
     it('should create audit log with expense details', async () => {
@@ -508,6 +512,7 @@ describe('CashbookService', () => {
           discrepancy_amount_paise: 5000n,
           discrepancy_notes: 'Short by ₹50',
         }),
+        expect.anything(),
       );
     });
 
@@ -535,6 +540,7 @@ describe('CashbookService', () => {
           discrepancy_amount_paise: null,
           discrepancy_notes: null,
         }),
+        expect.anything(),
       );
     });
   });

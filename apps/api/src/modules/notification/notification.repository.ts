@@ -106,15 +106,28 @@ export class NotificationRepository {
   }
 
   /**
+   * Processing-lease window — if a worker crashes between markProcessing and
+   * the terminal write, the row would be stranded in `processing` forever.
+   * fetchProcessableBatch recovers any `processing` row whose lease has
+   * elapsed, treating it as eligible for re-dispatch.
+   */
+  static readonly PROCESSING_LEASE_MS = 5 * 60 * 1000;
+
+  /**
    * Fetch the next batch of pending/failed messages eligible for processing.
    * Uses SELECT ... FOR UPDATE SKIP LOCKED to allow concurrent processors
-   * without contention.
+   * without contention. Also recovers `processing` rows whose lease has
+   * expired (worker crashed before writing the terminal state).
    */
   async fetchProcessableBatch(batchSize: number, tx: TxClient) {
     const now = new Date();
     return tx.$queryRawUnsafe<Array<{ id: string }>>(
       `SELECT id FROM outbox_messages
-       WHERE (status = 'pending' OR (status = 'failed' AND next_retry_at <= $1))
+       WHERE (
+               status = 'pending'
+            OR (status = 'failed'     AND next_retry_at <= $1)
+            OR (status = 'processing' AND next_retry_at <= $1)
+             )
          AND retry_count < max_retries
        ORDER BY created_at ASC
        LIMIT $2
@@ -125,12 +138,17 @@ export class NotificationRepository {
   }
 
   /**
-   * Mark a message as processing.
+   * Mark a message as processing and stamp a lease deadline on next_retry_at
+   * so a crashed worker's row can be reclaimed once the lease elapses.
    */
   async markProcessing(id: string, tx: TxClient) {
+    const leaseExpiresAt = new Date(Date.now() + NotificationRepository.PROCESSING_LEASE_MS);
     return tx['outbox_messages'].update({
       where: { id },
-      data: { status: 'processing' as never },
+      data: {
+        status: 'processing' as never,
+        next_retry_at: leaseExpiresAt,
+      },
       select: OUTBOX_SELECT,
     });
   }
@@ -189,18 +207,39 @@ export class NotificationRepository {
 
   /**
    * Reset a dead_letter or failed message for manual retry.
+   *
+   * Uses a single conditional updateMany so the status guard runs atomically
+   * with the write — preventing a TOCTOU race where the outbox processor (or a
+   * concurrent retry call) flips the row to 'processing'/'sent' between a
+   * separate read and write, which would otherwise resurrect an already-sent
+   * SMS for re-dispatch.
+   *
+   * Returns { count, message } — count is 0 when no row matched the guard
+   * (caller should translate to 404 or business-rule error accordingly).
    */
   async resetForRetry(id: string) {
-    return this.prisma['outbox_messages'].update({
-      where: { id },
+    const { count } = await this.prisma['outbox_messages'].updateMany({
+      where: {
+        id,
+        status: { in: ['failed', 'dead_letter'] as never },
+      },
       data: {
         status: 'pending' as never,
         retry_count: 0,
         next_retry_at: null,
         provider_response: null as never,
       },
+    });
+
+    if (count === 0) {
+      return { count: 0, message: null as Awaited<ReturnType<typeof this.findById>> };
+    }
+
+    const message = await this.prisma['outbox_messages'].findUnique({
+      where: { id },
       select: OUTBOX_SELECT,
     });
+    return { count, message };
   }
 
   /**

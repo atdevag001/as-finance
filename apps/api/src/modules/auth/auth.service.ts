@@ -2,11 +2,15 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
 import * as crypto from 'crypto';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { LoginDto } from './dto/login.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { AuthorizationError, BusinessRuleError, UnauthorizedError } from '../../common/errors';
 import { isCommonPassword } from '../../common/utils/common-passwords';
+
+// Prisma's interactive-transaction client type — used so createRefreshToken can run inside $transaction.
+type TxClient = Prisma.TransactionClient;
 
 // Use lower bcrypt cost in test/dev for faster hashing (still secure enough for tests)
 const BCRYPT_COST = process.env['BCRYPT_COST'] ? parseInt(process.env['BCRYPT_COST'], 10) : 12;
@@ -179,28 +183,42 @@ export class AuthService {
       throw new UnauthorizedError('Account is inactive', 'ACCOUNT_INACTIVE');
     }
 
-    // Revoke old refresh token (rotation). SKIP_TOKEN_ROTATION=true is for
-    // dev/test storage-state reuse only — env validation forbids it in prod.
-    if (process.env['SKIP_TOKEN_ROTATION'] !== 'true') {
-      await this.prisma['refresh_tokens'].update({
-        where: { id: matchedToken.id },
-        data: {
-          is_revoked: true,
-          revoked_at: new Date(),
-          revoked_reason: 'rotated',
-        },
-      });
-    }
+    // Atomic rotation: conditional updateMany + create inside a transaction so
+    // two concurrent refreshes can't both pass the is_revoked=false check and
+    // mint two live children. The first tx flips is_revoked; the second sees
+    // count===0 and aborts. SKIP_TOKEN_ROTATION=true is for dev/test only.
+    const skipRotation = process.env['SKIP_TOKEN_ROTATION'] === 'true';
+    const newRefreshToken: string = await this.prisma.$transaction(
+      async (tx: TxClient) => {
+        if (!skipRotation) {
+          const revoked = await tx['refresh_tokens'].updateMany({
+            where: { id: matchedToken.id, is_revoked: false },
+            data: {
+              is_revoked: true,
+              revoked_at: new Date(),
+              revoked_reason: 'rotated',
+            },
+          });
+          if (revoked.count === 0) {
+            throw new UnauthorizedError(
+              'Invalid or expired refresh token',
+              'INVALID_REFRESH_TOKEN',
+            );
+          }
+        }
+        return this.createRefreshToken(
+          matchedToken.user.id,
+          matchedToken.family_id,
+          matchedToken.id,
+          tx,
+        );
+      },
+    );
 
     const accessToken = this.issueAccessToken(
       matchedToken.user.id,
       matchedToken.user.role,
       matchedToken.user.token_version,
-    );
-    const newRefreshToken = await this.createRefreshToken(
-      matchedToken.user.id,
-      matchedToken.family_id,
-      matchedToken.id,
     );
 
     return {
@@ -373,6 +391,7 @@ export class AuthService {
     userId: string,
     familyId?: string,
     parentId?: string,
+    client: PrismaService | TxClient = this.prisma,
   ): Promise<string> {
     // Generate 64 bytes: first 16 for selector (stored plaintext), remaining 48 for validator (hashed)
     const selectorBytes = crypto.randomBytes(16);
@@ -388,7 +407,7 @@ export class AuthService {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_DAYS);
 
-    await this.prisma['refresh_tokens'].create({
+    await client['refresh_tokens'].create({
       data: {
         user_id: userId,
         token_selector: selector,

@@ -65,6 +65,30 @@ export function parseDateIST(dateStr: string): Date {
 }
 
 /**
+ * Parse 'YYYY-MM-DD' as UTC midnight on the SAME calendar day.
+ *
+ * Use this for Prisma `@db.Date` columns. Postgres' DATE cast under the default
+ * UTC session timezone would strip an IST-midnight Date (UTC 18:30 previous day)
+ * to the prior calendar day — so parseDateIST is unsafe for date-only columns.
+ * UTC-midnight preserves the user-supplied calendar day regardless of host TZ.
+ */
+export function parseDateOnlyUTC(dateStr: string): Date {
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) {
+    throw new Error(`Invalid date format: ${dateStr} (expected YYYY-MM-DD)`);
+  }
+  const [y, m, d] = parts.map(Number);
+  if (
+    Number.isNaN(y!) ||
+    Number.isNaN(m!) ||
+    Number.isNaN(d!)
+  ) {
+    throw new Error(`Invalid date components: ${dateStr}`);
+  }
+  return new Date(Date.UTC(y!, m! - 1, d!));
+}
+
+/**
  * Calendar-day difference between two Dates, in IST.
  * Floor-rounds; ignores time-of-day. Returns negative if b < a.
  *

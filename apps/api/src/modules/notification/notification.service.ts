@@ -98,27 +98,31 @@ export class NotificationService {
   /**
    * Retry a failed or dead_letter message.
    * Resets the message to pending status for reprocessing.
+   *
+   * Status guard + reset run as a single atomic conditional update in the
+   * repository (see resetForRetry) to close the TOCTOU window where the
+   * outbox processor could mark the row 'sent' between a check and a reset,
+   * causing a duplicate SMS dispatch.
    */
   async retry(id: string) {
-    const message = await this.repository.findById(id);
-    if (!message) {
-      throw new NotFoundError('Outbox message not found');
-    }
+    const { count, message } = await this.repository.resetForRetry(id);
 
-    if (message.status !== 'failed' && message.status !== 'dead_letter') {
+    if (count === 0) {
+      // Distinguish "missing" vs "wrong status" only for the operator-facing error.
+      const current = await this.repository.findById(id);
+      if (!current) {
+        throw new NotFoundError('Outbox message not found');
+      }
       throw new BusinessRuleError(
-        `Cannot retry message in '${message.status}' status. Only failed or dead_letter messages can be retried.`,
+        `Cannot retry message in '${current.status}' status. Only failed or dead_letter messages can be retried.`,
       );
     }
-
-    const updated = await this.repository.resetForRetry(id);
 
     this.logger.log({
       msg: 'Notification message reset for retry',
       messageId: id,
-      previousStatus: message.status,
     });
 
-    return updated;
+    return message;
   }
 }

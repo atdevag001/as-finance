@@ -333,7 +333,10 @@ describe('AuthService', () => {
       };
       mockPrisma.refresh_tokens.findFirst.mockResolvedValue(tokenWithFamily);
       (bcrypt.compare as ReturnType<typeof vi.fn>).mockResolvedValue(true);
-      mockPrisma.refresh_tokens.update.mockResolvedValue({});
+      // Rotation now runs inside $transaction with a conditional updateMany;
+      // simulate the tx callback resolving against the same mock client.
+      mockPrisma.refresh_tokens.updateMany.mockResolvedValue({ count: 1 });
+      mockPrisma.$transaction.mockImplementation(async (cb: any) => cb(mockPrisma));
       (jwt.sign as ReturnType<typeof vi.fn>).mockReturnValue('new-access-token');
       (bcrypt.hash as ReturnType<typeof vi.fn>).mockResolvedValue('new-hashed-refresh');
       mockPrisma.refresh_tokens.create.mockResolvedValue({});
@@ -344,10 +347,10 @@ describe('AuthService', () => {
       // refresh token = selector + validator (both come from mocked randomBytes)
       expect(result.refreshToken).toBe('mock-refresh-token-hexmock-refresh-token-hex');
 
-      // Old token revoked with reason='rotated' (Sprint family revocation)
-      expect(mockPrisma.refresh_tokens.update).toHaveBeenCalledWith(
+      // Old token revoked via conditional updateMany (race-safe rotation)
+      expect(mockPrisma.refresh_tokens.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: 'token-id-1' },
+          where: { id: 'token-id-1', is_revoked: false },
           data: expect.objectContaining({
             is_revoked: true,
             revoked_reason: 'rotated',
@@ -364,6 +367,27 @@ describe('AuthService', () => {
           }),
         }),
       );
+    });
+
+    /** Validates: race-safe rotation — concurrent refresh aborts when row already revoked */
+    it('should abort rotation when conditional revoke matches zero rows (race lost)', async () => {
+      const tokenWithFamily = {
+        ...validTokenRecord,
+        family_id: 'family-1',
+        parent_id: null,
+      };
+      mockPrisma.refresh_tokens.findFirst.mockResolvedValue(tokenWithFamily);
+      (bcrypt.compare as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+      // Simulate concurrent winner already flipped is_revoked — updateMany affects 0 rows.
+      mockPrisma.refresh_tokens.updateMany.mockResolvedValue({ count: 0 });
+      mockPrisma.$transaction.mockImplementation(async (cb: any) => cb(mockPrisma));
+
+      await expect(
+        service.refreshToken('racing-token-with-selector-prefix-32-chr'),
+      ).rejects.toThrow(UnauthorizedError);
+
+      // No new token should be minted when the race is lost
+      expect(mockPrisma.refresh_tokens.create).not.toHaveBeenCalled();
     });
 
     /** Validates: Requirements 17.8 */

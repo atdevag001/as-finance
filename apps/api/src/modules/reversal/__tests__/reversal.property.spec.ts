@@ -205,6 +205,10 @@ function createMockPrisma() {
     receipts: {
       findMany: vi.fn(),
     },
+    // Re-lock query on original collection — default to still-posted snapshot.
+    $queryRaw: vi.fn().mockResolvedValue([
+      { id: 'orig-collection-id', status: 'posted', is_reversal: false },
+    ]),
   };
 
   return {

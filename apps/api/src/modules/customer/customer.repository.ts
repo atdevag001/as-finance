@@ -183,6 +183,13 @@ export class CustomerRepository {
     });
   }
 
+  async findByPanLastFour(lastFour: string) {
+    return this.prisma['customers'].findMany({
+      where: { pan_last_four: lastFour },
+      select: { id: true, full_name: true, mobile: true, pan_last_four: true, status: true },
+    });
+  }
+
   async update(id: string, data: UpdateCustomerData) {
     const updateData: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(data)) {

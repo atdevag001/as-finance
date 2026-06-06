@@ -115,6 +115,12 @@ export class ReversalService {
       throw new NotFoundError(`Loan not found: ${original.loan_id}`);
     }
 
+    // Re-lock and re-validate the original collection row so concurrent reversal
+    // requests (different idempotency keys) cannot both pass the status guard
+    // against a stale snapshot — the loan FOR UPDATE alone serializes per-loan,
+    // not per-collection.
+    await this.lockAndRevalidateOriginalCollection(original.id, tx);
+
     // Fetch full loan details for DPD/outstanding recalculation
     const loan = await this.collectionRepository.getLoanForCollection(original.loan_id, tx);
     if (!loan) {
@@ -449,6 +455,39 @@ export class ReversalService {
     }
 
     return collection;
+  }
+
+  /**
+   * Re-lock the original collection row with SELECT ... FOR UPDATE and re-validate
+   * its state. Closes the race window between the initial unlocked status read
+   * and the loan FOR UPDATE lock: without this, two concurrent reversals (with
+   * different idempotency keys) can both observe status='posted' and both
+   * proceed past the guard, double-decrementing penalty/schedule state and
+   * inserting a second compensating collection.
+   */
+  private async lockAndRevalidateOriginalCollection(collectionId: string, tx: TxClient) {
+    const rows = await tx.$queryRaw<
+      { id: string; status: string; is_reversal: boolean }[]
+    >`SELECT id, status, is_reversal FROM collections WHERE id = ${collectionId}::uuid FOR UPDATE`;
+    const row = rows[0];
+
+    if (!row) {
+      throw new NotFoundError(`Collection not found: ${collectionId}`);
+    }
+
+    if (row.is_reversal) {
+      throw new BusinessRuleError(
+        'Cannot reverse a reversal. Chained reversals are not supported.',
+        'CANNOT_REVERSE_REVERSAL',
+      );
+    }
+
+    if (row.status === 'reversed') {
+      throw new ConflictError(
+        'Collection has already been reversed.',
+        'COLLECTION_ALREADY_REVERSED',
+      );
+    }
   }
 
   /**

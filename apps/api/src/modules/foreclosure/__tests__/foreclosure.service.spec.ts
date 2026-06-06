@@ -453,8 +453,7 @@ describe('ForeclosureService', () => {
         { foreclosureId: 'fc-1', paymentMode: 'cash', idempotencyKey: 'key-1' },
         'user-2', 'manager',
       );
-      expect(result.statusCode).toBe(201);
-      const data = result.data as any;
+      const data = result as any;
       expect(data.foreclosureId).toBe('fc-1');
       expect(data.loanId).toBe('loan-1');
       expect(data.status).toBe('settled');
@@ -518,8 +517,7 @@ describe('ForeclosureService', () => {
         { foreclosureId: 'fc-1', paymentMode: 'cash', idempotencyKey: 'dup-key' },
         'user-2', 'manager',
       );
-      expect(result.statusCode).toBe(201);
-      expect(result.data).toEqual({ foreclosureId: 'fc-1' });
+      expect(result).toEqual({ foreclosureId: 'fc-1' });
       expect(mockForeclosureRepo.findById).not.toHaveBeenCalled();
     });
 
@@ -586,7 +584,7 @@ describe('ForeclosureService', () => {
         { foreclosureId: 'fc-1', paymentMode: 'cash', idempotencyKey: 'key-1' },
         'user-1', 'super_admin', // same as requester but super_admin can bypass
       );
-      expect(result.statusCode).toBe(201);
+      expect((result as { status: string }).status).toBe('settled');
     });
 
     it('allows different user to execute foreclosure regardless of role', async () => {
@@ -596,7 +594,7 @@ describe('ForeclosureService', () => {
         { foreclosureId: 'fc-1', paymentMode: 'cash', idempotencyKey: 'key-1' },
         'user-2', 'manager', // different from requester (user-1)
       );
-      expect(result.statusCode).toBe(201);
+      expect((result as { status: string }).status).toBe('settled');
     });
 
     it('throws NotFoundError for non-existent foreclosure', async () => {

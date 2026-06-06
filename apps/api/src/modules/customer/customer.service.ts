@@ -186,6 +186,34 @@ export class CustomerService {
       );
     }
 
+    // Re-run duplicate detection on identifier changes (parity with create()) to surface collisions to managers.
+    const duplicateWarnings: Array<{ field: string; matchedCustomers: Array<{ id: string; fullName: string }> }> = [];
+
+    if (dto.mobile !== undefined && dto.mobile !== existing.mobile) {
+      const mobileMatches = await this.customerRepository.findByMobile(dto.mobile);
+      const others = mobileMatches.filter((c: { id: string }) => c.id !== id);
+      if (others.length > 0) {
+        duplicateWarnings.push({
+          field: 'mobile',
+          matchedCustomers: others.map((c: { id: string; full_name: string }) => ({ id: c.id, fullName: c.full_name })),
+        });
+      }
+    }
+
+    if (dto.panNumber !== undefined) {
+      const newPanLastFour = lastFour(dto.panNumber);
+      if (newPanLastFour !== existing.pan_last_four) {
+        const panMatches = await this.customerRepository.findByPanLastFour(newPanLastFour);
+        const others = panMatches.filter((c: { id: string }) => c.id !== id);
+        if (others.length > 0) {
+          duplicateWarnings.push({
+            field: 'pan',
+            matchedCustomers: others.map((c: { id: string; full_name: string }) => ({ id: c.id, fullName: c.full_name })),
+          });
+        }
+      }
+    }
+
     const updateData: UpdateCustomerData = {};
 
     if (dto.fullName !== undefined) updateData.full_name = dto.fullName;
@@ -225,6 +253,9 @@ export class CustomerService {
       after_state: updated,
     });
 
+    if (duplicateWarnings.length > 0) {
+      return { ...updated, duplicateWarnings };
+    }
     return updated;
   }
 

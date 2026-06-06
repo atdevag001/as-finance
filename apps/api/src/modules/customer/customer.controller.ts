@@ -135,7 +135,12 @@ export class CustomerController {
   @RequirePermission('customer.read')
   @ApiOperation({ summary: 'Get all documents for a customer' })
   @ApiResponse({ status: 200, description: 'Documents retrieved' })
-  async getDocuments(@Param('id') customerId: string) {
+  async getDocuments(
+    @Param('id') customerId: string,
+    @Req() req: Request & { user: JwtPayload },
+  ) {
+    // Enforce per-officer scope before exposing document metadata (filenames, types, etc.)
+    await this.customerService.findById(customerId, req.user.sub, req.user.role);
     const documents = await this.documentService.getCustomerDocuments(customerId);
     return { data: documents };
   }

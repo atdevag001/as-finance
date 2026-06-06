@@ -9,7 +9,7 @@ import { IdempotencyService } from '../idempotency/idempotency.service';
 import { ReceiptService } from '../receipt/receipt.service';
 import { PostCollectionDto } from './dto/post-collection.dto';
 import { BusinessRuleError, NotFoundError } from '../../common/errors';
-import { parseDateIST } from '../../common/utils/date.util';
+import { parseDateOnlyUTC } from '../../common/utils/date.util';
 import {
   allocate,
   AllocationResult,
@@ -215,13 +215,13 @@ export class CollectionService {
       penaltyIncomeAccount.id,
     );
 
-    // (H5) IST-midnight pin: avoid host-TZ drift in receipt/journal dates.
-    // parseDateIST('YYYY-MM-DD') anchors to 00:00 IST, the canonical business day.
-    const paymentDate = parseDateIST(dto.paymentDate);
+    // Postgres `@db.Date` under UTC session strips the prior-day instant returned
+    // by parseDateIST, so use UTC midnight of the same calendar day for date-only columns.
+    const paymentDate = parseDateOnlyUTC(dto.paymentDate);
 
     const journalEntry = await this.accountingService.createJournalEntry(
       {
-        date: paymentDate.toISOString(),
+        date: dto.paymentDate,
         description: `Collection for loan ${loan.loan_number}`,
         sourceType: JournalSourceType.COLLECTION,
         sourceId: dto.loanId,

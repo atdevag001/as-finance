@@ -92,9 +92,11 @@ describe('Disbursement Integration', () => {
   beforeEach(() => {
     repo = createMockRepo();
     mocks = createMockServices();
+    const settingsService = { getHolidays: vi.fn().mockResolvedValue([]) };
     service = new DisbursementService(
       mocks.prisma as never, repo as never, mocks.accounting as never,
       mocks.audit as never, mocks.idempotency as never, mocks.loan as never,
+      settingsService as never,
     );
   });
 

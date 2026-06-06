@@ -73,8 +73,26 @@ export class AuditService {
       targetId: query.targetId,
       actorId: query.actorId,
       actionType: query.actionType,
-      startDate: query.startDate ? new Date(query.startDate) : undefined,
-      endDate: query.endDate ? new Date(query.endDate) : undefined,
+      startDate: parseBoundaryDate(query.startDate, 'start', query.tzOffsetMinutes),
+      endDate: parseBoundaryDate(query.endDate, 'end', query.tzOffsetMinutes),
     });
   }
+}
+
+// Date-only inputs (YYYY-MM-DD) are interpreted in the client's local TZ, not UTC,
+// otherwise the audit log filter would be off by the user's offset (e.g. 5h30m for IST).
+function parseBoundaryDate(
+  value: string | undefined,
+  boundary: 'start' | 'end',
+  tzOffsetMinutes: number | undefined,
+): Date | undefined {
+  if (!value) return undefined;
+  const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
+  if (!isDateOnly) return new Date(value);
+  const offset = tzOffsetMinutes ?? 0;
+  // Build UTC midnight, then shift by offset so the resulting instant equals
+  // local midnight of the picked day; `end` advances to the start of the next day.
+  const base = new Date(`${value}T00:00:00.000Z`);
+  if (boundary === 'end') base.setUTCDate(base.getUTCDate() + 1);
+  return new Date(base.getTime() + offset * 60_000);
 }

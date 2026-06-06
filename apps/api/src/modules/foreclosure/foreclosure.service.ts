@@ -208,6 +208,19 @@ export class ForeclosureService {
 
     const rebatePaise = dto.rebatePaise ?? 0;
 
+    // H29: cap rebate at the total dues so the journal cannot become unbalanced
+    // (calculateForeclosureSettlement clamps the settlement, but the journal
+    // builder posts the raw rebate as DR DiscountExpense — so an over-cap
+    // rebate would silently break the balance invariant).
+    const totalDuesPaise =
+      outstandingPrincipalPaise + accruedInterestPaise + pendingPenaltiesPaise;
+    if (rebatePaise > totalDuesPaise) {
+      throw new BusinessRuleError(
+        `Rebate ${rebatePaise} paise exceeds total dues ${totalDuesPaise} paise`,
+        'REBATE_EXCEEDS_DUES',
+      );
+    }
+
     // Calculate settlement using pure function
     const settlement = calculateForeclosureSettlement({
       outstandingPrincipalPaise,
@@ -219,6 +232,10 @@ export class ForeclosureService {
     // Create foreclosure record with 24-hour expiry
     const quoteExpiresAt = new Date(now.getTime() + QUOTE_VALIDITY_MS);
 
+    // H13: rebate authorizer is the authenticated actor — never trust client.
+    // Only record it when a rebate is actually applied, otherwise leave null.
+    const rebateAuthorizedBy = rebatePaise > 0 ? actorId : undefined;
+
     const foreclosure = await this.foreclosureRepository.createForeclosure({
       loan_id: dto.loanId,
       outstanding_principal_paise: settlement.outstandingPrincipalPaise,
@@ -227,7 +244,7 @@ export class ForeclosureService {
       rebate_paise: settlement.rebatePaise,
       settlement_amount_paise: settlement.settlementAmountPaise,
       rebate_reason: dto.rebateReason,
-      rebate_authorized_by: dto.rebateAuthorizedBy,
+      rebate_authorized_by: rebateAuthorizedBy,
       requested_by: actorId,
       quote_expires_at: quoteExpiresAt,
     });
@@ -293,15 +310,15 @@ export class ForeclosureService {
         msg: 'Returning cached foreclosure result (idempotency hit)',
         idempotencyKey: dto.idempotencyKey,
       });
-      return { statusCode: cached.resultStatus, data: cached.resultBody };
+      // Return the cached result body verbatim; HTTP 201 is set by @HttpCode
+      // on the controller so callers receive a flat object, not an envelope.
+      return cached.resultBody;
     }
 
     // Execute atomic foreclosure transaction
-    const result = await this.prisma.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx) => {
       return this.executeForeclosureTransaction(tx, dto, actorId, actorRole);
     });
-
-    return { statusCode: 201, data: result };
   }
 
   private async executeForeclosureTransaction(
@@ -369,7 +386,24 @@ export class ForeclosureService {
     // Apply optional rebate override from execution request
     const rebatePaise = dto.rebatePaise ?? Number(foreclosure.rebate_paise);
     const rebateReason = dto.rebateReason ?? foreclosure.rebate_reason ?? undefined;
-    const rebateAuthorizedBy = dto.rebateAuthorizedBy ?? foreclosure.rebate_authorized_by ?? undefined;
+    // H13: rebate authorizer is the authenticated actor when a (possibly
+    // overridden) rebate is applied — never the client-supplied value. Falls
+    // back to the quote's stored authorizer only when no rebate is active.
+    const rebateAuthorizedBy =
+      rebatePaise > 0 ? actorId : (foreclosure.rebate_authorized_by ?? undefined);
+
+    // H29: enforce rebate ceiling against the quoted components so the
+    // settlement journal stays balanced (see buildSettlementJournalLines).
+    const quotedDuesPaise =
+      Number(foreclosure.outstanding_principal_paise) +
+      Number(foreclosure.accrued_interest_paise) +
+      Number(foreclosure.pending_penalties_paise);
+    if (rebatePaise > quotedDuesPaise) {
+      throw new BusinessRuleError(
+        `Rebate ${rebatePaise} paise exceeds total dues ${quotedDuesPaise} paise`,
+        'REBATE_EXCEEDS_DUES',
+      );
+    }
 
     // H16: Quote freshness check. The quote may be within its 24h validity
     // window but the underlying loan state (a fresh collection landing,

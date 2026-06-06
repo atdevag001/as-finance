@@ -412,30 +412,39 @@ export class PenaltyService {
       );
     }
 
-    // Step 1: Validate penalty exists
+    // Step 1: Validate penalty exists (initial read used only to discover loan_id).
     const penalty = await this.penaltyRepository.findByIdTx(penaltyId, tx);
     if (!penalty) {
       throw new NotFoundError(`Penalty not found: ${penaltyId}`);
     }
 
-    if (penalty.is_waived) {
+    // Lock loan row BEFORE re-reading penalty state so concurrent waivers
+    // against the same loan serialize here.
+    const lockedLoan = await this.penaltyRepository.lockLoanForUpdate(penalty.loan_id, tx);
+    if (!lockedLoan) {
+      throw new NotFoundError(`Loan not found: ${penalty.loan_id}`);
+    }
+
+    // Lock the penalty row and re-validate flags under the lock: the loan-row
+    // lock alone does not serialize reads of the penalty row, so a concurrent
+    // waiver could otherwise slip past the is_waived guard.
+    const lockedPenalty = await this.penaltyRepository.lockPenaltyForUpdate(penaltyId, tx);
+    if (!lockedPenalty) {
+      throw new NotFoundError(`Penalty not found: ${penaltyId}`);
+    }
+
+    if (lockedPenalty.is_waived) {
       throw new BusinessRuleError(
         'Penalty has already been waived',
         'PENALTY_ALREADY_WAIVED',
       );
     }
 
-    if (penalty.is_paid) {
+    if (lockedPenalty.is_paid) {
       throw new BusinessRuleError(
         'Cannot waive a penalty that has already been paid',
         'PENALTY_ALREADY_PAID',
       );
-    }
-
-    // Lock loan row
-    const lockedLoan = await this.penaltyRepository.lockLoanForUpdate(penalty.loan_id, tx);
-    if (!lockedLoan) {
-      throw new NotFoundError(`Loan not found: ${penalty.loan_id}`);
     }
 
     // Step 3: Mark penalty as waived
@@ -449,10 +458,14 @@ export class PenaltyService {
       tx,
     );
 
-    // Step 4: Update outstanding balance
-    const penaltyAmount = Number(penalty.amount_paise);
+    // Step 4: Update outstanding balance — deduct only the UNPAID portion.
+    // Any `paid_paise` already collected was removed from outstanding at
+    // payment time, so deducting `amount_paise` here would double-count.
+    const penaltyAmount = Number(lockedPenalty.amount_paise);
+    const penaltyPaid = Number(lockedPenalty.paid_paise ?? 0);
+    const unpaidPenaltyAmount = Math.max(0, penaltyAmount - penaltyPaid);
     const currentOutstanding = Number(lockedLoan.cached_outstanding_paise ?? 0);
-    const newOutstanding = Math.max(0, currentOutstanding - penaltyAmount);
+    const newOutstanding = Math.max(0, currentOutstanding - unpaidPenaltyAmount);
 
     // Step 5: Recalculate DPD and bucket
     const loan = await this.penaltyRepository.getLoanForPenalty(penalty.loan_id, tx);

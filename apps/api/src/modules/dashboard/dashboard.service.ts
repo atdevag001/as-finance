@@ -9,7 +9,6 @@ export interface DashboardKPIs {
   totalOutstandingPaise: number;
   todayCollectionsPaise: number;
   todayDisbursementsPaise: number;
-  cashInHandPaise: number;
   pendingApprovals: number;
 }
 
@@ -79,10 +78,8 @@ export class DashboardService {
       }),
     ]);
 
-    // Cash in hand would typically come from cashbook, but for simplicity
-    // we'll return today's collections as a proxy
-    const cashInHandPaise = Number(todayCollectionsAgg._sum.amount_paise ?? 0);
-
+    // cashInHandPaise removed: previously aliased today's collections, misrepresenting cash position;
+    // real cash-in-hand lives in the cashbook daily summary (opening + inflows - outflows).
     return {
       totalCustomers,
       activeLoans,
@@ -90,7 +87,6 @@ export class DashboardService {
       totalOutstandingPaise: Number(outstandingAgg._sum?.cached_outstanding_paise ?? 0),
       todayCollectionsPaise: Number(todayCollectionsAgg._sum?.amount_paise ?? 0),
       todayDisbursementsPaise: Number(todayDisbursementsAgg._sum?.principal_paise ?? 0),
-      cashInHandPaise,
       pendingApprovals,
     };
   }

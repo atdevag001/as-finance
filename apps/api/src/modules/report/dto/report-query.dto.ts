@@ -1,8 +1,10 @@
 import {
   IsDateString,
   IsEnum,
+  IsIn,
   IsInt,
   IsOptional,
+  IsString,
   IsUUID,
   Max,
   Min,
@@ -10,6 +12,21 @@ import {
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { LoanStatus } from '@as-finance/shared';
+
+/**
+ * Allowed values for the EMI-schedule report's status filter. These map to
+ * InstallmentStatus values plus 'all' (no filter) — distinct from LoanStatus,
+ * which is what `status` (loan-level) accepts.
+ */
+export const EMI_SCHEDULE_STATUSES = [
+  'all',
+  'paid',
+  'unpaid',
+  'overdue',
+  'partial',
+  'pending',
+] as const;
+export type EmiScheduleStatus = (typeof EMI_SCHEDULE_STATUSES)[number];
 
 /**
  * H10c — replaces the freeform `Record<string,string>` query bag on
@@ -63,6 +80,24 @@ export class ReportQueryDto {
   @IsOptional()
   @IsEnum(LoanStatus)
   status?: LoanStatus;
+
+  @ApiPropertyOptional({
+    description: 'EMI-schedule installment status filter',
+    enum: EMI_SCHEDULE_STATUSES,
+  })
+  @IsOptional()
+  @IsIn(EMI_SCHEDULE_STATUSES)
+  scheduleStatus?: EmiScheduleStatus;
+
+  @ApiPropertyOptional({ description: 'Overdue bucket filter (e.g. bucket_31_60)' })
+  @IsOptional()
+  @IsString()
+  bucket?: string;
+
+  @ApiPropertyOptional({ description: 'Filter by product version ID' })
+  @IsOptional()
+  @IsUUID()
+  productVersionId?: string;
 
   @ApiPropertyOptional({ description: 'Max records to return', minimum: 1, maximum: 1000 })
   @IsOptional()

@@ -52,6 +52,7 @@ function createMockRepository() {
     findAll: vi.fn(),
     findByAadhaarLastFour: vi.fn(),
     findByMobile: vi.fn(),
+    findByPanLastFour: vi.fn(),
     update: vi.fn(),
     blacklist: vi.fn(),
     reinstate: vi.fn(),

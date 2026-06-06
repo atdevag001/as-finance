@@ -1,6 +1,13 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { LoanService } from '../loan.service';
 import { BusinessRuleError, NotFoundError } from '../../../common/errors';
+
+// closeLoan now runs inside prisma.$transaction with a FOR UPDATE lock — these
+// helpers fake the transaction + lock so the mock-only service tests still work.
+const prismaMock: any = {
+  $transaction: vi.fn(async (cb: (tx: any) => Promise<any>) => cb({})),
+};
+const settingsMock: any = { getHolidays: vi.fn().mockResolvedValue([]) };
 
 /**
  * Unit tests for loan closure logic (Task 21.1).
@@ -31,8 +38,12 @@ function buildMockRepo(overrides: MockOverrides = {}) {
         created_by: 'creator-1',
         customer_id: 'cust-1',
         principal_paise: 100000n,
+        version: 1,
+        customer: { id: 'cust-1', full_name: 'Test', mobile: '9999999999', status: 'active', assigned_officer_id: 'officer-x' },
       };
     },
+    // lockLoanForUpdate must return a row so the tx body proceeds past the lock check.
+    lockLoanForUpdate: async () => ({ id: 'loan-1', status, version: 1, cached_outstanding_paise: 0n }),
     getUnpaidInstallments: async () => overrides.unpaidInstallments ?? [],
     getUnsettledPenalties: async () => overrides.unsettledPenalties ?? [],
     getPendingReversals: async () => overrides.pendingReversals ?? [],
@@ -52,7 +63,7 @@ describe('LoanService.closeLoan', () => {
   describe('successful closure', () => {
     it('closes an active loan when all prerequisites are met', async () => {
       const repo = buildMockRepo({ loanStatus: 'active' });
-      const service = new LoanService(repo as any);
+      const service = new LoanService(repo as any, prismaMock, settingsMock);
 
       const result = await service.closeLoan('loan-1', 'actor-1', 'manager');
 
@@ -61,7 +72,7 @@ describe('LoanService.closeLoan', () => {
 
     it('closes an overdue loan when all prerequisites are met', async () => {
       const repo = buildMockRepo({ loanStatus: 'overdue' });
-      const service = new LoanService(repo as any);
+      const service = new LoanService(repo as any, prismaMock, settingsMock);
 
       const result = await service.closeLoan('loan-1', 'actor-1', 'manager');
 
@@ -73,7 +84,7 @@ describe('LoanService.closeLoan', () => {
         loanStatus: 'active',
         outstandingBalance: 1n,
       });
-      const service = new LoanService(repo as any);
+      const service = new LoanService(repo as any, prismaMock, settingsMock);
 
       const result = await service.closeLoan('loan-1', 'actor-1', 'manager');
 
@@ -85,7 +96,7 @@ describe('LoanService.closeLoan', () => {
         loanStatus: 'active',
         outstandingBalance: -1n,
       });
-      const service = new LoanService(repo as any);
+      const service = new LoanService(repo as any, prismaMock, settingsMock);
 
       const result = await service.closeLoan('loan-1', 'actor-1', 'manager');
 
@@ -101,7 +112,7 @@ describe('LoanService.closeLoan', () => {
         historyRecorded = true;
         return {};
       };
-      const service = new LoanService(repo as any);
+      const service = new LoanService(repo as any, prismaMock, settingsMock);
 
       await service.closeLoan('loan-1', 'actor-1', 'manager');
 
@@ -118,7 +129,7 @@ describe('LoanService.closeLoan', () => {
         auditCreated = true;
         return {};
       };
-      const service = new LoanService(repo as any);
+      const service = new LoanService(repo as any, prismaMock, settingsMock);
 
       await service.closeLoan('loan-1', 'actor-1', 'manager');
 
@@ -129,7 +140,7 @@ describe('LoanService.closeLoan', () => {
   describe('prerequisite failures', () => {
     it('rejects closure when loan is not found', async () => {
       const repo = buildMockRepo({ loanExists: false });
-      const service = new LoanService(repo as any);
+      const service = new LoanService(repo as any, prismaMock, settingsMock);
 
       await expect(
         service.closeLoan('nonexistent', 'actor-1', 'manager'),
@@ -138,7 +149,7 @@ describe('LoanService.closeLoan', () => {
 
     it('rejects closure from invalid status (draft)', async () => {
       const repo = buildMockRepo({ loanStatus: 'draft' });
-      const service = new LoanService(repo as any);
+      const service = new LoanService(repo as any, prismaMock, settingsMock);
 
       await expect(
         service.closeLoan('loan-1', 'actor-1', 'manager'),
@@ -147,7 +158,7 @@ describe('LoanService.closeLoan', () => {
 
     it('rejects closure from terminal status (closed)', async () => {
       const repo = buildMockRepo({ loanStatus: 'closed' });
-      const service = new LoanService(repo as any);
+      const service = new LoanService(repo as any, prismaMock, settingsMock);
 
       await expect(
         service.closeLoan('loan-1', 'actor-1', 'manager'),
@@ -169,7 +180,7 @@ describe('LoanService.closeLoan', () => {
           },
         ],
       });
-      const service = new LoanService(repo as any);
+      const service = new LoanService(repo as any, prismaMock, settingsMock);
 
       try {
         await service.closeLoan('loan-1', 'actor-1', 'manager');
@@ -194,7 +205,7 @@ describe('LoanService.closeLoan', () => {
           },
         ],
       });
-      const service = new LoanService(repo as any);
+      const service = new LoanService(repo as any, prismaMock, settingsMock);
 
       try {
         await service.closeLoan('loan-1', 'actor-1', 'manager');
@@ -213,7 +224,7 @@ describe('LoanService.closeLoan', () => {
           { id: 'rev-1', original_collection_id: 'col-1' },
         ],
       });
-      const service = new LoanService(repo as any);
+      const service = new LoanService(repo as any, prismaMock, settingsMock);
 
       try {
         await service.closeLoan('loan-1', 'actor-1', 'manager');
@@ -230,7 +241,7 @@ describe('LoanService.closeLoan', () => {
         loanStatus: 'active',
         outstandingBalance: 200n,
       });
-      const service = new LoanService(repo as any);
+      const service = new LoanService(repo as any, prismaMock, settingsMock);
 
       try {
         await service.closeLoan('loan-1', 'actor-1', 'manager');
@@ -269,7 +280,7 @@ describe('LoanService.closeLoan', () => {
         ],
         outstandingBalance: 5000n,
       });
-      const service = new LoanService(repo as any);
+      const service = new LoanService(repo as any, prismaMock, settingsMock);
 
       try {
         await service.closeLoan('loan-1', 'actor-1', 'manager');
@@ -287,7 +298,7 @@ describe('LoanService.closeLoan', () => {
 
   describe('prevents reopening closed loans (Requirement 10.4)', () => {
     it('rejects transition from closed to any other status', () => {
-      const service = new LoanService(null as any);
+      const service = new LoanService(null as any, prismaMock, settingsMock);
       const statuses = [
         'draft', 'submitted', 'under_review', 'approved',
         'disbursed', 'active', 'overdue', 'defaulted', 'foreclosed',

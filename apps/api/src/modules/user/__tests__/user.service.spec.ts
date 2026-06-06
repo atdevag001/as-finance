@@ -46,14 +46,22 @@ function createMockRepository() {
   };
 }
 
+function createMockAuditService() {
+  return {
+    createAuditLog: vi.fn().mockResolvedValue({ id: 'audit-1' }),
+  };
+}
+
 describe('UserService', () => {
   let service: UserService;
   let mockRepo: ReturnType<typeof createMockRepository>;
+  let mockAudit: ReturnType<typeof createMockAuditService>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockRepo = createMockRepository();
-    service = new UserService(mockRepo as never);
+    mockAudit = createMockAuditService();
+    service = new UserService(mockRepo as never, mockAudit as never);
   });
 
   describe('createUser', () => {
@@ -669,6 +677,117 @@ describe('UserService', () => {
           UserRole.ACCOUNTANT,
         ),
       ).rejects.toThrow(AuthorizationError);
+    });
+  });
+
+  describe('audit logging', () => {
+    it('should emit USER_CREATED audit log on createUser', async () => {
+      mockRepo.findByUsername.mockResolvedValue(null);
+      mockRepo.findByMobile.mockResolvedValue(null);
+      (bcrypt.hash as ReturnType<typeof vi.fn>).mockResolvedValue('hashed-pw');
+      mockRepo.create.mockResolvedValue({ ...mockUser, id: 'new-id' });
+
+      await service.createUser(
+        {
+          username: 'newuser',
+          password: 'ValidPass1',
+          fullName: 'New User',
+          mobile: '9876543211',
+          role: UserRole.FIELD_OFFICER,
+        },
+        mockActorId,
+        UserRole.SUPER_ADMIN,
+      );
+
+      expect(mockAudit.createAuditLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action_type: 'user_created',
+          actor_id: mockActorId,
+          target_entity: 'user',
+          target_id: 'new-id',
+        }),
+      );
+    });
+
+    it('should emit USER_ROLE_CHANGED audit log on updateUser', async () => {
+      mockRepo.findById.mockResolvedValue(mockUser);
+      mockRepo.update.mockResolvedValue({ ...mockUser, role: 'manager' });
+
+      await service.updateUser(
+        mockUserId,
+        { role: UserRole.MANAGER },
+        mockActorId,
+        UserRole.SUPER_ADMIN,
+      );
+
+      expect(mockAudit.createAuditLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action_type: 'user_role_changed',
+          target_entity: 'user',
+          target_id: mockUserId,
+          remarks: 'role_changed',
+        }),
+      );
+    });
+
+    it('should emit audit log on addAreaAssignment', async () => {
+      mockRepo.findById.mockResolvedValue(mockUser);
+      mockRepo.findActiveAreaAssignments.mockResolvedValue([]);
+      mockRepo.createAreaAssignment.mockResolvedValue({
+        id: 'area-1',
+        user_id: mockUserId,
+        area_name: 'Zone A',
+        is_active: true,
+        assigned_by: mockActorId,
+        created_at: new Date(),
+      });
+
+      await service.addAreaAssignment(
+        mockUserId,
+        'Zone A',
+        mockActorId,
+        UserRole.MANAGER,
+      );
+
+      expect(mockAudit.createAuditLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          target_entity: 'user',
+          target_id: mockUserId,
+          remarks: 'area_assignment_added',
+        }),
+      );
+    });
+
+    it('should emit audit log on removeAreaAssignment', async () => {
+      mockRepo.findById.mockResolvedValue(mockUser);
+      mockRepo.findAreaAssignment.mockResolvedValue({
+        id: 'area-1',
+        user_id: mockUserId,
+        area_name: 'Zone A',
+        is_active: true,
+        assigned_by: mockActorId,
+      });
+      mockRepo.deactivateAreaAssignment.mockResolvedValue({
+        id: 'area-1',
+        user_id: mockUserId,
+        area_name: 'Zone A',
+        is_active: false,
+      });
+
+      await service.removeAreaAssignment(
+        mockUserId,
+        'area-1',
+        mockActorId,
+        UserRole.MANAGER,
+      );
+
+      expect(mockAudit.createAuditLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          target_entity: 'user',
+          target_id: mockUserId,
+          remarks: 'area_assignment_removed',
+        }),
+      );
     });
   });
 });

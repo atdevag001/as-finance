@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { PrismaService } from '../../database/prisma.service';
 import { CashbookRepository } from './cashbook.repository';
 import { AccountingService } from '../accounting/accounting.service';
@@ -8,6 +9,7 @@ import { CreateHandoverDto } from './dto/create-handover.dto';
 import { VerifyHandoverDto } from './dto/verify-handover.dto';
 import { BusinessRuleError, NotFoundError } from '../../common/errors';
 import { AccountingRepository } from '../accounting/accounting.repository';
+import { parseDateIST, todayIST } from '../../common/utils/date.util';
 
 /**
  * Prisma transaction client type.
@@ -129,14 +131,22 @@ export class CashbookService {
       throw new BusinessRuleError(`${accountName} account (${creditAccountCode}) not found`, 'MISSING_ACCOUNT');
     }
 
+    // Pre-generate expense ID so the journal entry can carry a valid source_id UUID
+    // up front (journal_entries.source_id is @db.Uuid; the previous 'pending' placeholder
+    // would fail the Prisma cast on the first real insert).
+    const expenseId = randomUUID();
+
     const result = await this.prisma.$transaction(async (tx: TxClient) => {
-      // 1. Create journal entry: DR Expense, CR Cash/Bank
+      // 1. Create journal entry: DR Expense, CR Cash/Bank.
+      //    sourceType is uppercased to match AccountingService.maybeWriteCashTransaction's
+      //    categoryMap; otherwise the auto-written cash_transactions row falls back to
+      //    'collection' and the cashbook miscounts the expense.
       const journalEntry = await this.accountingService.createJournalEntry(
         {
           date: dto.date,
           description: `Expense: ${dto.category} - ${dto.description}`,
-          sourceType: 'expense' as never,
-          sourceId: 'pending', // Will be updated after expense creation
+          sourceType: 'EXPENSE' as never,
+          sourceId: expenseId,
           lines: [
             { accountId: expenseAccount.id, debitPaise: dto.amountPaise, creditPaise: 0 },
             { accountId: creditAccount.id, debitPaise: 0, creditPaise: dto.amountPaise },
@@ -146,12 +156,13 @@ export class CashbookService {
         tx,
       );
 
-      // 2. Create expense record
+      // 2. Create expense record with the pre-generated UUID.
       const expense = await this.cashbookRepository.createExpense(
         {
+          id: expenseId,
           category: dto.category,
           amount_paise: BigInt(dto.amountPaise),
-          expense_date: new Date(dto.date),
+          expense_date: parseDateIST(dto.date),
           description: dto.description,
           document_file_id: dto.documentFileId,
           journal_entry_id: journalEntry.id,
@@ -160,22 +171,12 @@ export class CashbookService {
         tx,
       );
 
-      // 3. Create cash transaction record (outflow)
-      await this.cashbookRepository.createCashTransaction(
-        {
-          transaction_date: new Date(dto.date),
-          type: 'outflow',
-          category: 'expense',
-          amount_paise: BigInt(dto.amountPaise),
-          description: `Expense: ${dto.category} - ${dto.description}`,
-          source_type: 'expense',
-          source_id: expense.id,
-          recorded_by: actorId,
-        },
-        tx,
-      );
+      // NB: cash_transactions is intentionally NOT written here. AccountingService
+      // already mirrors any JE touching cash accounts (1001/1002) into cash_transactions
+      // inside createJournalEntry. Writing a second row here double-counted every
+      // expense outflow in the daily cashbook summary.
 
-      // 4. Create audit log
+      // 3. Create audit log
       await this.auditService.createAuditLog(
         {
           action_type: 'expense_recorded',
@@ -243,7 +244,7 @@ export class CashbookService {
   /**
    * Verify a cash handover, optionally flagging discrepancies.
    */
-  async verifyHandover(handoverId: string, dto: VerifyHandoverDto, _actorId: string, _actorRole: string) {
+  async verifyHandover(handoverId: string, dto: VerifyHandoverDto, actorId: string, actorRole: string) {
     const existing = await this.cashbookRepository.findHandoverById(handoverId);
     if (!existing) {
       throw new NotFoundError('Cash handover not found');
@@ -256,6 +257,15 @@ export class CashbookService {
       );
     }
 
+    // Separation of duties: the officer who created the handover cannot self-verify.
+    // Allows downstream finance teams to catch collection-officer errors or fraud.
+    if (existing.collection_officer_id === actorId) {
+      throw new BusinessRuleError(
+        'You cannot verify a handover you submitted',
+        'SELF_VERIFICATION_FORBIDDEN',
+      );
+    }
+
     if (dto.verificationStatus === 'discrepancy' && dto.discrepancyAmountPaise == null) {
       throw new BusinessRuleError(
         'Discrepancy amount is required when flagging a discrepancy',
@@ -263,12 +273,37 @@ export class CashbookService {
       );
     }
 
-    const updated = await this.cashbookRepository.updateHandoverVerification(handoverId, {
-      verification_status: dto.verificationStatus,
-      discrepancy_amount_paise:
-        dto.discrepancyAmountPaise != null ? BigInt(dto.discrepancyAmountPaise) : null,
-      discrepancy_notes: dto.discrepancyNotes ?? null,
-      verified_at: new Date(),
+    const updated = await this.prisma.$transaction(async (tx: TxClient) => {
+      const row = await this.cashbookRepository.updateHandoverVerification(
+        handoverId,
+        {
+          verification_status: dto.verificationStatus,
+          discrepancy_amount_paise:
+            dto.discrepancyAmountPaise != null ? BigInt(dto.discrepancyAmountPaise) : null,
+          discrepancy_notes: dto.discrepancyNotes ?? null,
+          verified_at: new Date(),
+        },
+        tx,
+      );
+
+      await this.auditService.createAuditLog(
+        {
+          action_type: 'cash_handover_verified',
+          actor_id: actorId,
+          actor_role: actorRole,
+          target_entity: 'cash_handover',
+          target_id: handoverId,
+          before_state: { verification_status: existing.verification_status },
+          after_state: {
+            verification_status: dto.verificationStatus,
+            discrepancy_amount_paise: dto.discrepancyAmountPaise ?? null,
+            discrepancy_notes: dto.discrepancyNotes ?? null,
+          },
+        },
+        tx,
+      );
+
+      return row;
     });
 
     this.logger.log({
@@ -285,10 +320,10 @@ export class CashbookService {
    * Also classifies income by source (Requirement 13.6).
    */
   async getDailySummary(date?: string) {
-    const summaryDate = date ? new Date(date) : new Date();
-    // Normalize to date-only (strip time)
-    const dateStr = summaryDate.toISOString().split('T')[0]!;
-    const dateOnly = new Date(dateStr);
+    // Normalize to date-only in IST so the summary belongs to one Indian
+    // business day, not a server-UTC slice that could span two IST days.
+    const dateStr = date ?? todayIST();
+    const dateOnly = parseDateIST(dateStr);
 
     // Get opening balance (all transactions before this date)
     const { totalInflows: priorInflows, totalOutflows: priorOutflows } =
@@ -328,7 +363,10 @@ export class CashbookService {
     }
 
     return {
-      date: dateOnly.toISOString().split('T')[0],
+      // dateStr is the IST calendar day the caller asked for. Don't reformat via
+      // toISOString() — that returns the UTC day, which is the day BEFORE in IST
+      // for any clock instant between 00:00 and 05:30 IST.
+      date: dateStr,
       ...summary,
       incomeBySource: [...incomeBySource.values()],
       transactionCount: transactions.length,

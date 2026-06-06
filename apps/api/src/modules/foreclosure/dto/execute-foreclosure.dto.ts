@@ -18,16 +18,15 @@ export class ExecuteForeclosureDto {
   rebateReason?: string;
 
   /**
-   * @deprecated Server-derived from authenticated user since 2026-06.
-   * Client-supplied value is logged but not trusted.
+   * @deprecated Server-derived from the authenticated actor (JWT subject)
+   * whenever a rebate is applied — the client-supplied value is ignored.
    *
    * H13 — Historically the client could nominate any user as the rebate
    * authorizer, which broke the four-eyes audit trail. The service now
-   * derives this from the JWT subject; this field is retained for backwards
-   * compatibility (so existing clients don't 400) and for audit logging of
-   * the *attempted* value.
+   * always derives the authorizer from req.user.sub; the field is retained
+   * only for backwards compatibility so existing clients don't 400.
    */
-  @ApiPropertyOptional({ description: 'User ID authorizing the rebate' })
+  @ApiPropertyOptional({ description: 'Deprecated — server-derived from JWT subject; client value ignored' })
   @IsOptional()
   @IsUUID()
   rebateAuthorizedBy?: string;

@@ -52,6 +52,10 @@ function createMockTx() {
         { id: 'rcp-1', amount_paise: 50000n, payment_mode: 'cash' },
       ]),
     },
+    // Reversal re-locks the original collection mid-tx — default to still-posted.
+    $queryRaw: vi.fn().mockResolvedValue([
+      { id: 'col-1', status: 'posted', is_reversal: false },
+    ]),
   };
 }
 

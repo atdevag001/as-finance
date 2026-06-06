@@ -99,7 +99,12 @@ describe('Maker-Checker Integration', () => {
 
   beforeEach(() => {
     repo = createMockLoanRepo();
-    loanService = new LoanService(repo as never);
+    const prismaMock: any = {
+      $transaction: vi.fn(async (cb: (tx: any) => Promise<any>) => cb({})),
+    };
+    const settingsMock: any = { getHolidays: vi.fn().mockResolvedValue([]) };
+    (repo as any).lockLoanForUpdate = vi.fn(async () => ({ id: 'loan-1', status: 'active', version: 1, cached_outstanding_paise: 0n }));
+    loanService = new LoanService(repo as never, prismaMock, settingsMock);
   });
 
   describe('Req 61.6 — Full approval flow with audit trail', () => {

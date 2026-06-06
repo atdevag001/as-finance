@@ -95,7 +95,7 @@ export class LoanProductService {
     );
 
     await this.loanProductRepository.createAuditLog({
-      action_type: 'loan_created',
+      action_type: 'loan_product_created',
       actor_id: actorId,
       actor_role: actorRole,
       target_entity: 'loan_product',
@@ -176,6 +176,27 @@ export class LoanProductService {
     // Validate allocation order
     this.validateAllocationOrder(mergedAllocationOrder);
 
+    // Re-check create-time consistency on merged values; partial DTOs can otherwise
+    // leave the new version with type set but value/frequency null (crashes downstream).
+    if (mergedProcessingFeeType && mergedProcessingFeeValue == null) {
+      throw new ValidationError(
+        'Processing fee value is required when fee type is specified',
+        'MISSING_PROCESSING_FEE_VALUE',
+      );
+    }
+    if (mergedPenaltyType && mergedPenaltyValue == null) {
+      throw new ValidationError(
+        'Penalty value is required when penalty type is specified',
+        'MISSING_PENALTY_VALUE',
+      );
+    }
+    if (mergedPenaltyType && !mergedPenaltyFrequency) {
+      throw new ValidationError(
+        'Penalty frequency is required when penalty type is specified',
+        'MISSING_PENALTY_FREQUENCY',
+      );
+    }
+
     // Get next version number
     const latestVersionNumber = await this.loanProductRepository.getLatestVersionNumber(id);
     const newVersionNumber = latestVersionNumber + 1;
@@ -200,7 +221,7 @@ export class LoanProductService {
     });
 
     await this.loanProductRepository.createAuditLog({
-      action_type: 'customer_updated',
+      action_type: 'loan_product_updated',
       actor_id: actorId,
       actor_role: actorRole,
       target_entity: 'loan_product',
@@ -250,7 +271,7 @@ export class LoanProductService {
     const deactivated = await this.loanProductRepository.deactivate(id);
 
     await this.loanProductRepository.createAuditLog({
-      action_type: 'customer_updated',
+      action_type: 'loan_product_deactivated',
       actor_id: actorId,
       actor_role: actorRole,
       target_entity: 'loan_product',

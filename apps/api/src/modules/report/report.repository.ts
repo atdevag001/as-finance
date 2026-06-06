@@ -58,7 +58,7 @@ export class ReportRepository {
     startDate: Date;
     endDate: Date;
     loanIdScope?: string[];
-    officerId?: string;
+    customerIdScope?: string[];
   }) {
     const where: Record<string, unknown> = {
       payment_date: { gte: params.startDate, lte: params.endDate },
@@ -67,8 +67,9 @@ export class ReportRepository {
     if (params.loanIdScope) {
       where['loan_id'] = { in: params.loanIdScope };
     }
-    if (params.officerId) {
-      where['collected_by'] = params.officerId;
+    // Scope by assigned customers (field officer RBAC), not by loan creator.
+    if (params.customerIdScope) {
+      where['loan'] = { customer_id: { in: params.customerIdScope } };
     }
 
     const collections = await this.prisma['collections'].findMany({
@@ -116,7 +117,7 @@ export class ReportRepository {
   /** Overdue loans with DPD and bucket info. */
   async getOverdueLoans(params: {
     loanIdScope?: string[];
-    officerId?: string;
+    customerIdScope?: string[];
     bucket?: string;
   }) {
     const where: Record<string, unknown> = {
@@ -126,8 +127,9 @@ export class ReportRepository {
     if (params.loanIdScope) {
       where['id'] = { in: params.loanIdScope };
     }
-    if (params.officerId) {
-      where['created_by'] = params.officerId;
+    // Field officers see loans for their assigned customers, not loans they created.
+    if (params.customerIdScope) {
+      where['customer_id'] = { in: params.customerIdScope };
     }
     if (params.bucket) {
       where['overdue_bucket'] = params.bucket;
@@ -157,7 +159,7 @@ export class ReportRepository {
   /** Loan portfolio with status breakdown. */
   async getLoanPortfolio(params: {
     loanIdScope?: string[];
-    officerId?: string;
+    customerIdScope?: string[];
     status?: string;
     productVersionId?: string;
   }) {
@@ -165,8 +167,9 @@ export class ReportRepository {
     if (params.loanIdScope) {
       where['id'] = { in: params.loanIdScope };
     }
-    if (params.officerId) {
-      where['created_by'] = params.officerId;
+    // Field officers see loans for their assigned customers, not loans they created.
+    if (params.customerIdScope) {
+      where['customer_id'] = { in: params.customerIdScope };
     }
     if (params.status) {
       where['status'] = params.status;
@@ -351,10 +354,19 @@ export class ReportRepository {
     endDate: Date;
     status?: string;
     loanIdScope?: string[];
+    customerIdScope?: string[];
   }) {
+    // Field officers see schedules for loans of their assigned customers.
+    const loanFilter: Record<string, unknown> = {
+      status: { in: ['active', 'overdue', 'disbursed'] },
+    };
+    if (params.customerIdScope) {
+      loanFilter['customer_id'] = { in: params.customerIdScope };
+    }
+
     const where: Record<string, unknown> = {
       due_date: { gte: params.startDate, lte: params.endDate },
-      loan: { status: { in: ['active', 'overdue', 'disbursed'] } },
+      loan: loanFilter,
     };
 
     if (params.status && params.status !== 'all') {

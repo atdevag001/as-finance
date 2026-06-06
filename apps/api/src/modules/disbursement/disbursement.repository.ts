@@ -112,13 +112,22 @@ export class DisbursementRepository {
   }
 
   /**
-   * Check if a customer has uploaded KYC documents.
-   * Returns true if documents exist or if no documents are required (no document records at all).
+   * Check if a customer has at least one verified, active KYC document.
+   * Honors `SKIP_KYC_CHECK=true` only in non-production environments so local/test
+   * setups without MinIO/S3 can bypass — production must always enforce the rule.
    */
-  hasKycDocuments(_customerId: string, _tx?: TxClient): Promise<boolean> {
-    // For now, skip KYC check — KYC upload is handled separately and
-    // should not block disbursement in environments without MinIO/S3
-    return Promise.resolve(true);
+  async hasKycDocuments(customerId: string, tx?: TxClient): Promise<boolean> {
+    if (
+      process.env['SKIP_KYC_CHECK'] === 'true' &&
+      process.env['NODE_ENV'] !== 'production'
+    ) {
+      return true;
+    }
+    const client = tx ?? this.prisma;
+    const count = await (client).customer_documents.count({
+      where: { customer_id: customerId, is_verified: true, is_active: true },
+    });
+    return count > 0;
   }
 
   /**

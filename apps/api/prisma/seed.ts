@@ -188,10 +188,13 @@ async function seedUsers() {
   for (const user of SAMPLE_USERS) {
     await prisma.users.upsert({
       where: { username: user.username },
+      // NB: password_hash is intentionally omitted from `update` — a re-seed
+      // must never silently downgrade an existing user's password to the
+      // publicly-known DEFAULT_PASSWORD. New rows still get bcrypt(DEFAULT_PASSWORD)
+      // via the create branch.
       update: {
         full_name: user.fullName,
         role: user.role,
-        password_hash: passwordHash,
       },
       create: {
         username: user.username,
@@ -466,6 +469,17 @@ async function seedSmsTemplates() {
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 async function main() {
+  // Refuse to run against production unless the operator explicitly opts in.
+  // Without this guard, `prisma db seed` pointed at a prod DATABASE_URL would
+  // silently overwrite admin password_hash with bcrypt('Admin@123') — a
+  // publicly-known credential — for any user matching the seed usernames.
+  if (process.env['NODE_ENV'] === 'production' && process.env['ALLOW_PROD_SEED'] !== 'true') {
+    console.error(
+      '❌ Refusing to seed in production. Set ALLOW_PROD_SEED=true to override (you almost certainly should not).',
+    );
+    process.exit(1);
+  }
+
   console.log('🌱 Starting seed...\n');
 
   await seedChartOfAccounts();

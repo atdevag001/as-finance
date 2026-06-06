@@ -247,7 +247,7 @@ describe('ReportService', () => {
 
       const result: any = await service.generateReport(
         'emi-schedule',
-        { startDate: '2024-01-01', endDate: '2024-12-31', status: 'all' },
+        { startDate: '2024-01-01', endDate: '2024-12-31', scheduleStatus: 'all' },
         fullAccessUser,
       );
 
@@ -339,14 +339,14 @@ describe('ReportService', () => {
       expect(mockRepo.getAssignedCustomerIds).not.toHaveBeenCalled();
     });
 
-    it('should scope field_officer to own assigned data', async () => {
+    it('should scope field_officer to own assigned customers (not loans they created)', async () => {
       mockRepo.getAssignedCustomerIds.mockResolvedValue(['cust-1', 'cust-2']);
 
       await service.generateReport('overdue', {}, { sub: 'fo-1', role: 'field_officer' });
 
       expect(mockRepo.getAssignedCustomerIds).toHaveBeenCalledWith('fo-1');
       expect(mockRepo.getOverdueLoans).toHaveBeenCalledWith(
-        expect.objectContaining({ officerId: 'fo-1' }),
+        expect.objectContaining({ customerIdScope: ['cust-1', 'cust-2'] }),
       );
     });
 

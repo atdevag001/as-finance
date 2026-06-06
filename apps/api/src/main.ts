@@ -114,6 +114,9 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('api/docs', app, document);
 
+  // Wire SIGTERM/SIGINT to Nest lifecycle so PrismaService.onModuleDestroy() runs $disconnect() before exit.
+  app.enableShutdownHooks();
+
   await app.listen(env.PORT);
 
   const logger = app.get(Logger);

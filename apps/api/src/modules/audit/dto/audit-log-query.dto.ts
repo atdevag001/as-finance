@@ -1,4 +1,6 @@
 import { IsOptional, IsString, IsInt, Min, Max, IsDateString, IsEnum, IsUUID } from 'class-validator';
+// Max range covers all real-world UTC offsets (UTC-12 to UTC+14, plus a margin).
+const MAX_TZ_OFFSET_MINUTES = 14 * 60;
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { AuditAction } from '@as-finance/shared';
@@ -48,4 +50,13 @@ export class AuditLogQueryDto {
   @IsOptional()
   @IsDateString()
   endDate?: string;
+
+  // Matches Date.prototype.getTimezoneOffset() semantics (minutes west of UTC, IST = -330).
+  @ApiPropertyOptional({ description: 'Client timezone offset in minutes, matching Date#getTimezoneOffset()' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(-MAX_TZ_OFFSET_MINUTES)
+  @Max(MAX_TZ_OFFSET_MINUTES)
+  tzOffsetMinutes?: number;
 }

@@ -1,7 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
-import { UserRole } from '@as-finance/shared';
+import { AuditAction, UserRole } from '@as-finance/shared';
 import { UserRepository } from './user.repository';
+import { AuditService } from '../audit/audit.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import {
@@ -10,6 +11,12 @@ import {
   ConflictError,
   NotFoundError,
 } from '../../common/errors';
+
+/** Optional request context for audit log fidelity (ip + requestId). */
+export interface UserRequestContext {
+  ipAddress?: string;
+  requestId?: string;
+}
 
 // Use lower bcrypt cost in test/dev for faster hashing (still secure enough for tests)
 const BCRYPT_COST = process.env['BCRYPT_COST'] ? parseInt(process.env['BCRYPT_COST'], 10) : 12;
@@ -37,9 +44,17 @@ const AREA_ASSIGNABLE_ROLES: readonly string[] = [
 export class UserService {
   private readonly logger = new Logger(UserService.name);
 
-  constructor(private readonly userRepository: UserRepository) {}
+  constructor(
+    private readonly userRepository: UserRepository,
+    private readonly auditService: AuditService,
+  ) {}
 
-  async createUser(dto: CreateUserDto, actorId: string, actorRole: string) {
+  async createUser(
+    dto: CreateUserDto,
+    actorId: string,
+    actorRole: string,
+    ctx: UserRequestContext = {},
+  ) {
     // Validate role assignment hierarchy
     this.validateRoleAssignment(actorRole, dto.role);
 
@@ -63,7 +78,7 @@ export class UserService {
 
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_COST);
 
-    return this.userRepository.create({
+    const created = await this.userRepository.create({
       username: dto.username,
       password_hash: passwordHash,
       full_name: dto.fullName,
@@ -71,6 +86,27 @@ export class UserService {
       mobile: dto.mobile,
       role: dto.role,
     });
+
+    // Compliance: emit audit trail for every user mutation (Requirement 17).
+    await this.auditService.createAuditLog({
+      action_type: AuditAction.USER_CREATED,
+      actor_id: actorId,
+      actor_role: actorRole,
+      target_entity: 'user',
+      target_id: created.id,
+      ip_address: ctx.ipAddress,
+      request_id: ctx.requestId,
+      after_state: {
+        username: created.username,
+        full_name: created.full_name,
+        email: created.email,
+        mobile: created.mobile,
+        role: created.role,
+        is_active: created.is_active,
+      },
+    });
+
+    return created;
   }
 
   async findAll(params: { skip?: number; take?: number; role?: string }) {
@@ -90,6 +126,7 @@ export class UserService {
     dto: UpdateUserDto,
     actorId: string,
     actorRole: string,
+    ctx: UserRequestContext = {},
   ) {
     const user = await this.userRepository.findById(id);
     if (!user) {
@@ -110,7 +147,8 @@ export class UserService {
     }
 
     // If role change is requested, validate hierarchy
-    if (dto.role && dto.role !== user.role) {
+    const roleChanged = !!(dto.role && dto.role !== user.role);
+    if (roleChanged) {
       // Prevent self-escalation
       if (id === actorId) {
         throw new AuthorizationError(
@@ -118,7 +156,7 @@ export class UserService {
           'SELF_ROLE_CHANGE',
         );
       }
-      this.validateRoleAssignment(actorRole, dto.role);
+      this.validateRoleAssignment(actorRole, dto.role!);
     }
 
     // Check uniqueness for mobile/email if changed
@@ -136,19 +174,51 @@ export class UserService {
       }
     }
 
-    return this.userRepository.update(id, {
+    const updated = await this.userRepository.update(id, {
       full_name: dto.fullName,
       email: dto.email,
       mobile: dto.mobile,
       role: dto.role,
       is_active: dto.isActive,
     });
+
+    // Compliance: emit audit trail for every user mutation. AuditAction enum
+    // lacks USER_UPDATED, so all updates flow through USER_ROLE_CHANGED — the
+    // before/after_state diff lets reviewers see exactly what changed.
+    await this.auditService.createAuditLog({
+      action_type: AuditAction.USER_ROLE_CHANGED,
+      actor_id: actorId,
+      actor_role: actorRole,
+      target_entity: 'user',
+      target_id: id,
+      ip_address: ctx.ipAddress,
+      request_id: ctx.requestId,
+      before_state: {
+        full_name: user.full_name,
+        email: user.email,
+        mobile: user.mobile,
+        role: user.role,
+        is_active: user.is_active,
+      },
+      after_state: {
+        full_name: updated.full_name,
+        email: updated.email,
+        mobile: updated.mobile,
+        role: updated.role,
+        is_active: updated.is_active,
+      },
+      remarks: roleChanged ? 'role_changed' : 'user_updated',
+    });
+
+    return updated;
   }
 
   async addAreaAssignment(
     userId: string,
     areaName: string,
     actorId: string,
+    actorRole: string = UserRole.MANAGER,
+    ctx: UserRequestContext = {},
   ) {
     const user = await this.userRepository.findById(userId);
     if (!user) {
@@ -174,14 +244,39 @@ export class UserService {
       );
     }
 
-    return this.userRepository.createAreaAssignment({
+    const assignment = await this.userRepository.createAreaAssignment({
       user_id: userId,
       area_name: areaName,
       assigned_by: actorId,
     });
+
+    // Area assignment affects what data the user can access — must be audited.
+    await this.auditService.createAuditLog({
+      action_type: AuditAction.USER_ROLE_CHANGED,
+      actor_id: actorId,
+      actor_role: actorRole,
+      target_entity: 'user',
+      target_id: userId,
+      ip_address: ctx.ipAddress,
+      request_id: ctx.requestId,
+      after_state: {
+        area_assignment_id: assignment.id,
+        area_name: assignment.area_name,
+        is_active: assignment.is_active,
+      },
+      remarks: 'area_assignment_added',
+    });
+
+    return assignment;
   }
 
-  async removeAreaAssignment(userId: string, areaId: string) {
+  async removeAreaAssignment(
+    userId: string,
+    areaId: string,
+    actorId?: string,
+    actorRole: string = UserRole.MANAGER,
+    ctx: UserRequestContext = {},
+  ) {
     const user = await this.userRepository.findById(userId);
     if (!user) {
       throw new NotFoundError('User not found', 'USER_NOT_FOUND');
@@ -202,7 +297,31 @@ export class UserService {
       );
     }
 
-    return this.userRepository.deactivateAreaAssignment(areaId);
+    const result = await this.userRepository.deactivateAreaAssignment(areaId);
+
+    // Area de-assignment also changes data access scope — audit it.
+    await this.auditService.createAuditLog({
+      action_type: AuditAction.USER_ROLE_CHANGED,
+      actor_id: actorId ?? assignment.assigned_by,
+      actor_role: actorRole,
+      target_entity: 'user',
+      target_id: userId,
+      ip_address: ctx.ipAddress,
+      request_id: ctx.requestId,
+      before_state: {
+        area_assignment_id: areaId,
+        area_name: assignment.area_name,
+        is_active: true,
+      },
+      after_state: {
+        area_assignment_id: areaId,
+        area_name: assignment.area_name,
+        is_active: false,
+      },
+      remarks: 'area_assignment_removed',
+    });
+
+    return result;
   }
 
   /**

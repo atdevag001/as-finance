@@ -19,7 +19,8 @@ import { BusinessRuleError, NotFoundError, ConflictError } from '../../../common
 
 function createMockLoanRepo() {
   return {
-    getCustomerStatus: vi.fn().mockResolvedValue({ id: 'cust-1', status: 'active', full_name: 'Test Customer' }),
+    // Default mock returns null assigned_officer; tests that exercise field_officer create paths re-mock per-actor below.
+    getCustomerStatus: vi.fn().mockResolvedValue({ id: 'cust-1', status: 'active', full_name: 'Test Customer', assigned_officer_id: null }),
     hasDefaultedLoans: vi.fn().mockResolvedValue(false),
     getProductVersion: vi.fn().mockResolvedValue({
       id: 'pv-1',
@@ -56,6 +57,7 @@ function createMockLoanRepo() {
 }
 
 function buildLoanDetail(overrides: Record<string, unknown> = {}) {
+  const createdBy = (overrides.created_by as string | undefined) ?? 'user-creator';
   return {
     id: 'loan-1',
     loan_number: 'LN-2024-00001',
@@ -64,7 +66,7 @@ function buildLoanDetail(overrides: Record<string, unknown> = {}) {
     tenure_months: 12,
     status: 'draft',
     version: 1,
-    created_by: 'user-creator',
+    created_by: createdBy,
     total_interest_paise: 1200000n,
     total_payable_paise: 11200000n,
     cached_outstanding_paise: 11200000n,
@@ -82,7 +84,8 @@ function buildLoanDetail(overrides: Record<string, unknown> = {}) {
     schedules: [],
     approvals: [],
     status_history: [],
-    customer: { id: 'cust-1', full_name: 'Test Customer', mobile: '9876543210', status: 'active' },
+    // For tests, treat the creator as the assigned officer so field_officer submit/reject paths pass scope.
+    customer: { id: 'cust-1', full_name: 'Test Customer', mobile: '9876543210', status: 'active', assigned_officer_id: createdBy },
     ...overrides,
   };
 }
@@ -111,7 +114,13 @@ describe('Loan Lifecycle Integration', () => {
 
   beforeEach(() => {
     repo = createMockLoanRepo();
-    loanService = new LoanService(repo as never);
+    const prismaMock: any = {
+      $transaction: vi.fn(async (cb: (tx: any) => Promise<any>) => cb({})),
+    };
+    const settingsMock: any = { getHolidays: vi.fn().mockResolvedValue([]) };
+    // lockLoanForUpdate is needed by closeLoan inside the transaction.
+    (repo as any).lockLoanForUpdate = vi.fn(async () => ({ id: 'loan-1', status: 'active', version: 1, cached_outstanding_paise: 0n }));
+    loanService = new LoanService(repo as never, prismaMock, settingsMock);
   });
 
   // ── Requirement 16.1: Full happy path ──────────────────────────────────

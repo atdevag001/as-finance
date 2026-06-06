@@ -46,6 +46,7 @@ function createLoan(overrides: Record<string, unknown> = {}) {
     approved_by: null,
     version: 1,
     product_version: createProductVersion(),
+    customer: { id: 'cust-1', full_name: 'Test Customer', mobile: '9999999999', status: 'active', assigned_officer_id: 'user-1' },
     ...overrides,
   };
 }
@@ -54,6 +55,8 @@ function createMockRepo(overrides: Record<string, unknown> = {}) {
   return {
     findById: vi.fn().mockResolvedValue(createLoan()),
     create: vi.fn().mockResolvedValue(createLoan()),
+    // closeLoan acquires a row lock inside the transaction.
+    lockLoanForUpdate: vi.fn().mockResolvedValue({ id: 'loan-1', status: 'active', version: 1, cached_outstanding_paise: 0n }),
     findAll: vi.fn().mockResolvedValue({ data: [], total: 0 }),
     updateStatus: vi.fn().mockImplementation(async (_id: string, status: string, extra?: Record<string, unknown>) => ({
       ...createLoan(),
@@ -64,7 +67,7 @@ function createMockRepo(overrides: Record<string, unknown> = {}) {
     createApproval: vi.fn().mockResolvedValue({}),
     createAuditLog: vi.fn().mockResolvedValue({}),
     generateLoanNumber: vi.fn().mockResolvedValue('LN-2024-00001'),
-    getCustomerStatus: vi.fn().mockResolvedValue({ id: 'cust-1', status: 'active', full_name: 'Test Customer' }),
+    getCustomerStatus: vi.fn().mockResolvedValue({ id: 'cust-1', status: 'active', full_name: 'Test Customer', assigned_officer_id: 'user-1' }),
     hasDefaultedLoans: vi.fn().mockResolvedValue(false),
     getProductVersion: vi.fn().mockResolvedValue(createProductVersion()),
     countActiveLoansByCustomerAndProduct: vi.fn().mockResolvedValue(0),
@@ -99,7 +102,8 @@ describe('LoanService', () => {
 
   beforeEach(() => {
     repo = createMockRepo();
-    service = new LoanService(repo as any, prismaMock);
+    const settingsMock = { getHolidays: vi.fn().mockResolvedValue([]) } as any;
+    service = new LoanService(repo as any, prismaMock, settingsMock);
   });
 
   // ── Requirement 15.3: Immutability after approval ──────────────────────
@@ -186,7 +190,7 @@ describe('LoanService', () => {
     });
 
     it('rejects creation for blacklisted customer', async () => {
-      repo.getCustomerStatus.mockResolvedValue({ id: 'cust-1', status: 'blacklisted', full_name: 'Test' });
+      repo.getCustomerStatus.mockResolvedValue({ id: 'cust-1', status: 'blacklisted', full_name: 'Test', assigned_officer_id: 'user-1' });
 
       await expect(
         service.create(validDto, 'user-1', 'field_officer'),
@@ -481,7 +485,7 @@ describe('LoanService', () => {
       );
 
       expect(result).toBeDefined();
-      expect(repo.updateStatus).toHaveBeenCalledWith('loan-1', 'rejected', undefined, expect.any(Number));
+      expect(repo.updateStatus).toHaveBeenCalledWith('loan-1', 'rejected', undefined, expect.any(Number), expect.anything());
     });
 
     it('records rejection reason in status history', async () => {
@@ -498,6 +502,7 @@ describe('LoanService', () => {
           to_status: 'rejected',
           reason: 'Bad credit history',
         }),
+        expect.anything(),
       );
     });
 
@@ -514,6 +519,7 @@ describe('LoanService', () => {
           action: 'rejected',
           remarks: 'Incomplete KYC',
         }),
+        expect.anything(),
       );
     });
 
@@ -532,6 +538,7 @@ describe('LoanService', () => {
           before_state: { status: 'under_review' },
           after_state: { status: 'rejected' },
         }),
+        expect.anything(),
       );
     });
 
@@ -562,7 +569,7 @@ describe('LoanService', () => {
     it('closes an active loan when all prerequisites are met', async () => {
       const result = await service.closeLoan('loan-1', 'actor-1', 'manager');
       expect(result).toBeDefined();
-      expect(repo.updateStatus).toHaveBeenCalledWith('loan-1', 'closed', undefined, expect.any(Number));
+      expect(repo.updateStatus).toHaveBeenCalledWith('loan-1', 'closed', undefined, expect.any(Number), expect.anything());
     });
 
     it('rejects closure when installments are unpaid', async () => {
@@ -634,11 +641,11 @@ describe('LoanService', () => {
       const result = await service.submit('loan-1', 'user-1', 'field_officer');
 
       expect(result).toBeDefined();
-      expect(repo.updateStatus).toHaveBeenCalledWith('loan-1', 'submitted', undefined, expect.any(Number));
+      expect(repo.updateStatus).toHaveBeenCalledWith('loan-1', 'submitted', undefined, expect.any(Number), expect.anything());
     });
 
     it('re-validates customer status at submission time', async () => {
-      repo.getCustomerStatus.mockResolvedValue({ id: 'cust-1', status: 'blacklisted', full_name: 'Test' });
+      repo.getCustomerStatus.mockResolvedValue({ id: 'cust-1', status: 'blacklisted', full_name: 'Test', assigned_officer_id: 'user-1' });
 
       await expect(
         service.submit('loan-1', 'user-1', 'field_officer'),
@@ -678,6 +685,7 @@ describe('LoanService', () => {
           action: 'submitted',
           actor_id: 'user-1',
         }),
+        expect.anything(),
       );
     });
   });
@@ -693,7 +701,7 @@ describe('LoanService', () => {
       const result = await service.review('loan-1', 'user-reviewer', 'manager');
 
       expect(result).toBeDefined();
-      expect(repo.updateStatus).toHaveBeenCalledWith('loan-1', 'under_review', undefined, expect.any(Number));
+      expect(repo.updateStatus).toHaveBeenCalledWith('loan-1', 'under_review', undefined, expect.any(Number), expect.anything());
     });
 
     it('rejects review from invalid status', async () => {

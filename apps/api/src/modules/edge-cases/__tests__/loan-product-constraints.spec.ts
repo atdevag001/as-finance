@@ -67,7 +67,7 @@ describe('Loan Product Constraint Validation (Req 74)', () => {
 
   beforeEach(() => {
     mockRepo = createMockLoanRepository();
-    service = new LoanService(mockRepo as never);
+    service = new LoanService(mockRepo as never, null as any, null as any);
 
     // Default happy-path mocks
     mockRepo.getCustomerStatus.mockResolvedValue({ status: 'active' });

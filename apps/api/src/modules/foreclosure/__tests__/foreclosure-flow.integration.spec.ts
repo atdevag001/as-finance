@@ -189,8 +189,7 @@ describe('Foreclosure Flow Integration', () => {
         'user-approver', 'manager',
       );
 
-      expect(result.statusCode).toBe(201);
-      const data = result.data as Record<string, unknown>;
+      const data = result as Record<string, unknown>;
       expect(data['status']).toBe('settled');
       expect(data['finalOutstandingPaise']).toBe(0);
       expect(data['foreclosureId']).toBe('fc-1');
@@ -365,8 +364,7 @@ describe('Foreclosure Flow Integration', () => {
         'user-approver', 'manager',
       );
 
-      expect(result.statusCode).toBe(201);
-      expect(result.data).toEqual({ foreclosureId: 'fc-1', status: 'settled' });
+      expect(result).toEqual({ foreclosureId: 'fc-1', status: 'settled' });
       // Transaction should NOT have been called
       expect(deps.prisma.$transaction).not.toHaveBeenCalled();
     });
@@ -376,8 +374,7 @@ describe('Foreclosure Flow Integration', () => {
         { foreclosureId: 'fc-1', paymentMode: 'cash', idempotencyKey: 'fc-mc-1' },
         'user-requester', 'manager', // same as quote requester
       );
-      expect(result.statusCode).toBe(201);
-      expect(result.data.status).toBe('settled');
+      expect((result as { status: string }).status).toBe('settled');
     });
 
     it('should create audit log entries for the settlement', async () => {
@@ -640,7 +637,7 @@ describe('Foreclosure Flow Integration', () => {
         'user-approver', 'manager',
       );
 
-      expect(result.statusCode).toBe(201);
+      expect((result as { status: string }).status).toBe('settled');
     });
 
     it('should reject execution of a cancelled quote', async () => {
@@ -710,11 +707,12 @@ describe('Foreclosure Flow Integration', () => {
         'user-requester', 'manager',
       );
 
+      // H13: rebate_authorized_by is server-derived from the actor, not client-supplied
       expect(repo.createForeclosure).toHaveBeenCalledWith(
         expect.objectContaining({
           rebate_paise: 5000,
           rebate_reason: 'Early settlement incentive',
-          rebate_authorized_by: 'mgr-auth-2',
+          rebate_authorized_by: 'user-requester',
         }),
       );
     });
@@ -732,12 +730,13 @@ describe('Foreclosure Flow Integration', () => {
         'user-approver', 'manager',
       );
 
+      // H13: rebate_authorized_by is server-derived from the actor, not client-supplied
       expect(repo.updateForeclosure).toHaveBeenCalledWith(
         'fc-1',
         expect.objectContaining({
           rebate_paise: 8000,
           rebate_reason: 'Manager override rebate',
-          rebate_authorized_by: 'mgr-auth-3',
+          rebate_authorized_by: 'user-approver',
         }),
         expect.anything(),
       );

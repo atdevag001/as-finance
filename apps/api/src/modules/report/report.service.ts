@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ReportRepository } from './report.repository';
 import { ReportExportService, ExportData, ExportColumn } from './report-export.service';
 import { NotFoundError } from '../../common/errors';
-import { parseDateIST, todayISTDate } from '../../common/utils/date.util';
+import { calendarDaysDiff, parseDateIST, todayISTDate } from '../../common/utils/date.util';
 
 /**
  * All 20 supported report types.
@@ -40,6 +40,7 @@ export interface ReportQuery {
   officerId?: string;
   bucket?: string;
   status?: string;
+  scheduleStatus?: string;
   productVersionId?: string;
   loanId?: string;
   skip?: number;
@@ -272,10 +273,11 @@ export class ReportService {
 
   private scopeToLoanFilter(scope: ReportScope): {
     loanIdScope?: string[];
-    officerId?: string;
+    customerIdScope?: string[];
   } {
     if (scope.type === 'full') return {};
-    if (scope.type === 'officer') return { officerId: scope.officerId };
+    // Field officers see their assigned customers' loans, not loans they created.
+    if (scope.type === 'officer') return { customerIdScope: scope.customerIds };
     if (scope.type === 'area') return { loanIdScope: scope.loanIds };
     return { loanIdScope: [] };
   }
@@ -293,7 +295,8 @@ export class ReportService {
     const { collections, journalLines } = await this.reportRepo.getDailyCollections({
       startDate,
       endDate,
-      ...filter,
+      loanIdScope: filter.loanIdScope,
+      customerIdScope: filter.customerIdScope,
     });
 
     // Build journal line map keyed by journal_entry_id
@@ -335,7 +338,8 @@ export class ReportService {
     const filter = this.scopeToLoanFilter(scope);
 
     const loans = await this.reportRepo.getOverdueLoans({
-      ...filter,
+      loanIdScope: filter.loanIdScope,
+      customerIdScope: filter.customerIdScope,
       bucket: query.bucket,
     });
 
@@ -405,7 +409,8 @@ export class ReportService {
     const filter = this.scopeToLoanFilter(scope);
 
     const loans = await this.reportRepo.getLoanPortfolio({
-      ...filter,
+      loanIdScope: filter.loanIdScope,
+      customerIdScope: filter.customerIdScope,
       status: query.status,
       productVersionId: query.productVersionId,
     });
@@ -638,8 +643,9 @@ export class ReportService {
     const schedules = await this.reportRepo.getEmiScheduleReport({
       startDate,
       endDate,
-      status: query.status,
+      status: query.scheduleStatus,
       loanIdScope: filter.loanIdScope,
+      customerIdScope: filter.customerIdScope,
     });
 
     // Anchor "today" to IST midnight so the overdue computation lines up with
@@ -667,8 +673,10 @@ export class ReportService {
       else if (status === 'overdue') overdueCount++;
       else unpaidCount++;
 
+      // Use calendar-day diff to avoid IST/UTC fractional-day truncation that
+      // consistently understated overdueDays by one.
       const overdueDays = status !== 'paid' && dueDate < today
-        ? Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24))
+        ? calendarDaysDiff(dueDate, today)
         : 0;
 
       const loan = s['loan'] as { id: string; loan_number: string; customer: { id: string; full_name: string; mobile: string } };
@@ -698,7 +706,7 @@ export class ReportService {
       filters: {
         startDate: startDate.toISOString().slice(0, 10),
         endDate: endDate.toISOString().slice(0, 10),
-        status: query.status ?? 'all',
+        status: query.scheduleStatus ?? 'all',
       },
       summary: {
         totalEmis: schedules.length,
@@ -745,12 +753,16 @@ export class ReportService {
   private parseDateRange(query: ReportQuery): { startDate: Date; endDate: Date } {
     // Default range = today (IST midnight) → now. Explicit YYYY-MM-DD inputs
     // parsed as IST midnight so the report window matches business days, not
-    // server-local days.
+    // server-local days. End date is shifted to the inclusive end-of-day so
+    // entries on the chosen endDate (stored as UTC midnight @db.Date) are not
+    // silently dropped by `<= endDate`.
     const todayIstMidnight = todayISTDate();
     const startDate = query.startDate
       ? parseDateIST(query.startDate)
       : todayIstMidnight;
-    const endDate = query.endDate ? parseDateIST(query.endDate) : new Date();
+    const endDate = query.endDate
+      ? new Date(parseDateIST(query.endDate).getTime() + 24 * 60 * 60 * 1000 - 1)
+      : new Date();
     return { startDate, endDate };
   }
 }

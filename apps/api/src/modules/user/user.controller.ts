@@ -34,9 +34,12 @@ export class UserController {
   @ApiResponse({ status: 409, description: 'Username/mobile/email conflict' })
   async create(
     @Body() dto: CreateUserDto,
-    @Req() req: Request & { user: JwtPayload },
+    @Req() req: Request & { user: JwtPayload; requestId?: string },
   ) {
-    return this.userService.createUser(dto, req.user.sub, req.user.role);
+    return this.userService.createUser(dto, req.user.sub, req.user.role, {
+      ipAddress: req.ip ?? '0.0.0.0',
+      requestId: req.requestId,
+    });
   }
 
   @Get()
@@ -72,9 +75,12 @@ export class UserController {
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateUserDto,
-    @Req() req: Request & { user: JwtPayload },
+    @Req() req: Request & { user: JwtPayload; requestId?: string },
   ) {
-    return this.userService.updateUser(id, dto, req.user.sub, req.user.role);
+    return this.userService.updateUser(id, dto, req.user.sub, req.user.role, {
+      ipAddress: req.ip ?? '0.0.0.0',
+      requestId: req.requestId,
+    });
   }
 
   @Post(':id/area-assignments')
@@ -86,10 +92,16 @@ export class UserController {
   async addAreaAssignment(
     @Param('id') userId: string,
     @Body() dto: AddAreaAssignmentDto,
-    @Req() req: Request & { user: JwtPayload },
+    @Req() req: Request & { user: JwtPayload; requestId?: string },
   ) {
     // H10a — areaName is validated by AddAreaAssignmentDto (charset, length).
-    return this.userService.addAreaAssignment(userId, dto.areaName, req.user.sub);
+    return this.userService.addAreaAssignment(
+      userId,
+      dto.areaName,
+      req.user.sub,
+      req.user.role,
+      { ipAddress: req.ip ?? '0.0.0.0', requestId: req.requestId },
+    );
   }
 
   @Delete(':id/area-assignments/:areaId')
@@ -101,7 +113,14 @@ export class UserController {
   async removeAreaAssignment(
     @Param('id') userId: string,
     @Param('areaId') areaId: string,
+    @Req() req: Request & { user: JwtPayload; requestId?: string },
   ) {
-    return this.userService.removeAreaAssignment(userId, areaId);
+    return this.userService.removeAreaAssignment(
+      userId,
+      areaId,
+      req.user.sub,
+      req.user.role,
+      { ipAddress: req.ip ?? '0.0.0.0', requestId: req.requestId },
+    );
   }
 }

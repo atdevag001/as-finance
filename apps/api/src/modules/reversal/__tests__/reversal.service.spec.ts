@@ -43,6 +43,11 @@ function createMockPrisma() {
     receipts: {
       findMany: vi.fn(),
     },
+    // Reversal re-locks the original collection with SELECT ... FOR UPDATE.
+    // Default = row still posted (matches the initial findUnique snapshot).
+    $queryRaw: vi.fn().mockResolvedValue([
+      { id: 'orig-collection-id', status: 'posted', is_reversal: false },
+    ]),
   };
 
   return {

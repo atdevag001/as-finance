@@ -234,8 +234,10 @@ describe('NotificationService', () => {
   /* ---------------------------------------------------------------- */
   describe('retry (resetForRetry)', () => {
     it('should reset a failed message for retry', async () => {
-      vi.mocked(repo.findById).mockResolvedValue({ id: 'msg-1', status: 'failed' } as never);
-      vi.mocked(repo.resetForRetry).mockResolvedValue({ id: 'msg-1', status: 'pending' } as never);
+      vi.mocked(repo.resetForRetry).mockResolvedValue({
+        count: 1,
+        message: { id: 'msg-1', status: 'pending' },
+      } as never);
 
       const result = await service.retry('msg-1');
 
@@ -244,8 +246,10 @@ describe('NotificationService', () => {
     });
 
     it('should reset a dead_letter message for retry', async () => {
-      vi.mocked(repo.findById).mockResolvedValue({ id: 'msg-2', status: 'dead_letter' } as never);
-      vi.mocked(repo.resetForRetry).mockResolvedValue({ id: 'msg-2', status: 'pending' } as never);
+      vi.mocked(repo.resetForRetry).mockResolvedValue({
+        count: 1,
+        message: { id: 'msg-2', status: 'pending' },
+      } as never);
 
       const result = await service.retry('msg-2');
 
@@ -254,24 +258,28 @@ describe('NotificationService', () => {
     });
 
     it('should throw NotFoundError for non-existent message', async () => {
+      vi.mocked(repo.resetForRetry).mockResolvedValue({ count: 0, message: null } as never);
       vi.mocked(repo.findById).mockResolvedValue(null);
 
       await expect(service.retry('non-existent')).rejects.toThrow(NotFoundError);
     });
 
     it('should throw BusinessRuleError for non-retryable status', async () => {
+      vi.mocked(repo.resetForRetry).mockResolvedValue({ count: 0, message: null } as never);
       vi.mocked(repo.findById).mockResolvedValue({ id: 'msg-3', status: 'sent' } as never);
 
       await expect(service.retry('msg-3')).rejects.toThrow(BusinessRuleError);
     });
 
     it('should throw BusinessRuleError for pending status', async () => {
+      vi.mocked(repo.resetForRetry).mockResolvedValue({ count: 0, message: null } as never);
       vi.mocked(repo.findById).mockResolvedValue({ id: 'msg-4', status: 'pending' } as never);
 
       await expect(service.retry('msg-4')).rejects.toThrow(BusinessRuleError);
     });
 
     it('should throw BusinessRuleError for processing status', async () => {
+      vi.mocked(repo.resetForRetry).mockResolvedValue({ count: 0, message: null } as never);
       vi.mocked(repo.findById).mockResolvedValue({ id: 'msg-5', status: 'processing' } as never);
 
       await expect(service.retry('msg-5')).rejects.toThrow(BusinessRuleError);
@@ -512,6 +520,7 @@ describe('NotificationRepository', () => {
         count: vi.fn(),
         findUnique: vi.fn(),
         update: vi.fn(),
+        updateMany: vi.fn(),
       },
       sms_templates: {
         findUnique: vi.fn(),
@@ -718,15 +727,20 @@ describe('NotificationRepository', () => {
   /*  Requirement 30.6 — resetForRetry                                 */
   /* ---------------------------------------------------------------- */
   describe('resetForRetry', () => {
-    it('should reset status to pending with zeroed retry_count', async () => {
+    it('should reset status to pending with zeroed retry_count when guard matches', async () => {
       const outbox = mockPrisma['outbox_messages'] as Record<string, ReturnType<typeof vi.fn>>;
-      outbox.update.mockResolvedValue({ id: 'msg-r', status: 'pending', retry_count: 0 });
+      outbox.updateMany.mockResolvedValue({ count: 1 });
+      outbox.findUnique.mockResolvedValue({ id: 'msg-r', status: 'pending', retry_count: 0 });
 
       const result = await repository.resetForRetry('msg-r');
 
-      expect(outbox.update).toHaveBeenCalledWith(
+      // Atomic conditional update — guards against TOCTOU with the outbox processor.
+      expect(outbox.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: 'msg-r' },
+          where: expect.objectContaining({
+            id: 'msg-r',
+            status: { in: ['failed', 'dead_letter'] },
+          }),
           data: expect.objectContaining({
             status: 'pending',
             retry_count: 0,
@@ -735,8 +749,19 @@ describe('NotificationRepository', () => {
           }),
         }),
       );
-      expect(result.status).toBe('pending');
-      expect(result.retry_count).toBe(0);
+      expect(result.count).toBe(1);
+      expect(result.message?.status).toBe('pending');
+    });
+
+    it('should return count=0 and not fetch when guard does not match (e.g. row is sent/processing)', async () => {
+      const outbox = mockPrisma['outbox_messages'] as Record<string, ReturnType<typeof vi.fn>>;
+      outbox.updateMany.mockResolvedValue({ count: 0 });
+
+      const result = await repository.resetForRetry('msg-locked');
+
+      expect(result.count).toBe(0);
+      expect(result.message).toBeNull();
+      expect(outbox.findUnique).not.toHaveBeenCalled();
     });
   });
 

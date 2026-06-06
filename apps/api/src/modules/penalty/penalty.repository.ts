@@ -21,6 +21,8 @@ const PENALTY_SELECT = {
   loan_id: true,
   installment_id: true,
   amount_paise: true,
+  // Needed by waiver flow so we only deduct the *unpaid* portion from outstanding.
+  paid_paise: true,
   penalty_period: true,
   calculation_details: true,
   is_paid: true,
@@ -48,6 +50,26 @@ export class PenaltyRepository {
     const rows = await tx.$queryRaw<
       { id: string; status: string; cached_outstanding_paise: bigint | null }[]
     >`SELECT id, status, cached_outstanding_paise FROM loans WHERE id = ${loanId}::uuid FOR UPDATE`;
+    return rows[0] ?? null;
+  }
+
+  /**
+   * Lock the penalty row using SELECT ... FOR UPDATE within a transaction.
+   * Required before reading waiver/payment flags to prevent concurrent waivers
+   * from double-deducting outstanding (the loan-row lock alone does not
+   * serialize reads of the penalty row).
+   */
+  async lockPenaltyForUpdate(penaltyId: string, tx: TxClient) {
+    const rows = await tx.$queryRaw<
+      {
+        id: string;
+        loan_id: string;
+        amount_paise: bigint;
+        paid_paise: bigint;
+        is_paid: boolean;
+        is_waived: boolean;
+      }[]
+    >`SELECT id, loan_id, amount_paise, paid_paise, is_paid, is_waived FROM penalties WHERE id = ${penaltyId}::uuid FOR UPDATE`;
     return rows[0] ?? null;
   }
 

@@ -8,8 +8,9 @@ import { LoanQueryDto } from './dto/loan-query.dto';
 import { BusinessRuleError, NotFoundError } from '../../common/errors';
 import { canBypassMakerChecker } from '../../common/constants/maker-checker';
 import { generateSchedule, type ScheduleParams } from '../schedule/schedule.service';
-import { addMonthsClamped } from '../../common/utils/date.util';
+import { addMonthsClamped, parseDateIST, todayISTDate } from '../../common/utils/date.util';
 import { UNRESTRICTED_ROLES } from '../../common/constants/roles';
+import { SettingsService } from '../settings/settings.service';
 
 /**
  * Allowed loan status transitions matrix.
@@ -49,7 +50,42 @@ export class LoanService {
   constructor(
     private readonly loanRepository: LoanRepository,
     private readonly prisma: PrismaService,
+    private readonly settingsService: SettingsService,
   ) {}
+
+  /**
+   * Enforce per-officer scope on mutation paths so restricted roles
+   * (e.g. field_officer) cannot act on loans assigned to other officers.
+   * Customers with no assigned officer are unscoped — any role may act.
+   */
+  private assertScope(
+    customer: { assigned_officer_id?: string | null } | null | undefined,
+    actorId: string | undefined,
+    actorRole: string | undefined,
+  ): void {
+    const assigned = customer?.assigned_officer_id;
+    if (
+      actorId &&
+      actorRole &&
+      !UNRESTRICTED_LOAN_ROLES.includes(actorRole) &&
+      assigned != null &&
+      assigned !== actorId
+    ) {
+      throw new BusinessRuleError(
+        'You can only act on loans for customers assigned to you',
+        'SCOPE_VIOLATION',
+      );
+    }
+  }
+
+  /**
+   * Fetch the configured holidays as IST-midnight Date objects for
+   * passing into the schedule generator.
+   */
+  private async getHolidaysForSchedule(): Promise<Date[]> {
+    const holidayStrings = await this.settingsService.getHolidays();
+    return holidayStrings.map((s) => parseDateIST(s));
+  }
 
   /**
    * Validate that a status transition is allowed.
@@ -88,6 +124,8 @@ export class LoanService {
     if (!customer) {
       throw new NotFoundError(`Customer not found: ${dto.customerId}`);
     }
+    // Restricted roles may only create loans for their own assigned customers.
+    this.assertScope(customer, actorId, actorRole);
     if (customer.status === 'blacklisted') {
       throw new BusinessRuleError(
         'Cannot create loan for a blacklisted customer',
@@ -195,6 +233,8 @@ export class LoanService {
     if (!loan) {
       throw new NotFoundError(`Loan not found: ${loanId}`);
     }
+    // Restricted roles may only act on loans for customers assigned to them.
+    this.assertScope(loan.customer, actorId, actorRole);
 
     this.validateTransition(loan.status, 'submitted');
 
@@ -235,37 +275,51 @@ export class LoanService {
       }
     }
 
-    const updated = await this.loanRepository.updateStatus(
-      loanId,
-      'submitted',
-      undefined,
-      loan.version,
-    );
+    // Wrap status + history + approval + audit writes in one transaction so a
+    // partial failure cannot leave a 'submitted' loan without an audit trail.
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await this.loanRepository.updateStatus(
+        loanId,
+        'submitted',
+        undefined,
+        loan.version,
+        tx,
+      );
 
-    await this.loanRepository.createStatusHistory({
-      loan_id: loanId,
-      from_status: 'draft',
-      to_status: 'submitted',
-      changed_by: actorId,
+      await this.loanRepository.createStatusHistory(
+        {
+          loan_id: loanId,
+          from_status: 'draft',
+          to_status: 'submitted',
+          changed_by: actorId,
+        },
+        tx,
+      );
+
+      await this.loanRepository.createApproval(
+        {
+          loan_id: loanId,
+          action: 'submitted',
+          actor_id: actorId,
+        },
+        tx,
+      );
+
+      await this.loanRepository.createAuditLog(
+        {
+          action_type: 'loan_submitted',
+          actor_id: actorId,
+          actor_role: actorRole,
+          target_entity: 'loan',
+          target_id: loanId,
+          before_state: { status: 'draft' },
+          after_state: { status: 'submitted' },
+        },
+        tx,
+      );
+
+      return updated;
     });
-
-    await this.loanRepository.createApproval({
-      loan_id: loanId,
-      action: 'submitted',
-      actor_id: actorId,
-    });
-
-    await this.loanRepository.createAuditLog({
-      action_type: 'loan_submitted',
-      actor_id: actorId,
-      actor_role: actorRole,
-      target_entity: 'loan',
-      target_id: loanId,
-      before_state: { status: 'draft' },
-      after_state: { status: 'submitted' },
-    });
-
-    return updated;
   }
 
   /**
@@ -276,40 +330,56 @@ export class LoanService {
     if (!loan) {
       throw new NotFoundError(`Loan not found: ${loanId}`);
     }
+    // Restricted roles may only act on loans for customers assigned to them.
+    this.assertScope(loan.customer, actorId, actorRole);
 
     this.validateTransition(loan.status, 'under_review');
 
-    const updated = await this.loanRepository.updateStatus(
-      loanId,
-      'under_review',
-      undefined,
-      loan.version,
-    );
+    // Wrap status + history + approval + audit writes in one transaction so a
+    // partial failure cannot leave an 'under_review' loan without an audit trail.
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await this.loanRepository.updateStatus(
+        loanId,
+        'under_review',
+        undefined,
+        loan.version,
+        tx,
+      );
 
-    await this.loanRepository.createStatusHistory({
-      loan_id: loanId,
-      from_status: 'submitted',
-      to_status: 'under_review',
-      changed_by: actorId,
+      await this.loanRepository.createStatusHistory(
+        {
+          loan_id: loanId,
+          from_status: 'submitted',
+          to_status: 'under_review',
+          changed_by: actorId,
+        },
+        tx,
+      );
+
+      await this.loanRepository.createApproval(
+        {
+          loan_id: loanId,
+          action: 'under_review',
+          actor_id: actorId,
+        },
+        tx,
+      );
+
+      await this.loanRepository.createAuditLog(
+        {
+          action_type: 'loan_reviewed',
+          actor_id: actorId,
+          actor_role: actorRole,
+          target_entity: 'loan',
+          target_id: loanId,
+          before_state: { status: 'submitted' },
+          after_state: { status: 'under_review' },
+        },
+        tx,
+      );
+
+      return updated;
     });
-
-    await this.loanRepository.createApproval({
-      loan_id: loanId,
-      action: 'under_review',
-      actor_id: actorId,
-    });
-
-    await this.loanRepository.createAuditLog({
-      action_type: 'loan_reviewed',
-      actor_id: actorId,
-      actor_role: actorRole,
-      target_entity: 'loan',
-      target_id: loanId,
-      before_state: { status: 'submitted' },
-      after_state: { status: 'under_review' },
-    });
-
-    return updated;
   }
 
   /**
@@ -330,6 +400,8 @@ export class LoanService {
     if (!loan) {
       throw new NotFoundError(`Loan not found: ${loanId}`);
     }
+    // Restricted roles may only act on loans for customers assigned to them.
+    this.assertScope(loan.customer, actorId, actorRole);
 
     this.validateTransition(loan.status, 'approved');
 
@@ -339,6 +411,17 @@ export class LoanService {
         'Maker-checker violation: approver cannot be the same user who created the loan',
         'MAKER_CHECKER_VIOLATION',
       );
+    }
+
+    // Reject past firstEmiDate so the schedule cannot be born instantly overdue.
+    if (dto.firstEmiDate) {
+      const firstEmiIST = parseDateIST(dto.firstEmiDate);
+      if (firstEmiIST <= todayISTDate()) {
+        throw new BusinessRuleError(
+          'First EMI date must be in the future',
+          'FIRST_EMI_DATE_NOT_FUTURE',
+        );
+      }
     }
 
     // Pre-compute the schedule outside the transaction (pure function,
@@ -362,6 +445,9 @@ export class LoanService {
         scheduleStartDate = this.calculateStartDateFromFirstEmi(firstEmi, pv.repayment_frequency);
       }
 
+      // Honour configured bank holidays so EMI due dates never land on them.
+      const holidays = await this.getHolidaysForSchedule();
+
       schedule = generateSchedule({
         principalPaise: Number(loan.principal_paise),
         annualRateBps: pv.annual_rate_bps,
@@ -369,7 +455,7 @@ export class LoanService {
         interestType: pv.interest_type,
         frequency: pv.repayment_frequency,
         startDate: scheduleStartDate,
-        holidays: [],
+        holidays,
       } as ScheduleParams);
 
       totalInterestPaise = schedule.reduce((sum, inst) => sum + inst.interestPaise, 0);
@@ -448,43 +534,59 @@ export class LoanService {
     if (!loan) {
       throw new NotFoundError(`Loan not found: ${loanId}`);
     }
+    // Restricted roles may only act on loans for customers assigned to them.
+    this.assertScope(loan.customer, actorId, actorRole);
 
     this.validateTransition(loan.status, 'rejected');
 
-    const updated = await this.loanRepository.updateStatus(
-      loanId,
-      'rejected',
-      undefined,
-      loan.version,
-    );
+    // Wrap status + history + approval + audit writes in one transaction so a
+    // partial failure cannot leave a 'rejected' loan without an audit trail.
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await this.loanRepository.updateStatus(
+        loanId,
+        'rejected',
+        undefined,
+        loan.version,
+        tx,
+      );
 
-    await this.loanRepository.createStatusHistory({
-      loan_id: loanId,
-      from_status: 'under_review',
-      to_status: 'rejected',
-      changed_by: actorId,
-      reason: dto.reason,
+      await this.loanRepository.createStatusHistory(
+        {
+          loan_id: loanId,
+          from_status: 'under_review',
+          to_status: 'rejected',
+          changed_by: actorId,
+          reason: dto.reason,
+        },
+        tx,
+      );
+
+      await this.loanRepository.createApproval(
+        {
+          loan_id: loanId,
+          action: 'rejected',
+          actor_id: actorId,
+          remarks: dto.reason,
+        },
+        tx,
+      );
+
+      await this.loanRepository.createAuditLog(
+        {
+          action_type: 'loan_rejected',
+          actor_id: actorId,
+          actor_role: actorRole,
+          target_entity: 'loan',
+          target_id: loanId,
+          before_state: { status: 'under_review' },
+          after_state: { status: 'rejected' },
+          remarks: dto.reason,
+        },
+        tx,
+      );
+
+      return updated;
     });
-
-    await this.loanRepository.createApproval({
-      loan_id: loanId,
-      action: 'rejected',
-      actor_id: actorId,
-      remarks: dto.reason,
-    });
-
-    await this.loanRepository.createAuditLog({
-      action_type: 'loan_rejected',
-      actor_id: actorId,
-      actor_role: actorRole,
-      target_entity: 'loan',
-      target_id: loanId,
-      before_state: { status: 'under_review' },
-      after_state: { status: 'rejected' },
-      remarks: dto.reason,
-    });
-
-    return updated;
   }
 
   /**
@@ -553,89 +655,96 @@ export class LoanService {
     if (!loan) {
       throw new NotFoundError(`Loan not found: ${loanId}`);
     }
+    // Restricted roles may only act on loans for customers assigned to them.
+    this.assertScope(loan.customer, actorId, actorRole);
 
     // Validate state transition (only active or overdue can transition to closed)
     this.validateTransition(loan.status, 'closed');
 
-    // Check all closure prerequisites
-    const unmetPrerequisites: string[] = [];
+    // Wrap row lock + re-checked prerequisites + writes in a single tx so a
+    // concurrent penalty/collection mutation cannot slip in between checks and
+    // close. Other modules update the loan row without bumping `version`, so a
+    // FOR UPDATE lock — not optimistic locking alone — is required for safety.
+    return this.prisma.$transaction(async (tx) => {
+      const locked = await this.loanRepository.lockLoanForUpdate(loanId, tx);
+      if (!locked) {
+        throw new NotFoundError(`Loan not found: ${loanId}`);
+      }
 
-    // 1. All installments fully paid
-    const unpaidInstallments = await this.loanRepository.getUnpaidInstallments(loanId);
-    if (unpaidInstallments.length > 0) {
-      const installmentNumbers = unpaidInstallments
-        .map((i) => `#${i.installment_number} (${i.status})`)
-        .join(', ');
-      unmetPrerequisites.push(
-        `Unpaid installments: ${installmentNumbers}`,
+      // Re-check all closure prerequisites under the row lock.
+      const unmetPrerequisites: string[] = [];
+
+      const unpaidInstallments = await this.loanRepository.getUnpaidInstallments(loanId, tx);
+      if (unpaidInstallments.length > 0) {
+        const installmentNumbers = unpaidInstallments
+          .map((i) => `#${i.installment_number} (${i.status})`)
+          .join(', ');
+        unmetPrerequisites.push(`Unpaid installments: ${installmentNumbers}`);
+      }
+
+      const unsettledPenalties = await this.loanRepository.getUnsettledPenalties(loanId, tx);
+      if (unsettledPenalties.length > 0) {
+        const penaltyDetails = unsettledPenalties
+          .map((p) => `${p.penalty_period} (${p.amount_paise} paise)`)
+          .join(', ');
+        unmetPrerequisites.push(`Unsettled penalties: ${penaltyDetails}`);
+      }
+
+      const pendingReversals = await this.loanRepository.getPendingReversals(loanId, tx);
+      if (pendingReversals.length > 0) {
+        unmetPrerequisites.push(
+          `Pending reversals: ${pendingReversals.length} reversal(s) in progress`,
+        );
+      }
+
+      const outstandingBalance = await this.loanRepository.getOutstandingBalance(loanId, tx);
+      const outstandingPaise = Number(outstandingBalance ?? 0);
+      if (Math.abs(outstandingPaise) > 1) {
+        unmetPrerequisites.push(
+          `Outstanding balance is ${outstandingPaise} paise (must be 0 or within 1 paisa tolerance)`,
+        );
+      }
+
+      if (unmetPrerequisites.length > 0) {
+        throw new BusinessRuleError(
+          `Loan closure prerequisites not met: ${unmetPrerequisites.join('; ')}`,
+          'CLOSURE_PREREQUISITES_NOT_MET',
+        );
+      }
+
+      const updated = await this.loanRepository.updateStatus(
+        loanId,
+        'closed',
+        undefined,
+        locked.version,
+        tx,
       );
-    }
 
-    // 2. All penalties settled or waived
-    const unsettledPenalties = await this.loanRepository.getUnsettledPenalties(loanId);
-    if (unsettledPenalties.length > 0) {
-      const penaltyDetails = unsettledPenalties
-        .map((p) => `${p.penalty_period} (${p.amount_paise} paise)`)
-        .join(', ');
-      unmetPrerequisites.push(
-        `Unsettled penalties: ${penaltyDetails}`,
+      await this.loanRepository.createStatusHistory(
+        {
+          loan_id: loanId,
+          from_status: loan.status,
+          to_status: 'closed',
+          changed_by: actorId,
+        },
+        tx,
       );
-    }
 
-    // 3. No pending reversals
-    const pendingReversals = await this.loanRepository.getPendingReversals(loanId);
-    if (pendingReversals.length > 0) {
-      unmetPrerequisites.push(
-        `Pending reversals: ${pendingReversals.length} reversal(s) in progress`,
+      await this.loanRepository.createAuditLog(
+        {
+          action_type: 'loan_closed',
+          actor_id: actorId,
+          actor_role: actorRole,
+          target_entity: 'loan',
+          target_id: loanId,
+          before_state: { status: loan.status, outstanding_paise: outstandingPaise },
+          after_state: { status: 'closed', outstanding_paise: 0 },
+        },
+        tx,
       );
-    }
 
-    // 4. Outstanding balance == 0 (within 1 paisa tolerance)
-    const outstandingBalance = await this.loanRepository.getOutstandingBalance(loanId);
-    const outstandingPaise = Number(outstandingBalance ?? 0);
-    if (Math.abs(outstandingPaise) > 1) {
-      unmetPrerequisites.push(
-        `Outstanding balance is ${outstandingPaise} paise (must be 0 or within 1 paisa tolerance)`,
-      );
-    }
-
-    // Reject if any prerequisites are unmet
-    if (unmetPrerequisites.length > 0) {
-      throw new BusinessRuleError(
-        `Loan closure prerequisites not met: ${unmetPrerequisites.join('; ')}`,
-        'CLOSURE_PREREQUISITES_NOT_MET',
-      );
-    }
-
-    // Update loan status to closed (with optimistic lock — fails if concurrent
-    // reversal/collection bumped the version while we were checking prerequisites)
-    const updated = await this.loanRepository.updateStatus(
-      loanId,
-      'closed',
-      undefined,
-      loan.version,
-    );
-
-    // Record status history
-    await this.loanRepository.createStatusHistory({
-      loan_id: loanId,
-      from_status: loan.status,
-      to_status: 'closed',
-      changed_by: actorId,
+      return updated;
     });
-
-    // Record audit log
-    await this.loanRepository.createAuditLog({
-      action_type: 'loan_closed',
-      actor_id: actorId,
-      actor_role: actorRole,
-      target_entity: 'loan',
-      target_id: loanId,
-      before_state: { status: loan.status, outstanding_paise: outstandingPaise },
-      after_state: { status: 'closed', outstanding_paise: 0 },
-    });
-
-    return updated;
   }
 
   /**
@@ -691,12 +800,11 @@ export class LoanService {
 
   /**
    * Get status transition history for a loan.
+   * Enforces per-officer scope so restricted roles cannot read audit trails
+   * for customers they are not assigned to.
    */
-  async getStatusHistory(id: string) {
-    const loan = await this.loanRepository.findById(id);
-    if (!loan) {
-      throw new NotFoundError(`Loan not found: ${id}`);
-    }
+  async getStatusHistory(id: string, actorId?: string, actorRole?: string) {
+    await this.findById(id, actorId, actorRole);
     return this.loanRepository.getStatusHistory(id);
   }
 
@@ -743,6 +851,8 @@ export class LoanService {
     if (!loan) {
       throw new NotFoundError(`Loan not found: ${loanId}`);
     }
+    // Restricted roles may only act on loans for customers assigned to them.
+    this.assertScope(loan.customer, actorId, actorRole);
 
     // Validate loan status - only approved or active loans can have schedule regenerated
     if (!['approved', 'active'].includes(loan.status)) {
@@ -796,6 +906,9 @@ export class LoanService {
     // Calculate start date from first EMI date
     const scheduleStartDate = this.calculateStartDateFromFirstEmi(firstEmi, pv.repayment_frequency);
 
+    // Honour configured bank holidays so regenerated EMI due dates skip them.
+    const holidays = await this.getHolidaysForSchedule();
+
     // Generate new schedule
     const schedule = generateSchedule({
       principalPaise: Number(loan.principal_paise),
@@ -804,7 +917,7 @@ export class LoanService {
       interestType: pv.interest_type,
       frequency: pv.repayment_frequency,
       startDate: scheduleStartDate,
-      holidays: [],
+      holidays,
     } as ScheduleParams);
 
     // Calculate new totals

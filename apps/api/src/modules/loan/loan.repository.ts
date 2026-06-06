@@ -450,13 +450,14 @@ export class LoanRepository {
 
   /**
    * Get customer status by ID.
+   * Includes assigned_officer_id so per-officer scope can be enforced on create.
    */
   async getCustomerStatus(
     customerId: string,
-  ): Promise<{ id: string; status: string; full_name: string } | null> {
+  ): Promise<{ id: string; status: string; full_name: string; assigned_officer_id: string | null } | null> {
     return this.prisma['customers'].findUnique({
       where: { id: customerId },
-      select: { id: true, status: true, full_name: true },
+      select: { id: true, status: true, full_name: true, assigned_officer_id: true },
     });
   }
 
@@ -464,8 +465,9 @@ export class LoanRepository {
    * Get unpaid installments for a loan (not fully paid and not closed).
    * Used for loan closure prerequisite check.
    */
-  async getUnpaidInstallments(loanId: string) {
-    return this.prisma['loan_schedules'].findMany({
+  async getUnpaidInstallments(loanId: string, tx?: TxClient) {
+    const client = tx ?? this.prisma;
+    return client['loan_schedules'].findMany({
       where: {
         loan_id: loanId,
         status: { notIn: ['paid', 'closed'] },
@@ -486,8 +488,9 @@ export class LoanRepository {
    * Get unsettled penalties for a loan (not paid and not waived).
    * Used for loan closure prerequisite check.
    */
-  async getUnsettledPenalties(loanId: string) {
-    return this.prisma['penalties'].findMany({
+  async getUnsettledPenalties(loanId: string, tx?: TxClient) {
+    const client = tx ?? this.prisma;
+    return client['penalties'].findMany({
       where: {
         loan_id: loanId,
         is_paid: false,
@@ -509,12 +512,13 @@ export class LoanRepository {
    * For closure, we check if any collection is in a non-terminal state that indicates
    * an in-progress reversal.
    */
-  async getPendingReversals(loanId: string) {
+  async getPendingReversals(loanId: string, tx?: TxClient) {
+    const client = tx ?? this.prisma;
     // Check for collections that are reversals and still in 'posted' status
     // but whose original collection is not yet marked as 'reversed'.
     // In practice, reversals are atomic, so we check for any collection
     // that is a reversal with status 'posted' whose original is still 'posted'.
-    return this.prisma['collections'].findMany({
+    return client['collections'].findMany({
       where: {
         loan_id: loanId,
         is_reversal: true,
@@ -533,8 +537,9 @@ export class LoanRepository {
   /**
    * Get the cached outstanding balance for a loan.
    */
-  async getOutstandingBalance(loanId: string): Promise<bigint | null> {
-    const loan = await this.prisma['loans'].findUnique({
+  async getOutstandingBalance(loanId: string, tx?: TxClient): Promise<bigint | null> {
+    const client = tx ?? this.prisma;
+    const loan = await client['loans'].findUnique({
       where: { id: loanId },
       select: { cached_outstanding_paise: true },
     });

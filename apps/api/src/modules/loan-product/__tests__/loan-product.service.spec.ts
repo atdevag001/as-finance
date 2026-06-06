@@ -111,7 +111,7 @@ describe('LoanProductService', () => {
 
       expect(mockRepository.createAuditLog).toHaveBeenCalledWith(
         expect.objectContaining({
-          action_type: 'loan_created',
+          action_type: 'loan_product_created',
           actor_id: mockActorId,
           actor_role: 'manager',
           target_entity: 'loan_product',

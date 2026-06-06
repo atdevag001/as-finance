@@ -9,6 +9,16 @@ import {
   ValidationError,
 } from '../../common/errors';
 import { UNRESTRICTED_ROLES } from '../../common/constants/roles';
+import {
+  UploadDocumentDto,
+  VALID_PREFIXES,
+  VALID_DOC_TYPES,
+} from './dto/upload-document.dto';
+import type { DocumentPrefix, DocumentType } from './dto/upload-document.dto';
+
+// Re-exports preserve historical import paths from this module after the DTO move.
+export { UploadDocumentDto, VALID_PREFIXES, VALID_DOC_TYPES };
+export type { DocumentPrefix, DocumentType };
 
 /** Maximum file size: 5 MB */
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
@@ -28,20 +38,6 @@ const SCRIPT_PATTERNS = [
   /<%/,                // Server-side template injection
   /<\?php/i,
 ];
-
-/** Valid upload prefixes (document categories) */
-const VALID_PREFIXES = ['kyc', 'loan-docs', 'receipts', 'expenses'] as const;
-export type DocumentPrefix = (typeof VALID_PREFIXES)[number];
-
-/** Valid document types for KYC */
-const VALID_DOC_TYPES = ['aadhaar_front', 'aadhaar_back', 'pan', 'photo', 'address_proof', 'other'] as const;
-export type DocumentType = (typeof VALID_DOC_TYPES)[number];
-
-export interface UploadDocumentDto {
-  prefix: DocumentPrefix;
-  customerId?: string;
-  documentType?: DocumentType;
-}
 
 /**
  * Detects MIME type from file buffer magic bytes.

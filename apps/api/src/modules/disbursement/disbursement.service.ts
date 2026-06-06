@@ -8,9 +8,10 @@ import { AuditService } from '../audit/audit.service';
 import { IdempotencyService } from '../idempotency/idempotency.service';
 import { LoanService } from '../loan/loan.service';
 import { generateSchedule } from '../schedule/schedule.service';
+import { SettingsService } from '../settings/settings.service';
 import { DisburseDto } from './dto/disburse.dto';
 import { BusinessRuleError, ConflictError, NotFoundError } from '../../common/errors';
-import { addMonthsClamped, parseDateIST } from '../../common/utils/date.util';
+import { addMonthsClamped, parseDateIST, todayIST } from '../../common/utils/date.util';
 import { canBypassMakerChecker } from '../../common/constants/maker-checker';
 
 // Configure Decimal.js: ROUND_HALF_UP for financial calculations
@@ -42,6 +43,7 @@ export class DisbursementService {
     private readonly auditService: AuditService,
     private readonly idempotencyService: IdempotencyService,
     private readonly loanService: LoanService,
+    private readonly settingsService: SettingsService,
   ) {}
 
   /**
@@ -191,7 +193,8 @@ export class DisbursementService {
     }
 
     const now = new Date();
-    const disbursementDate = parseDateIST(now.toISOString().split('T')[0]!); // IST business date
+    // Use IST business date — UTC-derived date is off-by-one between 18:30 and 24:00 UTC.
+    const disbursementDate = parseDateIST(todayIST());
 
     // ── Step 1: Status history for the audit trail (approved → disbursed → active) ──
     // We persist both edges of the state machine for audit traceability, but
@@ -332,9 +335,15 @@ export class DisbursementService {
         );
       }
 
-      // Regenerate the schedule with the new first EMI date
+      // Use UTC-midnight parse for schedule math — addMonthsClamped's local-time getters
+      // would otherwise read parseDateIST's prev-UTC-day instant as the wrong calendar day.
       const pv = loan.product_version;
-      const scheduleStartDate = this.calculateStartDateFromFirstEmi(firstEmi, pv.repayment_frequency);
+      const firstEmiCalendar = new Date(dto.firstEmiDate);
+      const scheduleStartDate = this.calculateStartDateFromFirstEmi(firstEmiCalendar, pv.repayment_frequency);
+
+      // Honour configured bank holidays so EMI due dates never land on them.
+      const holidayStrings = await this.settingsService.getHolidays();
+      const holidays = holidayStrings.map((s) => parseDateIST(s));
 
       const newSchedule = generateSchedule({
         principalPaise: Number(loan.principal_paise),
@@ -343,7 +352,7 @@ export class DisbursementService {
         interestType: pv.interest_type as InterestType,
         frequency: pv.repayment_frequency as Frequency,
         startDate: scheduleStartDate,
-        holidays: [],
+        holidays,
       });
 
       // Calculate new totals

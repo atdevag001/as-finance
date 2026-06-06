@@ -18,6 +18,7 @@ export class CashbookRepository {
    */
   async createExpense(
     data: {
+      id?: string;
       category: string;
       amount_paise: bigint;
       expense_date: Date;
@@ -119,8 +120,10 @@ export class CashbookRepository {
       discrepancy_notes?: string | null;
       verified_at: Date;
     },
+    tx?: TxClient,
   ) {
-    return this.prisma.cash_handover_records.update({
+    const client = tx ?? this.prisma;
+    return client.cash_handover_records.update({
       where: { id },
       data: data as never,
       include: {

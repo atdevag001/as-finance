@@ -6,9 +6,10 @@ import { LoanModule } from '../loan/loan.module';
 import { AccountingModule } from '../accounting/accounting.module';
 import { AuditModule } from '../audit/audit.module';
 import { IdempotencyModule } from '../idempotency/idempotency.module';
+import { SettingsModule } from '../settings/settings.module';
 
 @Module({
-  imports: [forwardRef(() => LoanModule), AccountingModule, AuditModule, IdempotencyModule],
+  imports: [forwardRef(() => LoanModule), AccountingModule, AuditModule, IdempotencyModule, SettingsModule],
   controllers: [DisbursementController],
   providers: [DisbursementService, DisbursementRepository],
   exports: [DisbursementService],

@@ -130,6 +130,7 @@ describe('DisbursementService', () => {
     });
     repo.create.mockResolvedValue({ id: 'disb-1' });
 
+    const settingsService = { getHolidays: vi.fn().mockResolvedValue([]) };
     service = new DisbursementService(
       prisma as never,
       repo as never,
@@ -137,6 +138,7 @@ describe('DisbursementService', () => {
       auditService as never,
       idempotencyService as never,
       loanService as never,
+      settingsService as never,
     );
   });
 

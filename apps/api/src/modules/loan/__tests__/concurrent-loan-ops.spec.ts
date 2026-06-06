@@ -22,6 +22,7 @@ function buildMockRepo(overrides: {
     getCustomerStatus: async () => ({
       id: 'cust-1',
       status: overrides.customerStatus ?? 'active',
+      assigned_officer_id: 'actor-1',
     }),
     hasDefaultedLoans: async () => overrides.hasDefaulted ?? false,
     getProductVersion: async () => ({
@@ -55,7 +56,7 @@ describe('Concurrent Loan Operations', () => {
   describe('max_concurrent_loans enforcement (Req 74.8)', () => {
     it('allows loan creation when under concurrent limit', async () => {
       const repo = buildMockRepo({ activeLoanCount: 0, maxConcurrentLoans: 3 });
-      const service = new LoanService(repo as any);
+      const service = new LoanService(repo as any, null as any, null as any);
 
       const result = await service.create(
         {
@@ -75,7 +76,7 @@ describe('Concurrent Loan Operations', () => {
 
     it('allows loan creation at limit minus one', async () => {
       const repo = buildMockRepo({ activeLoanCount: 2, maxConcurrentLoans: 3 });
-      const service = new LoanService(repo as any);
+      const service = new LoanService(repo as any, null as any, null as any);
 
       const result = await service.create(
         {
@@ -94,7 +95,7 @@ describe('Concurrent Loan Operations', () => {
 
     it('rejects loan creation when at concurrent limit', async () => {
       const repo = buildMockRepo({ activeLoanCount: 3, maxConcurrentLoans: 3 });
-      const service = new LoanService(repo as any);
+      const service = new LoanService(repo as any, null as any, null as any);
 
       await expect(
         service.create(
@@ -113,7 +114,7 @@ describe('Concurrent Loan Operations', () => {
 
     it('rejects with CONCURRENT_LOAN_LIMIT_EXCEEDED code', async () => {
       const repo = buildMockRepo({ activeLoanCount: 3, maxConcurrentLoans: 3 });
-      const service = new LoanService(repo as any);
+      const service = new LoanService(repo as any, null as any, null as any);
 
       try {
         await service.create(
@@ -136,7 +137,7 @@ describe('Concurrent Loan Operations', () => {
 
     it('rejects when exceeding concurrent limit', async () => {
       const repo = buildMockRepo({ activeLoanCount: 5, maxConcurrentLoans: 3 });
-      const service = new LoanService(repo as any);
+      const service = new LoanService(repo as any, null as any, null as any);
 
       await expect(
         service.create(
@@ -160,7 +161,7 @@ describe('Concurrent Loan Operations', () => {
       const repo = buildMockRepo({ maxConcurrentLoans: 1 });
       // Override to simulate race: first call returns 0, second returns 1
       repo.countActiveLoansByCustomerAndProduct = async () => callCount++;
-      const service = new LoanService(repo as any);
+      const service = new LoanService(repo as any, null as any, null as any);
 
       const dto = {
         customerId: 'cust-1',

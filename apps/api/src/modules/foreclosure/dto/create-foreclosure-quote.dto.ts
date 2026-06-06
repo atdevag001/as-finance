@@ -17,7 +17,12 @@ export class CreateForeclosureQuoteDto {
   @IsString()
   rebateReason?: string;
 
-  @ApiPropertyOptional({ description: 'User ID authorizing the rebate' })
+  /**
+   * @deprecated Server-derived from the authenticated actor (JWT subject)
+   * whenever a rebate is applied — the client-supplied value is ignored.
+   * Retained for backwards compatibility so existing clients don't 400.
+   */
+  @ApiPropertyOptional({ description: 'Deprecated — server-derived from JWT subject; client value ignored' })
   @IsOptional()
   @IsUUID()
   rebateAuthorizedBy?: string;

@@ -141,8 +141,11 @@ export class LoanController {
   @ApiOperation({ summary: 'Get loan status transition history' })
   @ApiResponse({ status: 200, description: 'Status history retrieved' })
   @ApiResponse({ status: 404, description: 'Loan not found' })
-  async getStatusHistory(@Param('id') id: string) {
-    return this.loanService.getStatusHistory(id);
+  async getStatusHistory(
+    @Param('id') id: string,
+    @Req() req: Request & { user: JwtPayload },
+  ) {
+    return this.loanService.getStatusHistory(id, req.user.sub, req.user.role);
   }
 
   @Post(':id/disburse')

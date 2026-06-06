@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
+import { parseDateOnlyUTC } from '../../common/utils/date.util';
 
 /**
  * Prisma transaction client type — a subset of PrismaService used within
@@ -337,12 +338,14 @@ export class CollectionRepository {
       where['loan_id'] = params.loanId;
     }
     if (params?.startDate || params?.endDate) {
+      // Match the UTC-midnight anchor used at write-time for the `@db.Date` column;
+      // an IST-midnight bound would shift filter ranges by a calendar day under UTC sessions.
       where['payment_date'] = {};
       if (params?.startDate) {
-        (where['payment_date'] as Record<string, unknown>)['gte'] = new Date(params.startDate);
+        (where['payment_date'] as Record<string, unknown>)['gte'] = parseDateOnlyUTC(params.startDate);
       }
       if (params?.endDate) {
-        (where['payment_date'] as Record<string, unknown>)['lte'] = new Date(params.endDate);
+        (where['payment_date'] as Record<string, unknown>)['lte'] = parseDateOnlyUTC(params.endDate);
       }
     }
 

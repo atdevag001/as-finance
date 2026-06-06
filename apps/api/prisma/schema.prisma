@@ -140,6 +140,9 @@ enum AuditAction {
   loan_foreclosed
   loan_overdue
   loan_defaulted
+  loan_product_created
+  loan_product_updated
+  loan_product_deactivated
   collection_posted
   collection_reversed
   penalty_posted

@@ -12,7 +12,7 @@ import { BusinessRuleError } from '../../../common/errors';
  */
 
 // Instantiate with null repository — validateTransition is a pure function
-const loanService = new LoanService(null as any);
+const loanService = new LoanService(null as any, null as any, null as any);
 
 // ─── Requirement 15.1: All valid transitions succeed ────────────────────────
 

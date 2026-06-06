@@ -194,11 +194,16 @@ export class AccountingService {
     }
     if (cashLinesSeen === 0) return;
 
+    // Keys match JournalSourceType enum (lowercase) — uppercase keys silently
+    // fell back to 'collection', mis-tagging expenses/disbursements in cashbook.
     const categoryMap: Record<string, string> = {
-      COLLECTION: 'collection',
-      DISBURSEMENT: 'disbursement',
-      EXPENSE: 'expense',
-      REVERSAL: 'collection',
+      collection: 'collection',
+      disbursement: 'disbursement',
+      expense: 'expense',
+      reversal: 'collection',
+      penalty: 'expense',
+      processing_fee: 'collection',
+      foreclosure: 'collection',
     };
     const category = categoryMap[dto.sourceType] ?? 'collection';
 
