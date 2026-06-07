@@ -22,7 +22,8 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "db:seed": "prisma db seed",
     "db:generate": "prisma generate",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "create-admin": "tsx ../../scripts/create-admin.ts"
   },
   "dependencies": {
     "@as-finance/shared": "workspace:*",
