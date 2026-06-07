@@ -6,6 +6,7 @@ import {
   createTestCustomer,
   createTestLoan,
   advanceLoanToStatus,
+  csrfHeadersFor,
 } from './fixtures';
 
 /**
@@ -197,6 +198,7 @@ test.describe('Collection Payment Modes — Bank Transfer & Online', () => {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${coToken}`,
+        ...(await csrfHeadersFor(coToken)),
       },
       body: JSON.stringify({
         loanId: loan.id,
@@ -237,6 +239,7 @@ test.describe('Collection Payment Modes — Bank Transfer & Online', () => {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${await getTokenForRole('viewer_auditor')}`,
+        ...(await csrfHeadersFor(await getTokenForRole('viewer_auditor'))),
       },
       body: JSON.stringify({
         loanId: '00000000-0000-0000-0000-000000000000',

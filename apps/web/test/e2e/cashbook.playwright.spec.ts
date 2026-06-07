@@ -1,4 +1,4 @@
-import { test, expect, getTokenForRole, apiRequest } from './fixtures';
+import { test, expect, getTokenForRole, apiRequest, csrfHeadersFor } from './fixtures';
 
 /**
  * Cashbook Module — Playwright E2E Tests
@@ -319,6 +319,7 @@ test.describe('Cashbook Module', () => {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${collectionOfficerToken}`,
           'Idempotency-Key': idemKey,
+          ...(await csrfHeadersFor(collectionOfficerToken)),
         },
         body: JSON.stringify({
           totalAmountPaise: amountPaise,

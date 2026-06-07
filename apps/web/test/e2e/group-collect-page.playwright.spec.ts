@@ -6,6 +6,7 @@ import {
   createTestLoan,
   advanceLoanToStatus,
   getTokenForRole,
+  csrfHeadersFor,
 } from './fixtures';
 
 /**
@@ -100,7 +101,7 @@ async function seedGroupWithActiveLoans(
   //    (createTestLoan helper doesn't expose it).
   const products = await apiRequest<{ data: Array<{ id: string; is_active: boolean }> }>(
     'GET',
-    '/loan-products?limit=10',
+    '/loan-products?take=10',
     token,
   );
   const product = products.data?.find((p) => p.is_active) ?? products.data?.[0];
@@ -336,6 +337,7 @@ test.describe('Group Collect Page — /groups/[id]/collect', () => {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${managerToken}`,
+        ...(await csrfHeadersFor(managerToken)),
       },
       body: JSON.stringify({
         totalAmountPaise: 999999, // deliberately wrong

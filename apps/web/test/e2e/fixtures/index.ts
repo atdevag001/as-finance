@@ -35,6 +35,7 @@ export {
   getAuthToken,
   getTokenForRole,
   apiRequest,
+  csrfHeadersFor,
   createTestCustomer,
   createTestLoan,
   advanceLoanToStatus,

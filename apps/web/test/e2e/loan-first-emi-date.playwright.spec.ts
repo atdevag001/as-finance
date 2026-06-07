@@ -3,6 +3,7 @@ import {
   getTokenForRole,
   createTestCustomer,
   apiRequest,
+  csrfHeadersFor,
 } from './fixtures';
 
 /**
@@ -97,6 +98,7 @@ async function createLoan(
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
+      ...(await csrfHeadersFor(token)),
     },
     body: JSON.stringify({
       customerId,
@@ -122,6 +124,7 @@ async function loanAction(
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
+      ...(await csrfHeadersFor(token)),
     },
     body: body ? JSON.stringify(body) : undefined,
   });

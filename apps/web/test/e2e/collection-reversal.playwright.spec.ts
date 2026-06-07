@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { getTokenForRole, createTestCustomer } from './fixtures';
+import { getTokenForRole, createTestCustomer, csrfHeadersFor } from './fixtures';
 
 /**
  * Collection Reversal — E2E Tests
@@ -58,6 +58,7 @@ async function createLoan(
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
+      ...(await csrfHeadersFor(token)),
     },
     body: JSON.stringify({
       customerId,
@@ -78,21 +79,22 @@ async function createLoan(
 async function activateLoan(foToken: string, managerToken: string, loanId: string): Promise<void> {
   await fetch(`${API_BASE}/loans/${loanId}/submit`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${foToken}` },
+    headers: { Authorization: `Bearer ${foToken}`, ...(await csrfHeadersFor(foToken)) },
   });
   await fetch(`${API_BASE}/loans/${loanId}/review`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${managerToken}` },
+    headers: { Authorization: `Bearer ${managerToken}`, ...(await csrfHeadersFor(managerToken)) },
   });
   await fetch(`${API_BASE}/loans/${loanId}/approve`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${managerToken}` },
+    headers: { Authorization: `Bearer ${managerToken}`, ...(await csrfHeadersFor(managerToken)) },
   });
   await fetch(`${API_BASE}/loans/${loanId}/disburse`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${managerToken}`,
+      ...(await csrfHeadersFor(managerToken)),
     },
     body: JSON.stringify({ mode: 'cash' }),
   });
@@ -111,6 +113,7 @@ async function postCollection(
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
+      ...(await csrfHeadersFor(token)),
     },
     body: JSON.stringify({
       loanId,

@@ -58,6 +58,28 @@ function readTokenFromStorageState(role: UserRole): string | null {
 // safe-method probe and reuse it.
 const csrfCache: Map<string, string> = new Map();
 
+/**
+ * Returns the headers spec authors need to merge into a hand-rolled
+ * `fetch` so it gets past the audit's global CsrfGuard on any non-safe
+ * method (POST / PUT / PATCH / DELETE).
+ *
+ *   const res = await fetch(url, {
+ *     method: 'POST',
+ *     headers: {
+ *       'Content-Type': 'application/json',
+ *       Authorization: `Bearer ${token}`,
+ *       ...(await csrfHeadersFor(token)),
+ *     },
+ *     body: JSON.stringify(payload),
+ *   });
+ *
+ * Cached internally so 8 parallel workers don't each call /auth/refresh.
+ */
+export async function csrfHeadersFor(token: string): Promise<{ Cookie: string; 'x-csrf-token': string }> {
+  const csrf = await getCsrfToken(token);
+  return { Cookie: `csrf_token=${csrf}`, 'x-csrf-token': csrf };
+}
+
 async function getCsrfToken(token: string): Promise<string> {
   const cached = csrfCache.get(token);
   if (cached) return cached;

@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect, csrfHeadersFor } from './fixtures';
 
 /**
  * Collection Posting — Playwright E2E Tests
@@ -142,6 +142,7 @@ async function pcCreateLoan(
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
+      ...(await csrfHeadersFor(token)),
     },
     body: JSON.stringify({
       customerId,
@@ -162,21 +163,31 @@ async function pcActivateLoan(
 ): Promise<void> {
   await fetch(`${API_BASE_PC}/loans/${loanId}/submit`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${foToken}` },
+    headers: {
+      Authorization: `Bearer ${foToken}`,
+      ...(await csrfHeadersFor(foToken)),
+    },
   });
   await fetch(`${API_BASE_PC}/loans/${loanId}/review`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${managerToken}` },
+    headers: {
+      Authorization: `Bearer ${managerToken}`,
+      ...(await csrfHeadersFor(managerToken)),
+    },
   });
   await fetch(`${API_BASE_PC}/loans/${loanId}/approve`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${managerToken}` },
+    headers: {
+      Authorization: `Bearer ${managerToken}`,
+      ...(await csrfHeadersFor(managerToken)),
+    },
   });
   await fetch(`${API_BASE_PC}/loans/${loanId}/disburse`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${managerToken}`,
+      ...(await csrfHeadersFor(managerToken)),
     },
     body: JSON.stringify({ mode: 'cash' }),
   });

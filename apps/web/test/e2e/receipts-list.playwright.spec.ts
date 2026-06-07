@@ -2,6 +2,7 @@ import { test, expect } from './fixtures';
 import {
   apiRequest,
   createTestCustomer,
+  csrfHeadersFor,
   getTokenForRole,
 } from './fixtures';
 
@@ -100,6 +101,7 @@ async function createReceiptForLoan(
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${coToken}`,
+      ...(await csrfHeadersFor(coToken)),
     },
     body: JSON.stringify({
       loanId,

@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { getTokenForRole, createTestCustomer } from './fixtures';
+import { getTokenForRole, createTestCustomer, csrfHeadersFor } from './fixtures';
 
 /**
  * Customer Operations — E2E Tests
@@ -204,6 +204,7 @@ test.describe('Customer Operations', () => {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${managerToken}`,
+          ...(await csrfHeadersFor(managerToken)),
         },
         body: JSON.stringify({ reason: 'E2E test setup - blacklisting for reinstate test' }),
       });
@@ -228,6 +229,7 @@ test.describe('Customer Operations', () => {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${managerToken}`,
+          ...(await csrfHeadersFor(managerToken)),
         },
         body: JSON.stringify({ reason: 'E2E test setup' }),
       });

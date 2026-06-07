@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { getTokenForRole, createTestCustomer, apiRequest } from './fixtures';
+import { getTokenForRole, createTestCustomer, apiRequest, csrfHeadersFor } from './fixtures';
 
 /**
  * Loan Schedule Regeneration — E2E Tests
@@ -87,6 +87,7 @@ async function createLoan(
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
+      ...(await csrfHeadersFor(token)),
     },
     body: JSON.stringify({
       customerId,
@@ -112,6 +113,7 @@ async function loanAction(
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
+      ...(await csrfHeadersFor(token)),
     },
     body: body ? JSON.stringify(body) : undefined,
   });
@@ -309,6 +311,7 @@ test.describe('Loan Schedule Regeneration (Change EMI Date)', () => {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${coToken}`,
+        ...(await csrfHeadersFor(coToken)),
       },
       body: JSON.stringify({
         loanId: id,

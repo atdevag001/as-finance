@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { getTokenForRole, createTestCustomer, apiRequest } from './fixtures';
+import { getTokenForRole, createTestCustomer, apiRequest, csrfHeadersFor } from './fixtures';
 
 /**
  * Loan Lifecycle — Comprehensive E2E Tests
@@ -79,6 +79,7 @@ async function createLoan(
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
+      ...(await csrfHeadersFor(token)),
     },
     body: JSON.stringify({
       customerId,
@@ -109,6 +110,7 @@ async function loanAction(
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
+      ...(await csrfHeadersFor(token)),
     },
     body: body ? JSON.stringify(body) : undefined,
   });
@@ -149,6 +151,7 @@ async function postCollection(
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
+      ...(await csrfHeadersFor(token)),
     },
     body: JSON.stringify({
       loanId,

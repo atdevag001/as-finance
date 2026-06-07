@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { getTokenForRole, createTestCustomer } from './fixtures';
+import { getTokenForRole, createTestCustomer, csrfHeadersFor } from './fixtures';
 
 /**
  * Loan Rejection & Closure — E2E Tests
@@ -51,6 +51,7 @@ async function createLoan(
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
+      ...(await csrfHeadersFor(token)),
     },
     body: JSON.stringify({
       customerId,
@@ -70,7 +71,10 @@ async function createLoan(
 async function submitLoan(foToken: string, loanId: string): Promise<void> {
   await fetch(`${API_BASE}/loans/${loanId}/submit`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${foToken}` },
+    headers: {
+      Authorization: `Bearer ${foToken}`,
+      ...(await csrfHeadersFor(foToken)),
+    },
   });
 }
 
@@ -81,11 +85,17 @@ async function submitLoan(foToken: string, loanId: string): Promise<void> {
 async function submitAndReviewLoan(foToken: string, managerToken: string, loanId: string): Promise<void> {
   await fetch(`${API_BASE}/loans/${loanId}/submit`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${foToken}` },
+    headers: {
+      Authorization: `Bearer ${foToken}`,
+      ...(await csrfHeadersFor(foToken)),
+    },
   });
   await fetch(`${API_BASE}/loans/${loanId}/review`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${managerToken}` },
+    headers: {
+      Authorization: `Bearer ${managerToken}`,
+      ...(await csrfHeadersFor(managerToken)),
+    },
   });
 }
 
@@ -96,21 +106,31 @@ async function submitAndReviewLoan(foToken: string, managerToken: string, loanId
 async function activateLoan(foToken: string, managerToken: string, loanId: string): Promise<void> {
   await fetch(`${API_BASE}/loans/${loanId}/submit`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${foToken}` },
+    headers: {
+      Authorization: `Bearer ${foToken}`,
+      ...(await csrfHeadersFor(foToken)),
+    },
   });
   await fetch(`${API_BASE}/loans/${loanId}/review`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${managerToken}` },
+    headers: {
+      Authorization: `Bearer ${managerToken}`,
+      ...(await csrfHeadersFor(managerToken)),
+    },
   });
   await fetch(`${API_BASE}/loans/${loanId}/approve`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${managerToken}` },
+    headers: {
+      Authorization: `Bearer ${managerToken}`,
+      ...(await csrfHeadersFor(managerToken)),
+    },
   });
   await fetch(`${API_BASE}/loans/${loanId}/disburse`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${managerToken}`,
+      ...(await csrfHeadersFor(managerToken)),
     },
     body: JSON.stringify({ mode: 'cash' }),
   });
@@ -132,6 +152,7 @@ async function fullyRepayLoan(token: string, loanId: string): Promise<void> {
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
+      ...(await csrfHeadersFor(token)),
     },
     body: JSON.stringify({
       loanId,
@@ -339,7 +360,10 @@ test.describe('Loan Closure', () => {
       // Close via API
       const closeRes = await fetch(`${API_BASE}/loans/${loanId}/close`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${managerToken}` },
+        headers: {
+          Authorization: `Bearer ${managerToken}`,
+          ...(await csrfHeadersFor(managerToken)),
+        },
       });
 
       // If close endpoint exists and succeeds
@@ -363,7 +387,10 @@ test.describe('Loan Closure', () => {
       // Close via API
       await fetch(`${API_BASE}/loans/${loanId}/close`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${managerToken}` },
+        headers: {
+          Authorization: `Bearer ${managerToken}`,
+          ...(await csrfHeadersFor(managerToken)),
+        },
       });
 
       await managerPage.goto(`/loans/${loanId}`);
@@ -407,6 +434,7 @@ test.describe('Rejected Loan State', () => {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${managerToken}`,
+        ...(await csrfHeadersFor(managerToken)),
       },
       body: JSON.stringify({ reason: 'API rejection for test' }),
     });

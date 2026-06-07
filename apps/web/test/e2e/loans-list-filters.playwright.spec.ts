@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { getTokenForRole, createTestCustomer } from './fixtures';
+import { getTokenForRole, createTestCustomer, csrfHeadersFor } from './fixtures';
 
 /**
  * Loans List — Status Filter Chips & Aadhaar Last-4 Search
@@ -52,6 +52,7 @@ async function createLoan(
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
+      ...(await csrfHeadersFor(token)),
     },
     body: JSON.stringify({
       customerId,
@@ -79,6 +80,7 @@ async function loanAction(
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
+      ...(await csrfHeadersFor(token)),
     },
     body: body ? JSON.stringify(body) : undefined,
   });

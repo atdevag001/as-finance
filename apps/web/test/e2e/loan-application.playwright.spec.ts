@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { getTokenForRole, createTestCustomer } from './fixtures';
+import { getTokenForRole, createTestCustomer, csrfHeadersFor } from './fixtures';
 
 /**
  * Loan Application — Playwright E2E Tests
@@ -78,6 +78,7 @@ test.describe('Loan Application', () => {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${foToken}`,
+        ...(await csrfHeadersFor(foToken)),
       },
       body: JSON.stringify({
         customerId,
@@ -129,6 +130,7 @@ test.describe('Loan Application', () => {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${foToken}`,
+          ...(await csrfHeadersFor(foToken)),
         },
       });
 
@@ -149,6 +151,7 @@ test.describe('Loan Application', () => {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${foToken}`,
+        ...(await csrfHeadersFor(foToken)),
       },
       body: JSON.stringify({
         customerId,
@@ -170,6 +173,7 @@ test.describe('Loan Application', () => {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${foToken}`,
+        ...(await csrfHeadersFor(foToken)),
       },
     });
 
@@ -209,6 +213,7 @@ test.describe('Loan Application', () => {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${managerToken}`,
+          ...(await csrfHeadersFor(managerToken)),
         },
       });
 

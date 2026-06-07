@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect, csrfHeadersFor } from './fixtures';
 
 /**
  * Receipt Print View — Playwright E2E Tests
@@ -49,6 +49,7 @@ async function createTestCustomer(token: string): Promise<string> {
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
+      ...(await csrfHeadersFor(token)),
     },
     body: JSON.stringify({
       fullName: `PW Receipt Test ${suffix}`,
@@ -108,6 +109,7 @@ async function createActiveLoan(
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${foToken}`,
+      ...(await csrfHeadersFor(foToken)),
     },
     body: JSON.stringify({
       customerId,
@@ -124,28 +126,44 @@ async function createActiveLoan(
   // Submit loan (draft -> submitted)
   const submitRes = await fetch(`${API_BASE}/loans/${loanId}/submit`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${foToken}` },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${foToken}`,
+      ...(await csrfHeadersFor(foToken)),
+    },
   });
   if (!submitRes.ok) throw new Error(`Failed to submit loan: ${await submitRes.text()}`);
 
   // Move to review (submitted -> under_review)
   const reviewRes = await fetch(`${API_BASE}/loans/${loanId}/review`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${managerToken}` },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${managerToken}`,
+      ...(await csrfHeadersFor(managerToken)),
+    },
   });
   if (!reviewRes.ok) throw new Error(`Failed to review loan: ${await reviewRes.text()}`);
 
   // Approve loan (under_review -> approved)
   const approveRes = await fetch(`${API_BASE}/loans/${loanId}/approve`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${managerToken}` },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${managerToken}`,
+      ...(await csrfHeadersFor(managerToken)),
+    },
   });
   if (!approveRes.ok) throw new Error(`Failed to approve loan: ${await approveRes.text()}`);
 
   // Disburse loan (approved -> disbursed/active) - requires mode parameter
   const disburseRes = await fetch(`${API_BASE}/disbursements`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${managerToken}` },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${managerToken}`,
+      ...(await csrfHeadersFor(managerToken)),
+    },
     body: JSON.stringify({ loanId, mode: 'cash', idempotencyKey: crypto.randomUUID() }),
   });
   if (!disburseRes.ok) throw new Error(`Failed to disburse loan: ${await disburseRes.text()}`);
@@ -166,6 +184,7 @@ async function postCollectionAndGetReceiptId(
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${coToken}`,
+      ...(await csrfHeadersFor(coToken)),
     },
     body: JSON.stringify({
       loanId,

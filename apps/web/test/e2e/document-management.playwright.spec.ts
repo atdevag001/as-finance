@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { getTokenForRole, createTestCustomer } from './fixtures';
+import { getTokenForRole, createTestCustomer, csrfHeadersFor } from './fixtures';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -234,6 +234,7 @@ test.describe('Document Management', () => {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${managerToken}`,
+          ...(await csrfHeadersFor(managerToken)),
         },
         body: formData,
       });
@@ -325,7 +326,10 @@ test.describe('Document Management', () => {
 
       const uploadRes = await fetch(`${API_BASE}/documents/upload`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          ...(await csrfHeadersFor(token)),
+        },
         body: formData,
       });
       if (!uploadRes.ok) return null;

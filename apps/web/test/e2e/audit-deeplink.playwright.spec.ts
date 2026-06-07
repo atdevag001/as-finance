@@ -49,7 +49,7 @@ async function getManagerUserId(token: string): Promise<string> {
   // helpers in this repo treat both shapes interchangeably.
   const res = await apiRequest<
     { data?: Array<{ id: string; username: string }> } | Array<{ id: string; username: string }>
-  >('GET', '/users?limit=100', token);
+  >('GET', '/users?take=100', token);
   const list = Array.isArray(res) ? res : (res.data ?? []);
   const manager = list.find((u) => u.username === TEST_USERS.manager.username);
   if (!manager) {

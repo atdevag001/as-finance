@@ -189,7 +189,7 @@ test.describe('Notifications Page', () => {
       try {
         const notifications = await apiRequest<{ total: number }>(
           'GET',
-          '/notifications?limit=1',
+          '/notifications?take=1',
           token
         );
         totalCount = notifications.total;
