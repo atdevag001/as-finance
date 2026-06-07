@@ -12,6 +12,40 @@ validation gates.
 
 ---
 
+## 0. First-time setup (fresh production DB only — skip otherwise)
+
+If this is the very first deploy to a brand-new database (no users yet,
+no migrations applied), you'll need a super_admin to log in with after
+deploy. The Prisma seed refuses to run when `NODE_ENV=production` by
+design (it'd silently overwrite `password_hash` for any matching
+username). Use the dedicated CLI instead:
+
+```bash
+# On the server, after the very first `pnpm install --frozen-lockfile`
+# and `cd apps/api && pnpm prisma migrate deploy`
+cd apps/api && pnpm create-admin
+```
+
+The CLI prompts for username / full name / mobile / email / password
+and refuses to run if any active super_admin already exists. The
+password input is hidden (no echo).
+
+After it succeeds, verify by logging in directly:
+
+```bash
+curl -X POST https://asfinance.skylomedia.com/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"<the username>","password":"<the password>"}'
+```
+
+You should receive a 200 with `accessToken` and `user` in the body.
+
+If this is **not** a fresh DB (you already have at least one
+super_admin), skip this section entirely — the CLI will refuse to run
+anyway.
+
+---
+
 ## 1. Pre-deploy gates (run on your laptop, before touching the server)
 
 ### 1.1 CI / tests green
@@ -106,8 +140,11 @@ SMS_API_KEY=<your value>
 SMS_API_URL=https://api.<provider>.com/send
 SMS_SENDER_ID=ASFIN
 
-# --- CORS (NEW since this branch: required when browsers call API cross-origin) ---
-CORS_ORIGINS=https://app.your-domain.com,https://admin.your-domain.com
+# --- CORS (REQUIRED — staging-deploy.sh aborts if unset) ---
+# Comma-separated list of allowed browser Origins. With this unset, every
+# browser POST/PATCH/PUT/DELETE returns "Origin not allowed by CORS" 500s
+# from the SPA, even though server-to-server still works.
+CORS_ORIGINS=https://asfinance.skylomedia.com
 
 # --- Hard never-set-in-prod ---
 # SKIP_TOKEN_ROTATION=          (leave unset)
