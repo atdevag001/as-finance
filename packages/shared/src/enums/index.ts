@@ -143,6 +143,7 @@ export enum AuditAction {
   USER_ROLE_CHANGED = 'user_role_changed',
   UNAUTHORIZED_ACCESS = 'unauthorized_access',
   CASH_HANDOVER = 'cash_handover',
+  CASH_HANDOVER_VERIFIED = 'cash_handover_verified',
   DOCUMENT_UPLOADED = 'document_uploaded',
   DOCUMENT_DELETED = 'document_deleted',
 }

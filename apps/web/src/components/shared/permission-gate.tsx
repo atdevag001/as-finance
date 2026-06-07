@@ -19,8 +19,15 @@ export interface PermissionGateProps {
  * authorization server-side.
  */
 export function PermissionGate({ permission, children, fallback = null }: PermissionGateProps) {
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
   const role = user?.role ?? '';
+
+  // While auth is still resolving, render nothing — falling through to the
+  // fallback briefly flashes a "no access" UI on every page load. The
+  // sibling content above this gate is usually a spinner/skeleton already.
+  if (isLoading) {
+    return null;
+  }
 
   if (!hasPermission(role, permission)) {
     return <>{fallback}</>;

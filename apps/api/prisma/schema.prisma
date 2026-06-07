@@ -158,6 +158,7 @@ enum AuditAction {
   user_role_changed
   unauthorized_access
   cash_handover
+  cash_handover_verified
   document_uploaded
   document_deleted
 }
