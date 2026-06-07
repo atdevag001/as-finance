@@ -288,7 +288,10 @@ export class DisbursementService {
 
     const journalEntry = await this.accountingService.createJournalEntry(
       {
-        date: disbursementDate.toISOString(),
+        // accountingService re-parses date with parseDateIST which requires
+        // YYYY-MM-DD; passing toISOString() (a full ISO timestamp) makes the
+        // parser throw and surfaces as a 500 on every real disbursement.
+        date: todayIST(),
         description: processingFeePaise > 0n
           ? `Disbursement for loan ${loan.loan_number} (net of ₹${Number(processingFeePaise) / 100} processing fee)`
           : `Disbursement for loan ${loan.loan_number}`,

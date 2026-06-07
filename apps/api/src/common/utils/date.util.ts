@@ -48,7 +48,16 @@ export function todayIST(): string {
  * Returns a Date object whose UTC time corresponds to 00:00 IST on that date.
  */
 export function parseDateIST(dateStr: string): Date {
-  const parts = dateStr.split('-');
+  // Accept either 'YYYY-MM-DD' OR a full ISO 'YYYY-MM-DDTHH:mm:ss(.sss)Z'
+  // by stripping anything after the 'T'. Several upstream services
+  // (disbursement / penalty / foreclosure / reversal) pass
+  // `new Date().toISOString()` to createJournalEntry — without this
+  // lenience every real money-movement throws 500 here.
+  const ymd =
+    dateStr.length > 10 && dateStr.indexOf('T') > 0
+      ? dateStr.slice(0, 10)
+      : dateStr;
+  const parts = ymd.split('-');
   if (parts.length !== 3) {
     throw new Error(`Invalid date format: ${dateStr} (expected YYYY-MM-DD)`);
   }
