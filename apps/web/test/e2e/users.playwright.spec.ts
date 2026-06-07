@@ -1,4 +1,31 @@
-import { test, expect } from './fixtures';
+import { test, expect, type Page } from './fixtures';
+
+/**
+ * Recover from a login redirect that some parallel-load test runs hit when
+ * /auth/refresh races against itself. Navigates to the target URL up to N
+ * times; after each, waits for the named selector OR resets via a reload.
+ */
+async function gotoStableForm(
+  page: Page,
+  url: string,
+  anchorSelector: string,
+  attempts = 3,
+): Promise<void> {
+  for (let i = 0; i < attempts; i++) {
+    await page.goto(url);
+    await page.waitForLoadState('networkidle');
+    if (!page.url().includes('/login')) {
+      try {
+        await page.locator(anchorSelector).waitFor({ state: 'visible', timeout: 10_000 });
+        return;
+      } catch {
+        // fall through to retry
+      }
+    }
+    await page.waitForTimeout(1000);
+  }
+  // Last-resort: caller will see the next assertion fail with a clean reason
+}
 
 /**
  * Users Module — Playwright E2E Tests
@@ -31,12 +58,12 @@ test.describe('Users Module', () => {
 
     test('displays users table with columns', async ({ adminPage }) => {
       await adminPage.goto('/users');
-      await adminPage.waitForLoadState('domcontentloaded');
+      await adminPage.waitForLoadState('networkidle');
       // If auth refresh was rate-limited (429), page may redirect to /login. Retry once.
       if (adminPage.url().includes('/login')) {
         await adminPage.waitForTimeout(1500);
         await adminPage.goto('/users');
-        await adminPage.waitForLoadState('domcontentloaded');
+        await adminPage.waitForLoadState('networkidle');
       }
       await expect(adminPage.getByRole('heading', { name: /user management/i })).toBeVisible({ timeout: 30_000 });
       // Table headers
@@ -50,7 +77,7 @@ test.describe('Users Module', () => {
 
     test('shows status badges for active/inactive users', async ({ adminPage }) => {
       await adminPage.goto('/users');
-      await adminPage.waitForLoadState('domcontentloaded');
+      await adminPage.waitForLoadState('networkidle');
       // Look for status badges
       const statusBadges = adminPage.locator('[class*="badge"]').or(adminPage.locator('[class*="status"]'));
       if ((await statusBadges.count()) > 0) {
@@ -61,25 +88,25 @@ test.describe('Users Module', () => {
 
     test('admin sees "New User" button', async ({ adminPage }) => {
       await adminPage.goto('/users');
-      await adminPage.waitForLoadState('domcontentloaded');
+      await adminPage.waitForLoadState('networkidle');
       await expect(adminPage.getByRole('heading', { name: /user management/i })).toBeVisible({ timeout: 30_000 });
       await expect(adminPage.getByRole('link', { name: /new user/i })).toBeVisible({ timeout: 15_000 });
     });
 
     test('pagination works', async ({ adminPage }) => {
       await adminPage.goto('/users');
-      await adminPage.waitForLoadState('domcontentloaded');
+      await adminPage.waitForLoadState('networkidle');
       // If pagination exists, test it
       const nextButton = adminPage.getByRole('button', { name: /next/i });
       if (await nextButton.isVisible() && await nextButton.isEnabled()) {
         await nextButton.click();
-        await adminPage.waitForLoadState('domcontentloaded');
+        await adminPage.waitForLoadState('networkidle');
       }
     });
 
     test('edit link navigates to edit page', async ({ adminPage }) => {
       await adminPage.goto('/users');
-      await adminPage.waitForLoadState('domcontentloaded');
+      await adminPage.waitForLoadState('networkidle');
       const editButton = adminPage.getByRole('link', { name: /edit/i }).first();
       if (await editButton.isVisible()) {
         await editButton.click();
@@ -91,7 +118,7 @@ test.describe('Users Module', () => {
   test.describe('Create User Form', () => {
     test('navigates to create user page', async ({ adminPage }) => {
       await adminPage.goto('/users');
-      await adminPage.waitForLoadState('domcontentloaded');
+      await adminPage.waitForLoadState('networkidle');
       await expect(adminPage.getByRole('heading', { name: /user management/i })).toBeVisible({ timeout: 30_000 });
       await adminPage.getByRole('link', { name: /new user/i }).click();
       await adminPage.waitForURL('**/users/new', { timeout: 15_000 });
@@ -100,11 +127,11 @@ test.describe('Users Module', () => {
 
     test('form has all required fields', async ({ adminPage }) => {
       await adminPage.goto('/users/new');
-      await adminPage.waitForLoadState('domcontentloaded');
+      await adminPage.waitForLoadState('networkidle');
       if (adminPage.url().includes('/login')) {
         await adminPage.waitForTimeout(1500);
         await adminPage.goto('/users/new');
-        await adminPage.waitForLoadState('domcontentloaded');
+        await adminPage.waitForLoadState('networkidle');
       }
       // Wait for form to load
       await expect(adminPage.getByRole('heading', { name: /create user/i })).toBeVisible({ timeout: 30_000 });
@@ -118,11 +145,11 @@ test.describe('Users Module', () => {
 
     test('role dropdown has all 7 roles', async ({ adminPage }) => {
       await adminPage.goto('/users/new');
-      await adminPage.waitForLoadState('domcontentloaded');
+      await adminPage.waitForLoadState('networkidle');
       if (adminPage.url().includes('/login')) {
         await adminPage.waitForTimeout(1500);
         await adminPage.goto('/users/new');
-        await adminPage.waitForLoadState('domcontentloaded');
+        await adminPage.waitForLoadState('networkidle');
       }
       const roleSelect = adminPage.locator('select').first();
       if (await roleSelect.isVisible()) {
@@ -133,15 +160,7 @@ test.describe('Users Module', () => {
     });
 
     test('validates username is required', async ({ adminPage }) => {
-      await adminPage.goto('/users/new');
-      await adminPage.waitForLoadState('domcontentloaded');
-      if (adminPage.url().includes('/login')) {
-        await adminPage.waitForTimeout(1500);
-        await adminPage.goto('/users/new');
-        await adminPage.waitForLoadState('domcontentloaded');
-      }
-      // Wait for form to load
-      await expect(adminPage.locator('input[name="username"]')).toBeVisible({ timeout: 30_000 });
+      await gotoStableForm(adminPage, '/users/new', 'input[name="username"]');
       // Fill other fields but not username (use name attribute since labels lack htmlFor)
       await adminPage.locator('input[name="fullName"]').fill('Test User');
       await adminPage.locator('input[name="mobile"]').fill('9876543210');
@@ -155,15 +174,7 @@ test.describe('Users Module', () => {
     });
 
     test('validates username minimum length', async ({ adminPage }) => {
-      await adminPage.goto('/users/new');
-      await adminPage.waitForLoadState('domcontentloaded');
-      if (adminPage.url().includes('/login')) {
-        await adminPage.waitForTimeout(1500);
-        await adminPage.goto('/users/new');
-        await adminPage.waitForLoadState('domcontentloaded');
-      }
-      // Wait for form to load
-      await expect(adminPage.locator('input[name="username"]')).toBeVisible({ timeout: 30_000 });
+      await gotoStableForm(adminPage, '/users/new', 'input[name="username"]');
       // Fill username with only 2 characters (use name attribute since labels lack htmlFor)
       await adminPage.locator('input[name="username"]').fill('ab');
       await adminPage.locator('input[name="fullName"]').fill('Test User');
@@ -180,15 +191,7 @@ test.describe('Users Module', () => {
     });
 
     test('validates password strength - minimum 8 characters', async ({ adminPage }) => {
-      await adminPage.goto('/users/new');
-      await adminPage.waitForLoadState('domcontentloaded');
-      if (adminPage.url().includes('/login')) {
-        await adminPage.waitForTimeout(1500);
-        await adminPage.goto('/users/new');
-        await adminPage.waitForLoadState('domcontentloaded');
-      }
-      // Wait for form to load
-      await expect(adminPage.locator('input[name="username"]')).toBeVisible({ timeout: 30_000 });
+      await gotoStableForm(adminPage, '/users/new', 'input[name="username"]');
       await adminPage.locator('input[name="username"]').fill('testuser');
       await adminPage.locator('input[name="fullName"]').fill('Test User');
       await adminPage.locator('input[name="mobile"]').fill('9876543210');
@@ -201,15 +204,7 @@ test.describe('Users Module', () => {
     });
 
     test('validates password strength - requires uppercase', async ({ adminPage }) => {
-      await adminPage.goto('/users/new');
-      await adminPage.waitForLoadState('domcontentloaded');
-      if (adminPage.url().includes('/login')) {
-        await adminPage.waitForTimeout(1500);
-        await adminPage.goto('/users/new');
-        await adminPage.waitForLoadState('domcontentloaded');
-      }
-      // Wait for form to load
-      await expect(adminPage.locator('input[name="username"]')).toBeVisible({ timeout: 30_000 });
+      await gotoStableForm(adminPage, '/users/new', 'input[name="username"]');
       await adminPage.locator('input[name="username"]').fill('testuser');
       await adminPage.locator('input[name="fullName"]').fill('Test User');
       await adminPage.locator('input[name="mobile"]').fill('9876543210');
@@ -223,12 +218,12 @@ test.describe('Users Module', () => {
 
     test('validates password strength - requires digit', async ({ adminPage }) => {
       await adminPage.goto('/users/new');
-      await adminPage.waitForLoadState('domcontentloaded');
+      await adminPage.waitForLoadState('networkidle');
       // If auth refresh was rate-limited (429), page may redirect to /login. Retry once.
       if (adminPage.url().includes('/login')) {
         await adminPage.waitForTimeout(1500);
         await adminPage.goto('/users/new');
-        await adminPage.waitForLoadState('domcontentloaded');
+        await adminPage.waitForLoadState('networkidle');
       }
       // Wait for form to load
       await expect(adminPage.locator('input[name="username"]')).toBeVisible({ timeout: 30_000 });
@@ -244,15 +239,7 @@ test.describe('Users Module', () => {
     });
 
     test('validates role is required', async ({ adminPage }) => {
-      await adminPage.goto('/users/new');
-      await adminPage.waitForLoadState('domcontentloaded');
-      if (adminPage.url().includes('/login')) {
-        await adminPage.waitForTimeout(1500);
-        await adminPage.goto('/users/new');
-        await adminPage.waitForLoadState('domcontentloaded');
-      }
-      // Wait for form to load
-      await expect(adminPage.locator('input[name="username"]')).toBeVisible({ timeout: 30_000 });
+      await gotoStableForm(adminPage, '/users/new', 'input[name="username"]');
       await adminPage.locator('input[name="username"]').fill('testuser');
       await adminPage.locator('input[name="fullName"]').fill('Test User');
       await adminPage.locator('input[name="mobile"]').fill('9876543210');
@@ -266,15 +253,7 @@ test.describe('Users Module', () => {
     });
 
     test('mobile field accepts only 10 digits', async ({ adminPage }) => {
-      await adminPage.goto('/users/new');
-      await adminPage.waitForLoadState('domcontentloaded');
-      if (adminPage.url().includes('/login')) {
-        await adminPage.waitForTimeout(1500);
-        await adminPage.goto('/users/new');
-        await adminPage.waitForLoadState('domcontentloaded');
-      }
-      // Wait for form to load
-      await expect(adminPage.locator('input[name="username"]')).toBeVisible({ timeout: 30_000 });
+      await gotoStableForm(adminPage, '/users/new', 'input[name="username"]');
       await adminPage.locator('input[name="mobile"]').fill('123456789'); // Only 9 digits
       await adminPage.locator('input[name="username"]').fill('testuser');
       await adminPage.locator('input[name="fullName"]').fill('Test User');
@@ -291,7 +270,7 @@ test.describe('Users Module', () => {
   test.describe('Edit User Form', () => {
     test('loads with pre-populated data', async ({ adminPage }) => {
       await adminPage.goto('/users');
-      await adminPage.waitForLoadState('domcontentloaded');
+      await adminPage.waitForLoadState('networkidle');
       // Wait for page to load
       await expect(adminPage.getByRole('heading', { name: /user management/i })).toBeVisible({ timeout: 30_000 });
       const editLink = adminPage.getByRole('link', { name: /edit/i }).first();
@@ -308,7 +287,7 @@ test.describe('Users Module', () => {
 
     test('username field is disabled', async ({ adminPage }) => {
       await adminPage.goto('/users');
-      await adminPage.waitForLoadState('domcontentloaded');
+      await adminPage.waitForLoadState('networkidle');
       // Wait for page to load
       await expect(adminPage.getByRole('heading', { name: /user management/i })).toBeVisible({ timeout: 30_000 });
       const editLink = adminPage.getByRole('link', { name: /edit/i }).first();
@@ -325,7 +304,7 @@ test.describe('Users Module', () => {
 
     test('has Active checkbox', async ({ adminPage }) => {
       await adminPage.goto('/users');
-      await adminPage.waitForLoadState('domcontentloaded');
+      await adminPage.waitForLoadState('networkidle');
       // Wait for page to load
       await expect(adminPage.getByRole('heading', { name: /user management/i })).toBeVisible({ timeout: 30_000 });
       const editLink = adminPage.getByRole('link', { name: /edit/i }).first();
@@ -343,7 +322,7 @@ test.describe('Users Module', () => {
 
     test('save changes button works', async ({ adminPage }) => {
       await adminPage.goto('/users');
-      await adminPage.waitForLoadState('domcontentloaded');
+      await adminPage.waitForLoadState('networkidle');
       // Wait for page to load
       await expect(adminPage.getByRole('heading', { name: /user management/i })).toBeVisible({ timeout: 30_000 });
       const editLink = adminPage.getByRole('link', { name: /edit/i }).first();
