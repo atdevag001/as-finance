@@ -21,7 +21,9 @@ import {
   PermissionGate,
   ConfirmDialog,
   ReversalDialog,
+  AccessDenied,
 } from '@/components/shared';
+import { hasPermission } from '@/lib/permissions';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -75,6 +77,24 @@ interface StatusTransition {
 }
 
 export default function LoanDetailPage({ params }: { params: { id: string } }) {
+  const { user, isLoading: isAuthLoading } = useAuth();
+  const role = user?.role ?? '';
+
+  if (isAuthLoading) {
+    return (
+      <div className="flex justify-center py-8">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
+  if (!hasPermission(role, 'loan.read')) {
+    return <AccessDenied />;
+  }
+
+  return <LoanDetailPageContent params={params} />;
+}
+
+function LoanDetailPageContent({ params }: { params: { id: string } }) {
   const { id } = params;
   const { data: loan, isLoading, error } = useLoan(id);
   const { data: collectionsData } = useCollections({ loanId: id });

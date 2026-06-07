@@ -19,9 +19,16 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 export default function ReceiptViewPage({ params }: { params: { id: string } }) {
-  const { user } = useAuth();
+  const { user, isLoading: isAuthLoading } = useAuth();
   const role = user?.role ?? '';
 
+  if (isAuthLoading) {
+    return (
+      <div className="flex justify-center py-8">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
   if (!hasPermission(role, 'receipt.read')) {
     return <AccessDenied />;
   }

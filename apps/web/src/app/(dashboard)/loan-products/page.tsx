@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Plus } from 'lucide-react';
 import { useLoanProducts, useDeactivateLoanProduct, type LoanProduct } from '@/hooks/useLoanProducts';
 import { useToast } from '@/providers/toast-provider';
+import { useAuth } from '@/providers/auth-provider';
 import {
   StatusBadge,
   MoneyDisplay,
@@ -13,11 +14,31 @@ import {
   PaginationControls,
   PermissionGate,
   ConfirmDialog,
+  AccessDenied,
 } from '@/components/shared';
 import { Button } from '@/components/ui/button';
 import { calculatePeriodicRate } from '@/lib/utils';
+import { hasPermission } from '@/lib/permissions';
 
 export default function LoanProductsPage() {
+  const { user, isLoading: isAuthLoading } = useAuth();
+  const role = user?.role ?? '';
+
+  if (isAuthLoading) {
+    return (
+      <div className="flex justify-center py-8">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
+  if (!hasPermission(role, 'loan_product.read')) {
+    return <AccessDenied />;
+  }
+
+  return <LoanProductsPageContent />;
+}
+
+function LoanProductsPageContent() {
   const [page, setPage] = useState(1);
   const { data, isLoading, error } = useLoanProducts({ page });
   const deactivate = useDeactivateLoanProduct();

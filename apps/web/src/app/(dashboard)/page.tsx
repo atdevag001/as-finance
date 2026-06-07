@@ -4,11 +4,30 @@ import Link from 'next/link';
 import { Banknote, Search, Users } from 'lucide-react';
 import { useDashboard } from '@/hooks/useDashboard';
 import { useAuth } from '@/providers/auth-provider';
-import { MoneyDisplay, LoadingSpinner, ErrorMessage } from '@/components/shared';
+import { AccessDenied, MoneyDisplay, LoadingSpinner, ErrorMessage } from '@/components/shared';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { hasPermission } from '@/lib/permissions';
 
 export default function DashboardPage() {
+  const { user, isLoading: isAuthLoading } = useAuth();
+  const role = user?.role ?? '';
+
+  if (isAuthLoading) {
+    return (
+      <div className="flex justify-center py-8">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
+  if (!hasPermission(role, 'dashboard.read')) {
+    return <AccessDenied />;
+  }
+
+  return <DashboardPageContent />;
+}
+
+function DashboardPageContent() {
   const { user } = useAuth();
   const { data, isLoading, error } = useDashboard();
 

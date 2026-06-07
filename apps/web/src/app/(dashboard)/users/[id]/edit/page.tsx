@@ -40,7 +40,7 @@ export default function EditUserPage() {
   const router = useRouter();
   const params = useParams();
   const userId = params['id'] as string;
-  const { user: authUser } = useAuth();
+  const { user: authUser, isLoading: isAuthLoading } = useAuth();
   const authRole = authUser?.role ?? '';
   const { data: userData, isLoading, error: fetchError } = useUser(userId);
   const updateUser = useUpdateUser();
@@ -70,6 +70,13 @@ export default function EditUserPage() {
     }
   }, [userData, reset]);
 
+  if (isAuthLoading) {
+    return (
+      <div className="flex justify-center py-8">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
   if (!hasPermission(authRole, 'user.update')) {
     return <AccessDenied />;
   }

@@ -19,9 +19,16 @@ import { PERMISSIONS } from '@as-finance/shared/constants';
 const HANDOVER_VERIFIER_ROLES = new Set<string>(PERMISSIONS['handover.verify'] as readonly string[]);
 
 export default function HandoversPage() {
-  const { user } = useAuth();
+  const { user, isLoading: isAuthLoading } = useAuth();
   const role = user?.role ?? '';
 
+  if (isAuthLoading) {
+    return (
+      <div className="flex justify-center py-8">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
   // Collection officers initiate handovers; verifiers (accountants/managers) approve them — admit either.
   if (!hasPermission(role, 'handover.create') && !hasPermission(role, 'accounting.manage_cashbook')) {
     return <AccessDenied />;

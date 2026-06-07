@@ -13,9 +13,16 @@ import { useBalanceSheet } from '@/hooks/useAccounting';
 import { todayIST } from '@/lib/date-utils';
 
 export default function BalanceSheetPage() {
-  const { user } = useAuth();
+  const { user, isLoading: isAuthLoading } = useAuth();
   const role = user?.role ?? '';
 
+  if (isAuthLoading) {
+    return (
+      <div className="flex justify-center py-8">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
   if (!hasPermission(role, 'accounting.read')) {
     return <AccessDenied />;
   }

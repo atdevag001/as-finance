@@ -11,11 +11,32 @@ import {
   PaginationControls,
   PermissionGate,
   MobileCardList,
+  AccessDenied,
   type MobileCardItem,
 } from '@/components/shared';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/providers/auth-provider';
+import { hasPermission } from '@/lib/permissions';
 
 export default function GroupsPage() {
+  const { user, isLoading: isAuthLoading } = useAuth();
+  const role = user?.role ?? '';
+
+  if (isAuthLoading) {
+    return (
+      <div className="flex justify-center py-8">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
+  if (!hasPermission(role, 'group.read')) {
+    return <AccessDenied />;
+  }
+
+  return <GroupsPageContent />;
+}
+
+function GroupsPageContent() {
   const [page, setPage] = useState(1);
   const { data, isLoading, error } = useGroups({ page });
 

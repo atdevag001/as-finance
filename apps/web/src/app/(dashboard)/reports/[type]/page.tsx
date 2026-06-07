@@ -48,9 +48,16 @@ const REPORT_LABELS: Record<string, string> = {
 const MONEY_COLUMN_PATTERNS = /paise|amount|balance|total|outstanding|principal|interest|penalty|inflow|outflow/i;
 
 export default function ReportDetailPage() {
-  const { user } = useAuth();
+  const { user, isLoading: isAuthLoading } = useAuth();
   const role = user?.role ?? '';
 
+  if (isAuthLoading) {
+    return (
+      <div className="flex justify-center py-8">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
   if (!hasPermission(role, 'report.read')) {
     return <AccessDenied />;
   }

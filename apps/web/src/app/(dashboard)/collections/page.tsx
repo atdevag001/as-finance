@@ -15,13 +15,34 @@ import {
   PermissionGate,
   ReversalDialog,
   MobileCardList,
+  AccessDenied,
   type MobileCardItem,
 } from '@/components/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useAuth } from '@/providers/auth-provider';
+import { hasPermission } from '@/lib/permissions';
 
 export default function CollectionsPage() {
+  const { user, isLoading: isAuthLoading } = useAuth();
+  const role = user?.role ?? '';
+
+  if (isAuthLoading) {
+    return (
+      <div className="flex justify-center py-8">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
+  if (!hasPermission(role, 'collection.read')) {
+    return <AccessDenied />;
+  }
+
+  return <CollectionsPageContent />;
+}
+
+function CollectionsPageContent() {
   const [page, setPage] = useState(1);
   const [startDate, setStartDate] = useState(() => todayIST());
   const [endDate, setEndDate] = useState(() => todayIST());

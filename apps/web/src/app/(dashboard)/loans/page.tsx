@@ -4,9 +4,11 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { Plus, X } from 'lucide-react';
 import { useLoans } from '@/hooks/useLoans';
-import { StatusBadge, MoneyDisplay, LoadingSpinner, ErrorMessage, PaginationControls, PermissionGate, MobileCardList, type MobileCardItem } from '@/components/shared';
+import { AccessDenied, StatusBadge, MoneyDisplay, LoadingSpinner, ErrorMessage, PaginationControls, PermissionGate, MobileCardList, type MobileCardItem } from '@/components/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useAuth } from '@/providers/auth-provider';
+import { hasPermission } from '@/lib/permissions';
 
 const STATUS_FILTERS = [
   { label: 'All', value: '' },
@@ -24,6 +26,24 @@ const STATUS_FILTERS = [
 ] as const;
 
 export default function LoansPage() {
+  const { user, isLoading: isAuthLoading } = useAuth();
+  const role = user?.role ?? '';
+
+  if (isAuthLoading) {
+    return (
+      <div className="flex justify-center py-8">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
+  if (!hasPermission(role, 'loan.read')) {
+    return <AccessDenied />;
+  }
+
+  return <LoansPageContent />;
+}
+
+function LoansPageContent() {
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState('');
   const [aadhaar, setAadhaar] = useState('');

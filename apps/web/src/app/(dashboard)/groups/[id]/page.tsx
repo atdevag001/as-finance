@@ -7,6 +7,7 @@ import { useGroup, useAddGroupMember, usePostGroupCollection, type GroupMember }
 import { useCustomers, type Customer } from '@/hooks/useCustomers';
 import { useToast } from '@/providers/toast-provider';
 import {
+  AccessDenied,
   StatusBadge,
   MoneyDisplay,
   LoadingSpinner,
@@ -20,8 +21,28 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { todayIST } from '@/lib/date-utils';
+import { useAuth } from '@/providers/auth-provider';
+import { hasPermission } from '@/lib/permissions';
 
 export default function GroupDetailPage({ params }: { params: { id: string } }) {
+  const { user, isLoading: isAuthLoading } = useAuth();
+  const role = user?.role ?? '';
+
+  if (isAuthLoading) {
+    return (
+      <div className="flex justify-center py-8">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
+  if (!hasPermission(role, 'group.read')) {
+    return <AccessDenied />;
+  }
+
+  return <GroupDetailPageContent params={params} />;
+}
+
+function GroupDetailPageContent({ params }: { params: { id: string } }) {
   const { id } = params;
   const { data: group, isLoading, error } = useGroup(id);
   const addMember = useAddGroupMember();

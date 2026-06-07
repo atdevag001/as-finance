@@ -19,9 +19,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { calculatePeriodicRate } from '@/lib/utils';
 
 export default function EditLoanProductPage() {
-  const { user } = useAuth();
+  const { user, isLoading: isAuthLoading } = useAuth();
   const role = user?.role ?? '';
 
+  if (isAuthLoading) {
+    return (
+      <div className="flex justify-center py-8">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
   if (!hasPermission(role, 'loan_product.update')) {
     return <AccessDenied />;
   }

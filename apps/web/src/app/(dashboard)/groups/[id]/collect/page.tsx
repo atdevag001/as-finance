@@ -6,17 +6,37 @@ import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
-import { MoneyDisplay, LoadingSpinner, ErrorMessage } from '@/components/shared';
+import { AccessDenied, MoneyDisplay, LoadingSpinner, ErrorMessage } from '@/components/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { todayIST } from '@/lib/date-utils';
+import { useAuth } from '@/providers/auth-provider';
+import { hasPermission } from '@/lib/permissions';
 
 interface GroupMemberLoan { id: string; loan_number: string; outstanding_paise: number | null; }
 interface GroupMember { id: string; customer_name: string; loan_id?: string; loan_number?: string; outstanding_paise?: number; loans?: GroupMemberLoan[]; }
 interface GroupDetail { id: string; name: string; members: GroupMember[]; }
 
 export default function GroupCollectPage({ params }: { params: Promise<{ id: string }> }) {
+  const { user, isLoading: isAuthLoading } = useAuth();
+  const role = user?.role ?? '';
+
+  if (isAuthLoading) {
+    return (
+      <div className="flex justify-center py-8">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
+  if (!hasPermission(role, 'group.collect')) {
+    return <AccessDenied />;
+  }
+
+  return <GroupCollectPageContent params={params} />;
+}
+
+function GroupCollectPageContent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
   const qc = useQueryClient();

@@ -12,8 +12,10 @@ import { useLoanProductsList } from '@/hooks/useLoanProducts';
 import { useCustomers, type Customer } from '@/hooks/useCustomers';
 import { useGroupsList } from '@/hooks/useGroups';
 import { useToast } from '@/providers/toast-provider';
+import { useAuth } from '@/providers/auth-provider';
 import { ApiClientError } from '@/lib/api-client';
-import { ErrorMessage } from '@/components/shared';
+import { hasPermission } from '@/lib/permissions';
+import { AccessDenied, ErrorMessage, LoadingSpinner } from '@/components/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -44,6 +46,24 @@ const formSchema = z.object({
 type FormData = z.infer<typeof formSchema>;
 
 export default function NewLoanPage() {
+  const { user, isLoading: isAuthLoading } = useAuth();
+  const role = user?.role ?? '';
+
+  if (isAuthLoading) {
+    return (
+      <div className="flex justify-center py-8">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
+  if (!hasPermission(role, 'loan.create')) {
+    return <AccessDenied />;
+  }
+
+  return <NewLoanPageContent />;
+}
+
+function NewLoanPageContent() {
   const router = useRouter();
   const createLoan = useCreateLoan();
   const { showToast } = useToast();

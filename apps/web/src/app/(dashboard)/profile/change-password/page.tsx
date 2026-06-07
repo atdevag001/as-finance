@@ -7,13 +7,28 @@ import { ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { apiClient, ApiClientError } from '@/lib/api-client';
 import { useAuth } from '@/providers/auth-provider';
 import { useToast } from '@/providers/toast-provider';
-import { ErrorMessage } from '@/components/shared';
+import { ErrorMessage, LoadingSpinner } from '@/components/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 export default function ChangePasswordPage() {
+  const { isLoading: isAuthLoading } = useAuth();
+
+  if (isAuthLoading) {
+    return (
+      <div className="flex justify-center py-8">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
+  // No permission gate — any authenticated user can use this page. Middleware already enforced login.
+
+  return <ChangePasswordPageContent />;
+}
+
+function ChangePasswordPageContent() {
   const { showToast } = useToast();
   const { logout } = useAuth();
   const router = useRouter();

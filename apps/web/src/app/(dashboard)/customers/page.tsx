@@ -4,9 +4,11 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Plus, Search } from 'lucide-react';
 import { useCustomers } from '@/hooks/useCustomers';
-import { StatusBadge, LoadingSpinner, ErrorMessage, PaginationControls, PermissionGate, MobileCardList, TappablePhone, type MobileCardItem } from '@/components/shared';
+import { AccessDenied, StatusBadge, LoadingSpinner, ErrorMessage, PaginationControls, PermissionGate, MobileCardList, TappablePhone, type MobileCardItem } from '@/components/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useAuth } from '@/providers/auth-provider';
+import { hasPermission } from '@/lib/permissions';
 
 // 'inactive' is a valid DTO value but no service ever writes it — hide until a deactivation flow exists.
 const STATUS_OPTIONS = [
@@ -16,6 +18,9 @@ const STATUS_OPTIONS = [
 ] as const;
 
 export default function CustomersPage() {
+  const { user, isLoading: isAuthLoading } = useAuth();
+  const role = user?.role ?? '';
+
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -40,6 +45,17 @@ export default function CustomersPage() {
     setStatus(newStatus);
     setPage(1);
   };
+
+  if (isAuthLoading) {
+    return (
+      <div className="flex justify-center py-8">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
+  if (!hasPermission(role, 'customer.read')) {
+    return <AccessDenied />;
+  }
 
   return (
     <div className="space-y-4">

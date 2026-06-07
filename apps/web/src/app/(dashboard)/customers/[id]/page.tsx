@@ -4,7 +4,9 @@ import { useState, useRef } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Upload, ShieldBan, ShieldCheck, Plus, Pencil, Eye, ExternalLink, Trash2 } from 'lucide-react';
 import { useCustomer, useUpdateCustomer, useAddFamilyMember, useAddGuarantor } from '@/hooks/useCustomers';
-import { StatusBadge, MoneyDisplay, LoadingSpinner, ErrorMessage, PermissionGate, ConfirmDialog, DateDisplay, TappablePhone } from '@/components/shared';
+import { StatusBadge, MoneyDisplay, LoadingSpinner, ErrorMessage, PermissionGate, ConfirmDialog, DateDisplay, TappablePhone, AccessDenied } from '@/components/shared';
+import { useAuth } from '@/providers/auth-provider';
+import { hasPermission } from '@/lib/permissions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -31,6 +33,24 @@ interface Document {
 }
 
 export default function CustomerDetailPage({ params }: { params: { id: string } }) {
+  const { user, isLoading: isAuthLoading } = useAuth();
+  const role = user?.role ?? '';
+
+  if (isAuthLoading) {
+    return (
+      <div className="flex justify-center py-8">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
+  if (!hasPermission(role, 'customer.read')) {
+    return <AccessDenied />;
+  }
+
+  return <CustomerDetailPageContent params={params} />;
+}
+
+function CustomerDetailPageContent({ params }: { params: { id: string } }) {
   const { id } = params;
   const { data: customer, isLoading, error } = useCustomer(id);
   const { showToast } = useToast();

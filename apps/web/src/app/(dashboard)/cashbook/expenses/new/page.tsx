@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
-import { AccessDenied, ConfirmDialog } from '@/components/shared';
+import { AccessDenied, ConfirmDialog, LoadingSpinner } from '@/components/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/providers/auth-provider';
@@ -18,9 +18,16 @@ import { EXPENSE_CATEGORIES } from '@as-finance/shared';
 const PAYMENT_MODES = ['cash', 'bank_transfer', 'online'] as const;
 
 export default function NewExpensePage() {
-  const { user } = useAuth();
+  const { user, isLoading: isAuthLoading } = useAuth();
   const role = user?.role ?? '';
 
+  if (isAuthLoading) {
+    return (
+      <div className="flex justify-center py-8">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
   if (!hasPermission(role, 'accounting.create_expense')) {
     return <AccessDenied />;
   }

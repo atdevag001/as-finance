@@ -13,7 +13,9 @@ import { createCustomerSchema } from '@as-finance/shared/validation';
 import { useCreateCustomer, type DuplicateWarning } from '@/hooks/useCustomers';
 import { useToast } from '@/providers/toast-provider';
 import { ApiClientError } from '@/lib/api-client';
-import { ErrorMessage } from '@/components/shared';
+import { AccessDenied, ErrorMessage, LoadingSpinner } from '@/components/shared';
+import { useAuth } from '@/providers/auth-provider';
+import { hasPermission } from '@/lib/permissions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -40,6 +42,24 @@ const formSchema = createCustomerSchema
 type FormData = z.infer<typeof formSchema>;
 
 export default function NewCustomerPage() {
+  const { user, isLoading: isAuthLoading } = useAuth();
+  const role = user?.role ?? '';
+
+  if (isAuthLoading) {
+    return (
+      <div className="flex justify-center py-8">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
+  if (!hasPermission(role, 'customer.create')) {
+    return <AccessDenied />;
+  }
+
+  return <NewCustomerPageContent />;
+}
+
+function NewCustomerPageContent() {
   const router = useRouter();
   const createCustomer = useCreateCustomer();
   const { showToast } = useToast();

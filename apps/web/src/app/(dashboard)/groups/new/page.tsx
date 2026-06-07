@@ -10,8 +10,10 @@ import { z } from 'zod';
 import { useCreateGroup } from '@/hooks/useGroups';
 import { useCustomers, type Customer } from '@/hooks/useCustomers';
 import { useToast } from '@/providers/toast-provider';
+import { useAuth } from '@/providers/auth-provider';
 import { ApiClientError } from '@/lib/api-client';
-import { ErrorMessage } from '@/components/shared';
+import { hasPermission } from '@/lib/permissions';
+import { AccessDenied, ErrorMessage, LoadingSpinner } from '@/components/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -37,6 +39,24 @@ const formSchema = z.object({
 type FormData = z.infer<typeof formSchema>;
 
 export default function NewGroupPage() {
+  const { user, isLoading: isAuthLoading } = useAuth();
+  const role = user?.role ?? '';
+
+  if (isAuthLoading) {
+    return (
+      <div className="flex justify-center py-8">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
+  if (!hasPermission(role, 'group.create')) {
+    return <AccessDenied />;
+  }
+
+  return <NewGroupPageContent />;
+}
+
+function NewGroupPageContent() {
   const router = useRouter();
   const createGroup = useCreateGroup();
   const { showToast } = useToast();

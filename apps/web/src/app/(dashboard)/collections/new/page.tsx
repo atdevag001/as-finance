@@ -8,12 +8,14 @@ import { apiClient, ApiClientError } from '@/lib/api-client';
 import { useLoans, type Loan } from '@/hooks/useLoans';
 import { useToast } from '@/providers/toast-provider';
 import { todayIST } from '@/lib/date-utils';
-import { ConfirmDialog, MoneyDisplay, ErrorMessage, LoadingSpinner } from '@/components/shared';
+import { AccessDenied, ConfirmDialog, MoneyDisplay, ErrorMessage, LoadingSpinner } from '@/components/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '@/providers/auth-provider';
+import { hasPermission } from '@/lib/permissions';
 
 type PaymentMode = 'cash' | 'bank_transfer' | 'online';
 
@@ -36,6 +38,24 @@ const PAYMENT_MODES: { value: PaymentMode; label: string; icon: typeof Banknote 
 ];
 
 export default function NewCollectionPage() {
+  const { user, isLoading: isAuthLoading } = useAuth();
+  const role = user?.role ?? '';
+
+  if (isAuthLoading) {
+    return (
+      <div className="flex justify-center py-8">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
+  if (!hasPermission(role, 'collection.create')) {
+    return <AccessDenied />;
+  }
+
+  return <NewCollectionPageContent />;
+}
+
+function NewCollectionPageContent() {
   const router = useRouter();
   const { showToast } = useToast();
   const queryClient = useQueryClient();

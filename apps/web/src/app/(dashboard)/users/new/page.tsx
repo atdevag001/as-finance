@@ -15,7 +15,7 @@ import { hasPermission } from '@/lib/permissions';
 import { useCreateUser } from '@/hooks/useUsers';
 import { useToast } from '@/providers/toast-provider';
 import { ApiClientError } from '@/lib/api-client';
-import { AccessDenied, ErrorMessage } from '@/components/shared';
+import { AccessDenied, ErrorMessage, LoadingSpinner } from '@/components/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -38,9 +38,25 @@ const ROLE_OPTIONS = Object.values(UserRole).map((r) => ({
 }));
 
 export default function NewUserPage() {
-  const router = useRouter();
-  const { user } = useAuth();
+  const { user, isLoading: isAuthLoading } = useAuth();
   const role = user?.role ?? '';
+
+  if (isAuthLoading) {
+    return (
+      <div className="flex justify-center py-8">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
+  if (!hasPermission(role, 'user.create')) {
+    return <AccessDenied />;
+  }
+
+  return <NewUserPageContent />;
+}
+
+function NewUserPageContent() {
+  const router = useRouter();
   const createUser = useCreateUser();
   const { showToast } = useToast();
   const [serverError, setServerError] = useState<string | null>(null);
@@ -52,10 +68,6 @@ export default function NewUserPage() {
   } = useForm<FormData>({
     resolver: zodResolver(createUserFormSchema),
   });
-
-  if (!hasPermission(role, 'user.create')) {
-    return <AccessDenied />;
-  }
 
   async function onSubmit(data: FormData) {
     setServerError(null);

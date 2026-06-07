@@ -6,15 +6,35 @@ import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { useCreateLoanProduct } from '@/hooks/useLoanProducts';
 import { useToast } from '@/providers/toast-provider';
-import { ErrorMessage } from '@/components/shared';
+import { useAuth } from '@/providers/auth-provider';
+import { AccessDenied, ErrorMessage, LoadingSpinner } from '@/components/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { calculatePeriodicRate } from '@/lib/utils';
+import { hasPermission } from '@/lib/permissions';
 
 export default function NewLoanProductPage() {
+  const { user, isLoading: isAuthLoading } = useAuth();
+  const role = user?.role ?? '';
+
+  if (isAuthLoading) {
+    return (
+      <div className="flex justify-center py-8">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
+  if (!hasPermission(role, 'loan_product.create')) {
+    return <AccessDenied />;
+  }
+
+  return <NewLoanProductPageContent />;
+}
+
+function NewLoanProductPageContent() {
   const router = useRouter();
   const create = useCreateLoanProduct();
   const { showToast } = useToast();
