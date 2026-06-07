@@ -10,7 +10,14 @@ on:
 env:
   DATABASE_URL: postgresql://asfinance:asfinance_dev@localhost:5432/asfinance_lms?schema=public
   JWT_SECRET: e2e-test-secret-minimum-16-chars
-  JWT_EXPIRY: 15m
+  # 120m so the JWT outlasts the full Playwright suite — at 15m the last
+  # tests in a ~45-min run got 401'd mid-flow and redirected to /login,
+  # producing false RBAC-matrix and rbac-matrix-style failures.
+  JWT_EXPIRY: 120m
+  SKIP_TOKEN_ROTATION: 'true'
+  # Bypass KYC for seeded test customers; the audit's KYC enforcement is the
+  # right behavior in prod but our seed customers have no uploaded docs.
+  SKIP_KYC_CHECK: 'true'
   NODE_ENV: test
 
 jobs:

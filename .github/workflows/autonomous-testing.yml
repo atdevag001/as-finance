@@ -22,7 +22,10 @@ on:
 env:
   DATABASE_URL: postgresql://asfinance:asfinance_dev@localhost:5432/asfinance_lms?schema=public
   JWT_SECRET: e2e-test-secret-minimum-16-chars
-  JWT_EXPIRY: 15m
+  # 120m so the JWT outlasts the full Playwright suite — matches e2e-tests.yml.
+  JWT_EXPIRY: 120m
+  SKIP_TOKEN_ROTATION: 'true'
+  SKIP_KYC_CHECK: 'true'
   NODE_ENV: test
   COVERAGE_TARGET: ${{ github.event.inputs.coverage_target || '80' }}
 

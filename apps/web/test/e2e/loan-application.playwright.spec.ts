@@ -138,8 +138,10 @@ test.describe('Loan Application', () => {
       await fieldOfficerPage.reload();
       await fieldOfficerPage.waitForLoadState('domcontentloaded');
 
-      // Verify the status badge now shows "submitted"
-      await expect(fieldOfficerPage.locator('span', { hasText: /^submitted$/i })).toBeVisible({ timeout: 30_000 });
+      // Verify the status badge now shows "submitted".
+      // .first() because the loan-detail page can render the word in
+      // multiple places (badge + status-history rows) — strict mode otherwise.
+      await expect(fieldOfficerPage.locator('span', { hasText: /^submitted$/i }).first()).toBeVisible({ timeout: 30_000 });
     }
   });
 
