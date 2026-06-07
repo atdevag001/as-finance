@@ -40,8 +40,16 @@ const STATUS_OPTIONS = [
 ];
 
 export default function NotificationsPage() {
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
   const role = user?.role ?? '';
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-8">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
 
   if (!hasPermission(role, 'notification.read')) {
     return <AccessDenied />;

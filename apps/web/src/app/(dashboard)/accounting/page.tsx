@@ -12,8 +12,16 @@ import { useChartOfAccounts, useDaybook } from '@/hooks/useAccounting';
 import { todayIST, formatDateIST } from '@/lib/date-utils';
 
 export default function AccountingPage() {
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
   const role = user?.role ?? '';
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-8">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
 
   if (!hasPermission(role, 'accounting.read')) {
     return <AccessDenied />;

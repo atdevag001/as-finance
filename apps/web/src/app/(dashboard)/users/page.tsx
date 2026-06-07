@@ -20,11 +20,19 @@ import {
 import { Button } from '@/components/ui/button';
 
 export default function UsersPage() {
-  const { user } = useAuth();
+  const { user, isLoading: isAuthLoading } = useAuth();
   const role = user?.role ?? '';
   const [page, setPage] = useState(1);
 
   const { data, isLoading, error } = useUsers({ page });
+
+  if (isAuthLoading) {
+    return (
+      <div className="flex justify-center py-8">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
 
   if (!hasPermission(role, 'user.read')) {
     return <AccessDenied />;

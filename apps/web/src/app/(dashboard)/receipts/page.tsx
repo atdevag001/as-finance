@@ -19,8 +19,16 @@ import { hasPermission } from '@/lib/permissions';
 import { useReceipts } from '@/hooks/useReceipts';
 
 export default function ReceiptsPage() {
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
   const role = user?.role ?? '';
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-8">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
 
   if (!hasPermission(role, 'receipt.read')) {
     return <AccessDenied />;

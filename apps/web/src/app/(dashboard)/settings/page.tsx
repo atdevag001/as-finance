@@ -33,8 +33,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Trash2, Plus } from 'lucide-react';
 
 export default function SettingsPage() {
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
   const role = user?.role ?? '';
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-8">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
 
   if (!hasPermission(role, 'settings.read')) {
     return <AccessDenied />;

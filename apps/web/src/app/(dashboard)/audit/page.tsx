@@ -34,8 +34,16 @@ const TARGET_ENTITIES = [
 const ALL = '__all__';
 
 export default function AuditPage() {
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
   const role = user?.role ?? '';
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-8">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
 
   if (!hasPermission(role, 'audit.read')) {
     return <AccessDenied />;

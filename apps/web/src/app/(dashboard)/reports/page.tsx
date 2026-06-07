@@ -20,7 +20,7 @@ import {
   User,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { AccessDenied } from '@/components/shared';
+import { AccessDenied, LoadingSpinner } from '@/components/shared';
 import { useAuth } from '@/providers/auth-provider';
 import { hasPermission } from '@/lib/permissions';
 
@@ -62,8 +62,16 @@ const REPORT_TYPES = [
 const CATEGORIES = ['Collections', 'Loans', 'Customers', 'Groups', 'Income', 'Accounting', 'Audit'] as const;
 
 export default function ReportsPage() {
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
   const role = user?.role ?? '';
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-8">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
 
   if (!hasPermission(role, 'report.read')) {
     return <AccessDenied />;

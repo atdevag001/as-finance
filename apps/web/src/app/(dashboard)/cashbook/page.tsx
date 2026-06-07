@@ -13,8 +13,16 @@ import { useDailySummary } from '@/hooks/useCashbook';
 import { todayIST } from '@/lib/date-utils';
 
 export default function CashbookPage() {
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
   const role = user?.role ?? '';
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-8">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
 
   if (!hasPermission(role, 'accounting.manage_cashbook')) {
     return <AccessDenied />;
