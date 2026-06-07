@@ -21,7 +21,24 @@ import { AuthorizationError } from '../../common/errors';
 const REFRESH_COOKIE_NAME = 'refresh_token';
 const ACCESS_COOKIE_NAME = 'access_token';
 const REFRESH_COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
-const ACCESS_COOKIE_MAX_AGE_MS = 15 * 60 * 1000; // 15 minutes
+
+/**
+ * Parse JWT_EXPIRY (e.g. '15m', '60m', '1h') into milliseconds so the
+ * cookie maxAge tracks the actual JWT TTL. Falls back to 15min if the
+ * env value is missing or unparseable. Without this, a JWT_EXPIRY=60m
+ * still left the browser stopping sending the cookie at the 15min
+ * hardcoded mark — visible only on long-running E2E suites.
+ */
+function parseJwtExpiryMs(): number {
+  const raw = (process.env['JWT_EXPIRY'] ?? '15m').trim();
+  const m = raw.match(/^(\d+)\s*([smhd])?$/i);
+  if (!m) return 15 * 60 * 1000;
+  const n = parseInt(m[1]!, 10);
+  const unit = (m[2] ?? 's').toLowerCase();
+  const mult: Record<string, number> = { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 };
+  return n * (mult[unit] ?? 1000);
+}
+const ACCESS_COOKIE_MAX_AGE_MS = parseJwtExpiryMs();
 
 function accessCookieOptions() {
   return {
