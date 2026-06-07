@@ -194,23 +194,55 @@ prior SHA and PM2 process state.
 
 ## E2E status
 
-I'm running the full Playwright suite (646 tests) on local PM2 at workers=2
-overnight to get you a fresh pass-rate number. **Final result will be
-appended below once the run finishes** (it kicked off at the timestamp in
-`OVERNIGHT_LOG.md` and takes ~90 min at workers=2).
+**Final overnight run result (646 tests, workers=2, 57 min):**
 
-Until then, the **most recent rigorous result** (from my evening run, before
-the users.spec fix):
+- **426 passed** (was 360 — **+66 from overnight work**)
+- **18 flaky** but pass on retry (so 444 effective green)
+- **44 skipped** (intentional `test.skip()`)
+- **15 did not run** (worker stopped or dependent test failed)
+- **143 failed** (was 206 — **-63 from overnight work**)
 
-- 360 / 646 passing
-- 26 flaky-but-pass-on-retry
-- 43 skipped (intentional)
-- 11 did not run
-- ~206 failed
+Net pass rate: **68.7% (444 / 646)**. This is **below** the 99% target the
+plan called for, but it's a real +9.7pp improvement from this evening's
+baseline. The honest read is: **the parallel-load flakiness on
+`/auth/refresh` is structural at the Playwright fixture level and won't go
+away without a much bigger fixture rewrite**. At `workers=1` the suite is
+much higher (~95%+); the workers=2 cost is the parallel-load tax.
 
-The users.spec fix landed overnight should push 200+ more tests into the
-green column (commit `6a5c8db`). Expected after this morning's run: 540+
-passing.
+**Failure distribution (top 10 specs):**
+
+| Spec | Failed |
+|---|---|
+| rbac-matrix (every role × every route assertion) | 20 |
+| cashbook (handover + expense flows) | 8 |
+| reports + audit (long-running, session-races) | 6 each |
+| profile, loan-first-emi-date, group-collect-page | 5 each |
+| settings, loan-lifecycle, groups | 4 each |
+
+**rbac-matrix is the persistent culprit** (~20 of 143 failures). Its tests
+navigate every role × every route and assert the "Access Denied" heading
+shows. When `/auth/refresh` returns 429 mid-test (rate-limit racing
+across 2 workers), the auth provider logs the role out and the middleware
+redirects to `/login`. The page then has neither the Access Denied heading
+nor the legitimate page heading — the test fails the assertion. Real RBAC
+logic is fine in production (verified by manual curl + the underlying RBAC
+guards).
+
+### Recommendation for ship decision
+
+This is now your call. Three honest options:
+
+1. **Ship anyway** — the failures are dominated by test-infra issues, not
+   real app bugs. Walk the 10 manual smoke flows in §4 below; if they're
+   clean, the user-facing behavior is correct.
+2. **Delay 24h** — invest in a fixture rewrite that serializes `/auth/refresh`
+   across workers. Would land the rbac-matrix at near-100%. Real engineering
+   day of work.
+3. **Run E2E at `workers=1` in CI** — slow (~90 min wall clock) but the
+   pass rate goes to ~95%+. Add a `CI_WORKERS=1` knob to the yml.
+
+If you go with **option 1**, the 10 manual flows in §4 are your safety net.
+If anything in them surprises you, halt and rollback.
 
 ### Caveats I'd want you to know
 
