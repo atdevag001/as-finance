@@ -237,7 +237,7 @@ async function postFormData<T>(
  * Fetch a binary file (blob) from the API.
  * Used for file downloads (PDF, Excel, etc.)
  */
-async function fetchBlob(path: string): Promise<Blob> {
+async function fetchBlob(path: string, skipRefresh = false): Promise<Blob> {
   const requestId = generateRequestId();
   const headers = new Headers();
   headers.set('x-request-id', requestId);
@@ -252,6 +252,16 @@ async function fetchBlob(path: string): Promise<Blob> {
     headers,
     credentials: 'include',
   });
+
+  // Mirror request()/postFormData(): silently refresh expired token so document
+  // View doesn't surface a 401 as a misleading "permission denied" to the user.
+  if (res.status === 401 && !skipRefresh) {
+    const newToken = await ensureValidToken();
+    if (newToken) {
+      return fetchBlob(path, true);
+    }
+    // Refresh failed — surface the 401
+  }
 
   if (!res.ok) {
     const errorBody = (await res.json().catch(() => ({

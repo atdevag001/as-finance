@@ -52,8 +52,21 @@ export default function NewLoanProductPage() {
       setError('Principal range is required.');
       return;
     }
+    const minP = parseFloat(formData.minPrincipal);
+    const maxP = parseFloat(formData.maxPrincipal);
+    // Catch inverted ranges here so the user sees inline feedback instead of a generic backend 400.
+    if (minP > maxP) {
+      setError('Min principal cannot be greater than max principal.');
+      return;
+    }
     if (!formData.minTenureMonths || !formData.maxTenureMonths) {
       setError('Tenure range is required.');
+      return;
+    }
+    const minT = parseInt(formData.minTenureMonths);
+    const maxT = parseInt(formData.maxTenureMonths);
+    if (minT > maxT) {
+      setError('Min tenure cannot be greater than max tenure.');
       return;
     }
 
@@ -63,10 +76,10 @@ export default function NewLoanProductPage() {
       interestType: formData.interestType,
       annualRateBps: Math.round(parseFloat(formData.annualRate) * 100), // percent to bps
       repaymentFrequency: formData.repaymentFrequency,
-      minPrincipalPaise: Math.round(parseFloat(formData.minPrincipal) * 100),
-      maxPrincipalPaise: Math.round(parseFloat(formData.maxPrincipal) * 100),
-      minTenureMonths: parseInt(formData.minTenureMonths),
-      maxTenureMonths: parseInt(formData.maxTenureMonths),
+      minPrincipalPaise: Math.round(minP * 100),
+      maxPrincipalPaise: Math.round(maxP * 100),
+      minTenureMonths: minT,
+      maxTenureMonths: maxT,
       allocationOrder: formData.allocationOrder.split(',').map(s => s.trim()),
     };
 

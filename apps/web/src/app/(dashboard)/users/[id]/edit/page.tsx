@@ -96,7 +96,9 @@ export default function EditUserPage() {
       const payload: Record<string, unknown> = {
         id: userId,
         fullName: data.fullName,
-        email: data.email || undefined,
+        // Distinguish "clear email" (null) from "leave unchanged" (omitted);
+        // coercing '' to undefined would silently drop the clear intent.
+        email: data.email === '' ? null : data.email,
         mobile: data.mobile,
         isActive: data.isActive,
       };

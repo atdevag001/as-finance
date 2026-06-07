@@ -3,15 +3,32 @@
 import { cn } from '@/lib/utils';
 
 /**
+ * Coerces a paise value (which may arrive as a string from the API since BigInt serializes to
+ * string) into bigint. Returns BigInt(0) for non-finite / unparseable inputs so the UI never crashes.
+ */
+function toPaiseBigInt(paise: number | string | bigint): bigint {
+  if (typeof paise === 'bigint') return paise;
+  if (typeof paise === 'number') {
+    if (!Number.isFinite(paise)) return BigInt(0);
+    return BigInt(Math.trunc(paise));
+  }
+  // string: tolerate a leading minus, ignore fractional paise (Indian money is integral paise).
+  const trimmed = paise.trim();
+  if (trimmed === '' || !/^-?\d+$/.test(trimmed)) return BigInt(0);
+  return BigInt(trimmed);
+}
+
+/**
  * Formats paise to INR with Indian comma grouping.
  * Indian grouping: last 3 digits, then groups of 2.
  * Example: 12345678 paise → "₹1,23,456.78"
  */
-function formatPaiseToINR(paise: number): string {
-  const isNegative = paise < 0;
-  const absPaise = Math.abs(paise);
-  const rupees = Math.floor(absPaise / 100);
-  const paisa = absPaise % 100;
+function formatPaiseToINR(paise: number | string | bigint): string {
+  const value = toPaiseBigInt(paise);
+  const isNegative = value < BigInt(0);
+  const absPaise = isNegative ? -value : value;
+  const rupees = absPaise / BigInt(100);
+  const paisa = absPaise % BigInt(100);
   const decPart = paisa.toString().padStart(2, '0');
 
   const intStr = rupees.toString();
@@ -32,8 +49,8 @@ function formatPaiseToINR(paise: number): string {
 }
 
 interface MoneyDisplayProps {
-  /** Amount in paise (integer) */
-  paise: number;
+  /** Amount in paise. Accepts string (API BigInt serialization), number, or bigint. */
+  paise: number | string | bigint;
   /** Show negative amounts in red */
   colorNegative?: boolean;
   className?: string;
@@ -41,7 +58,7 @@ interface MoneyDisplayProps {
 
 export function MoneyDisplay({ paise, colorNegative = true, className }: MoneyDisplayProps) {
   const formatted = formatPaiseToINR(paise);
-  const isNegative = paise < 0;
+  const isNegative = toPaiseBigInt(paise) < BigInt(0);
 
   return (
     <span

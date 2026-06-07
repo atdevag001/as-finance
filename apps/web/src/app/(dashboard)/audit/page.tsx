@@ -3,9 +3,34 @@
 import { useState } from 'react';
 import { LoadingSpinner, ErrorMessage, PaginationControls, AccessDenied, DateDisplay } from '@/components/shared';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useAuth } from '@/providers/auth-provider';
 import { hasPermission } from '@/lib/permissions';
 import { useAuditLogs } from '@/hooks/useAuditLogs';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { AuditAction } from '@as-finance/shared/enums';
+
+// Matches the `target_entity` strings the backend writes (see audit-emitting services).
+const TARGET_ENTITIES = [
+  'customer',
+  'loan',
+  'collection',
+  'penalty',
+  'foreclosure',
+  'expense',
+  'cash_handover',
+  'user',
+  'setting',
+] as const;
+
+// A Select cannot use '' as an item value, so we represent "no filter" with this sentinel.
+const ALL = '__all__';
 
 export default function AuditPage() {
   const { user } = useAuth();
@@ -25,9 +50,26 @@ function AuditContent() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
-  const { data, isLoading, error } = useAuditLogs({ page, entity: entity || undefined, action: action || undefined, startDate: startDate || undefined, endDate: endDate || undefined });
+  // Debounce date inputs so partial values (e.g. "2024-01-0") don't each fire a request.
+  const debouncedStartDate = useDebouncedValue(startDate, 300);
+  const debouncedEndDate = useDebouncedValue(endDate, 300);
 
-  function handleFilterChange(setter: (v: string) => void) {
+  const { data, isLoading, error } = useAuditLogs({
+    page,
+    entity: entity || undefined,
+    action: action || undefined,
+    startDate: debouncedStartDate || undefined,
+    endDate: debouncedEndDate || undefined,
+  });
+
+  function handleSelectChange(setter: (v: string) => void) {
+    return (value: string) => {
+      setter(value === ALL ? '' : value);
+      setPage(1);
+    };
+  }
+
+  function handleDateChange(setter: (v: string) => void) {
     return (e: React.ChangeEvent<HTMLInputElement>) => {
       setter(e.target.value);
       setPage(1);
@@ -39,10 +81,34 @@ function AuditContent() {
       <h1 className="text-2xl font-bold">Audit Log</h1>
 
       <div className="flex flex-wrap gap-2">
-        <Input placeholder="Filter by entity…" value={entity} onChange={handleFilterChange(setEntity)} className="w-48" />
-        <Input placeholder="Filter by action…" value={action} onChange={handleFilterChange(setAction)} className="w-48" />
-        <Input type="date" value={startDate} onChange={handleFilterChange(setStartDate)} className="w-40" aria-label="Start date" />
-        <Input type="date" value={endDate} onChange={handleFilterChange(setEndDate)} className="w-40" aria-label="End date" />
+        <Select value={entity || ALL} onValueChange={handleSelectChange(setEntity)}>
+          <SelectTrigger className="w-48" aria-label="Filter by entity">
+            <SelectValue placeholder="All entities" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>All entities</SelectItem>
+            {TARGET_ENTITIES.map((e) => (
+              <SelectItem key={e} value={e} className="capitalize">
+                {e.replace(/_/g, ' ')}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={action || ALL} onValueChange={handleSelectChange(setAction)}>
+          <SelectTrigger className="w-56" aria-label="Filter by action">
+            <SelectValue placeholder="All actions" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>All actions</SelectItem>
+            {Object.values(AuditAction).map((a) => (
+              <SelectItem key={a} value={a} className="capitalize">
+                {a.replace(/_/g, ' ')}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Input type="date" value={startDate} onChange={handleDateChange(setStartDate)} className="w-40" aria-label="Start date" />
+        <Input type="date" value={endDate} onChange={handleDateChange(setEndDate)} className="w-40" aria-label="End date" />
       </div>
 
       {isLoading && <div className="flex justify-center py-8"><LoadingSpinner size="lg" /></div>}
@@ -96,12 +162,12 @@ function AuditContent() {
                     </td>
                     <td className="px-4 py-3 capitalize">{log.action_type.replace(/_/g, ' ')}</td>
                     <td className="px-4 py-3">
-                      <span>{log.actor_id.slice(0, 8)}</span>
+                      <span>{log.actor?.full_name ?? log.actor_id}</span>
                       <span className="ml-1 text-xs text-muted-foreground">({log.actor_role.replace(/_/g, ' ')})</span>
                     </td>
                     <td className="px-4 py-3">
                       <span className="capitalize">{log.target_entity.replace(/_/g, ' ')}</span>
-                      <span className="ml-1 text-xs text-muted-foreground">{log.target_id.slice(0, 8)}</span>
+                      <span className="ml-1 font-mono text-xs text-muted-foreground">{log.target_id}</span>
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">{log.remarks ?? '—'}</td>
                   </tr>

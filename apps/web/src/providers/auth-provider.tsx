@@ -159,25 +159,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     async function restore() {
-      // Skip restore if we already have an access token (e.g., just logged in or from cookie)
+      // Keep in-memory token primed for the /auth/refresh request below, but do NOT
+      // short-circuit with a JWT-derived user: JWT lacks username/fullName, and committing
+      // empty strings to state breaks `user?.fullName ?? 'User'` consumers until the next
+      // silent refresh (up to 13 minutes later). Always call /auth/refresh to get full user.
       const existingToken = getAccessToken();
       if (existingToken) {
-        // Token exists - decode it to get user info and mark as authenticated
         const payload = decodeJwt(existingToken);
         if (payload && payload.exp * 1000 > Date.now()) {
-          // Token is valid and not expired - ensure it's set in memory for API calls
           setAccessToken(existingToken);
-          // Create minimal user from JWT
-          const minimalUser: AuthUser = {
-            id: payload.sub,
-            username: '', // Not in JWT, will be filled on next refresh
-            fullName: '', // Not in JWT, will be filled on next refresh
-            role: payload.role,
-          };
-          setState({ user: minimalUser, isLoading: false, isAuthenticated: true });
-          return;
         }
-        // Token expired, fall through to refresh
       }
       try {
         const data = await apiClient.post<{ accessToken: string; user: AuthUser }>(

@@ -8,6 +8,8 @@ export interface AuditLog {
   action_type: string;
   actor_id: string;
   actor_role: string;
+  // Joined from the actor user — absent on legacy rows, so optional.
+  actor?: { id: string; full_name: string; email: string } | null;
   target_entity: string;
   target_id: string;
   created_at: string;

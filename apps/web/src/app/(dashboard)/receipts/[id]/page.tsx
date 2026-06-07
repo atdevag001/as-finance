@@ -12,6 +12,7 @@ import {
   DateDisplay,
   StatusBadge,
   AccessDenied,
+  PermissionGate,
 } from '@/components/shared';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -152,10 +153,13 @@ function ReceiptViewContent({ id }: { id: string }) {
                 <span className="hidden sm:inline">Share</span>
               </Button>
             )}
-            <Button onClick={() => window.print()} className="min-h-[44px] gap-2">
-              <Printer className="h-4 w-4" />
-              <span className="hidden sm:inline">Print</span>
-            </Button>
+            {/* receipt.print is restricted (SUPER_ADMIN/MANAGER/COLLECTION_OFFICER); other roles must not see Print */}
+            <PermissionGate permission="receipt.print">
+              <Button onClick={() => window.print()} className="min-h-[44px] gap-2">
+                <Printer className="h-4 w-4" />
+                <span className="hidden sm:inline">Print</span>
+              </Button>
+            </PermissionGate>
           </div>
         </div>
 

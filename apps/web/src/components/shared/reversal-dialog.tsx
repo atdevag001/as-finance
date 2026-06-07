@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -37,16 +37,25 @@ export function ReversalDialog({ open, onOpenChange, collection }: ReversalDialo
   const [error, setError] = useState<string | null>(null);
   const createReversal = useCreateReversal();
   const { showToast } = useToast();
+  // Same key reused across retries so backend idempotency cache catches duplicate clicks.
+  const idempotencyKeyRef = useRef<string | null>(null);
 
   const isProcessing = createReversal.isPending;
   const isReasonValid = reason.trim().length >= MIN_REASON_LENGTH;
   const loanNumber = collection?.loan?.loan_number ?? collection?.loan_number ?? '—';
+
+  useEffect(() => {
+    if (open && collection && idempotencyKeyRef.current === null) {
+      idempotencyKeyRef.current = crypto.randomUUID();
+    }
+  }, [open, collection]);
 
   function handleClose(nextOpen: boolean) {
     if (isProcessing) return;
     if (!nextOpen) {
       setReason('');
       setError(null);
+      idempotencyKeyRef.current = null;
     }
     onOpenChange(nextOpen);
   }
@@ -54,16 +63,19 @@ export function ReversalDialog({ open, onOpenChange, collection }: ReversalDialo
   async function handleConfirm() {
     if (!collection || !isReasonValid) return;
     setError(null);
-    const idempotencyKey = crypto.randomUUID();
+    if (idempotencyKeyRef.current === null) {
+      idempotencyKeyRef.current = crypto.randomUUID();
+    }
     try {
       await createReversal.mutateAsync({
         collectionId: collection.id,
         reason: reason.trim(),
-        idempotencyKey,
+        idempotencyKey: idempotencyKeyRef.current,
       });
       showToast({ message: 'Collection reversed successfully' });
       setReason('');
       setError(null);
+      idempotencyKeyRef.current = null;
       onOpenChange(false);
     } catch (err) {
       setError((err as Error).message || 'Failed to reverse collection');

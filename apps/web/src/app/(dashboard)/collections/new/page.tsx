@@ -113,10 +113,23 @@ export default function NewCollectionPage() {
     const amount = parseFloat(amountRupees);
     if (!amountRupees || isNaN(amount) || amount <= 0) {
       newErrors['amount'] = 'Amount must be a positive number';
+    } else if (
+      selectedLoan?.cached_outstanding_paise != null &&
+      Math.round(amount * 100) > selectedLoan.cached_outstanding_paise
+    ) {
+      // Catch overpayment client-side so the confirm dialog never lies — the server would also reject with COLLECTION_EXCEEDS_OUTSTANDING.
+      const outstandingRupees = (selectedLoan.cached_outstanding_paise / 100).toLocaleString('en-IN', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
+      newErrors['amount'] = `Amount exceeds outstanding (₹${outstandingRupees})`;
     }
 
     if (!paymentDate) {
       newErrors['date'] = 'Payment date is required';
+    } else if (paymentDate > todayIST()) {
+      // Server-side IsDateString allows future dates; block here to keep receipt/journal dates from leaking into the future.
+      newErrors['date'] = 'Payment date cannot be in the future';
     }
 
     setErrors(newErrors);
@@ -149,9 +162,13 @@ export default function NewCollectionPage() {
         },
       );
 
-      // Invalidate relevant queries
+      // Posting mutates receipts, penalties, accounting journals and dashboard KPIs — refresh all affected caches.
       queryClient.invalidateQueries({ queryKey: ['collections'] });
       queryClient.invalidateQueries({ queryKey: ['loans'] });
+      queryClient.invalidateQueries({ queryKey: ['receipts'] });
+      queryClient.invalidateQueries({ queryKey: ['penalties'] });
+      queryClient.invalidateQueries({ queryKey: ['accounting'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
 
       showToast({ message: 'Collection posted successfully', variant: 'success' });
       setShowConfirm(false);
@@ -181,6 +198,13 @@ export default function NewCollectionPage() {
   const amountPaisePreview = amountRupees && !isNaN(parseFloat(amountRupees))
     ? Math.round(parseFloat(amountRupees) * 100)
     : 0;
+
+  // Drives Submit-button disabled state so the confirm dialog can never show an over-outstanding/future-dated value.
+  const exceedsOutstanding =
+    !!selectedLoan &&
+    selectedLoan.cached_outstanding_paise != null &&
+    amountPaisePreview > selectedLoan.cached_outstanding_paise;
+  const isFutureDate = !!paymentDate && paymentDate > todayIST();
 
   return (
     <div className="mx-auto max-w-lg space-y-4 pb-8">
@@ -245,7 +269,7 @@ export default function NewCollectionPage() {
                       onFocus={() => {
                         if (loanSearch.length > 0) setShowDropdown(true);
                       }}
-                      placeholder="Search by loan number or customer name…"
+                      placeholder="Search by loan number…"
                       className="min-h-[44px] pl-9 text-base"
                       autoComplete="off"
                       disabled={isSubmitting}
@@ -367,6 +391,7 @@ export default function NewCollectionPage() {
                 id="paymentDate"
                 type="date"
                 value={paymentDate}
+                max={todayIST()}
                 onChange={(e) => {
                   setPaymentDate(e.target.value);
                   setErrors((prev) => {
@@ -389,7 +414,7 @@ export default function NewCollectionPage() {
         <div className="mt-4">
           <Button
             type="submit"
-            disabled={isSubmitting}
+            disabled={isSubmitting || exceedsOutstanding || isFutureDate}
             className="min-h-[44px] w-full text-base font-semibold"
           >
             {isSubmitting ? (

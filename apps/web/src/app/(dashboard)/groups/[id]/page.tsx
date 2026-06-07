@@ -101,9 +101,15 @@ export default function GroupDetailPage({ params }: { params: { id: string } }) 
   }
 
   function openCollectionForm() {
+    // Key per-loan, not per-customer, so members with multiple active group loans each get a row.
     const initial: Record<string, string> = {};
     (group?.members ?? []).forEach((m: GroupMember) => {
-      initial[m.customer_id] = '';
+      const memberLoans = m.loans && m.loans.length > 0
+        ? m.loans
+        : m.loan_id ? [{ id: m.loan_id, loan_number: m.loan_number ?? '', outstanding_paise: m.outstanding_paise ?? null }] : [];
+      memberLoans.forEach((l) => {
+        initial[l.id] = '';
+      });
     });
     setPayments(initial);
     setCollectError(null);
@@ -112,19 +118,21 @@ export default function GroupDetailPage({ params }: { params: { id: string } }) 
 
   async function handlePostGroupCollection() {
     setCollectError(null);
+    // Payment keys are loan IDs; any empty/falsy key indicates a programming error rather than user input.
     const memberBreakdown = Object.entries(payments)
       .filter(([, amt]) => amt && Number(amt) > 0)
-      .map(([customerId, amt]) => {
-        const member = group!.members.find((m: GroupMember) => m.customer_id === customerId);
-        return {
-          loanId: member?.loan_id!,
-          amountPaise: Math.round(Number(amt) * 100),
-        };
-      })
-      .filter((item) => item.loanId);
+      .map(([loanId, amt]) => ({
+        loanId,
+        amountPaise: Math.round(Number(amt) * 100),
+      }));
 
     if (memberBreakdown.length === 0) {
       setCollectError('Enter at least one payment amount for members with active loans');
+      return;
+    }
+
+    if (memberBreakdown.some((item) => !item.loanId)) {
+      setCollectError('Cannot post payment for a member without an active loan');
       return;
     }
 
@@ -192,30 +200,37 @@ export default function GroupDetailPage({ params }: { params: { id: string } }) 
             <>
               {/* Mobile Card View */}
               <div className="space-y-3 lg:hidden">
-                {group.members.map((m: GroupMember) => (
-                  <div key={m.id} className="rounded-lg border p-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <p className="font-medium truncate">{m.customer_name}</p>
-                        {m.loan_id && (
-                          <Link href={`/loans/${m.loan_id}`} className="text-sm text-primary hover:underline">
-                            {m.loan_number ?? m.loan_id.slice(0, 8)}
-                          </Link>
-                        )}
-                      </div>
-                      <div className="text-right shrink-0">
-                        {m.outstanding_paise != null ? (
-                          <>
-                            <MoneyDisplay paise={Number(m.outstanding_paise)} className="font-medium" />
-                            <p className="text-xs text-muted-foreground">Outstanding</p>
-                          </>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </div>
+                {group.members.map((m: GroupMember) => {
+                  const memberLoans = m.loans && m.loans.length > 0
+                    ? m.loans
+                    : m.loan_id ? [{ id: m.loan_id, loan_number: m.loan_number ?? '', outstanding_paise: m.outstanding_paise ?? null }] : [];
+                  return (
+                    <div key={m.id} className="rounded-lg border p-3">
+                      <p className="font-medium truncate">{m.customer_name}</p>
+                      {memberLoans.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">No active loan</p>
+                      ) : (
+                        memberLoans.map((l) => (
+                          <div key={l.id} className="mt-2 flex items-start justify-between gap-2">
+                            <Link href={`/loans/${l.id}`} className="text-sm text-primary hover:underline">
+                              {l.loan_number || l.id.slice(0, 8)}
+                            </Link>
+                            <div className="text-right shrink-0">
+                              {l.outstanding_paise != null ? (
+                                <>
+                                  <MoneyDisplay paise={Number(l.outstanding_paise)} className="font-medium" />
+                                  <p className="text-xs text-muted-foreground">Outstanding</p>
+                                </>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </div>
+                          </div>
+                        ))
+                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Desktop Table */}
@@ -229,23 +244,35 @@ export default function GroupDetailPage({ params }: { params: { id: string } }) 
                     </tr>
                   </thead>
                   <tbody>
-                    {group.members.map((m: GroupMember) => (
-                      <tr key={m.id} className="border-b last:border-0">
-                        <td className="px-3 py-2">{m.customer_name}</td>
-                        <td className="px-3 py-2">
-                          {m.loan_id ? (
-                            <Link href={`/loans/${m.loan_id}`} className="text-primary hover:underline">
-                              {m.loan_number ?? m.loan_id.slice(0, 8)}
+                    {group.members.flatMap((m: GroupMember) => {
+                      const memberLoans = m.loans && m.loans.length > 0
+                        ? m.loans
+                        : m.loan_id ? [{ id: m.loan_id, loan_number: m.loan_number ?? '', outstanding_paise: m.outstanding_paise ?? null }] : [];
+                      if (memberLoans.length === 0) {
+                        return [(
+                          <tr key={m.id} className="border-b last:border-0">
+                            <td className="px-3 py-2">{m.customer_name}</td>
+                            <td className="px-3 py-2">—</td>
+                            <td className="px-3 py-2 text-right">—</td>
+                          </tr>
+                        )];
+                      }
+                      return memberLoans.map((l, idx) => (
+                        <tr key={`${m.id}:${l.id}`} className="border-b last:border-0">
+                          <td className="px-3 py-2">{idx === 0 ? m.customer_name : ''}</td>
+                          <td className="px-3 py-2">
+                            <Link href={`/loans/${l.id}`} className="text-primary hover:underline">
+                              {l.loan_number || l.id.slice(0, 8)}
                             </Link>
-                          ) : '—'}
-                        </td>
-                        <td className="px-3 py-2 text-right">
-                          {m.outstanding_paise != null
-                            ? <MoneyDisplay paise={Number(m.outstanding_paise)} />
-                            : '—'}
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            {l.outstanding_paise != null
+                              ? <MoneyDisplay paise={Number(l.outstanding_paise)} />
+                              : '—'}
+                          </td>
+                        </tr>
+                      ));
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -363,29 +390,53 @@ export default function GroupDetailPage({ params }: { params: { id: string } }) 
       >
         <div className="space-y-3 py-2 max-h-80 overflow-y-auto">
           {collectError && <p className="text-sm text-destructive">{collectError}</p>}
-          {group.members.map((m: GroupMember) => (
-            <div key={m.customer_id} className="flex items-center gap-3">
-              <div className="flex-1 text-sm">
-                <p className="font-medium">{m.customer_name}</p>
-                {m.outstanding_paise != null && (
-                  <p className="text-muted-foreground">
-                    Outstanding: <MoneyDisplay paise={Number(m.outstanding_paise)} />
-                  </p>
-                )}
+          {group.members.flatMap((m: GroupMember) => {
+            const memberLoans = m.loans && m.loans.length > 0
+              ? m.loans
+              : m.loan_id ? [{ id: m.loan_id, loan_number: m.loan_number ?? '', outstanding_paise: m.outstanding_paise ?? null }] : [];
+            // Show loanless members as disabled rows so users see why their amount was rejected instead of silently dropping it.
+            if (memberLoans.length === 0) {
+              return [(
+                <div key={m.id} className="flex items-center gap-3 opacity-60">
+                  <div className="flex-1 text-sm">
+                    <p className="font-medium">{m.customer_name}</p>
+                    <p className="text-xs text-muted-foreground">No active loan</p>
+                  </div>
+                  <Input
+                    className="w-28"
+                    type="number"
+                    placeholder="—"
+                    value=""
+                    disabled
+                  />
+                </div>
+              )];
+            }
+            return memberLoans.map((l) => (
+              <div key={l.id} className="flex items-center gap-3">
+                <div className="flex-1 text-sm">
+                  <p className="font-medium">{m.customer_name}</p>
+                  <p className="text-xs text-muted-foreground">{l.loan_number}</p>
+                  {l.outstanding_paise != null && (
+                    <p className="text-muted-foreground">
+                      Outstanding: <MoneyDisplay paise={Number(l.outstanding_paise)} />
+                    </p>
+                  )}
+                </div>
+                <Input
+                  className="w-28"
+                  type="number"
+                  inputMode="numeric"
+                  min="0"
+                  step="1"
+                  placeholder="₹ 0"
+                  value={payments[l.id] ?? ''}
+                  onChange={(e) => setPayments((prev) => ({ ...prev, [l.id]: e.target.value }))}
+                  disabled={postGroupCollection.isPending}
+                />
               </div>
-              <Input
-                className="w-28"
-                type="number"
-                inputMode="numeric"
-                min="0"
-                step="1"
-                placeholder="₹ 0"
-                value={payments[m.customer_id] ?? ''}
-                onChange={(e) => setPayments((prev) => ({ ...prev, [m.customer_id]: e.target.value }))}
-                disabled={postGroupCollection.isPending}
-              />
-            </div>
-          ))}
+            ));
+          })}
         </div>
       </ConfirmDialog>
     </div>

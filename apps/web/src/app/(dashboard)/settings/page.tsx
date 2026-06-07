@@ -16,13 +16,13 @@ import {
   useHolidays,
   useSetHolidays,
 } from '@/hooks/useSettings';
+import { todayIST } from '@/lib/date-utils';
 import { useToast } from '@/providers/toast-provider';
 import { ApiClientError } from '@/lib/api-client';
 import {
   AccessDenied,
   LoadingSpinner,
   ErrorMessage,
-  PermissionGate,
   DateDisplay,
 } from '@/components/shared';
 import { Button } from '@/components/ui/button';
@@ -55,6 +55,11 @@ export default function SettingsPage() {
 const SPECIALIZED_SETTING_KEYS = new Set<string>(['holiday_calendar']);
 
 function SettingsSection() {
+  const { user } = useAuth();
+  const role = user?.role ?? '';
+  // Gate editing UX so MANAGER (read-only) doesn't waste a save on a 403.
+  const canUpdate = hasPermission(role, 'settings.update');
+
   const { data: settings, isLoading, error } = useSettings();
   const updateSetting = useUpdateSetting();
   const { showToast } = useToast();
@@ -108,14 +113,14 @@ function SettingsSection() {
     setServerError(null);
     setIsSaving(true);
     try {
-      const nextOriginals: Record<string, string> = { ...originalValues };
       for (const [key, raw] of Object.entries(changedSettings)) {
         const kind = kinds[key] ?? 'string';
         const parsed = parseSettingValue(raw, kind);
         await updateSetting.mutateAsync({ key, value: parsed });
-        nextOriginals[key] = raw;
+        // Commit each successful save immediately so a mid-loop failure
+        // doesn't leave already-persisted keys flagged as dirty.
+        setOriginalValues((prev) => ({ ...prev, [key]: raw }));
       }
-      setOriginalValues(nextOriginals);
       showToast({ message: 'Settings saved successfully', variant: 'success' });
     } catch (err) {
       if (err instanceof ApiClientError) {
@@ -170,20 +175,23 @@ function SettingsSection() {
                 inputMode={kind === 'number' ? 'decimal' : undefined}
                 value={currentValues[setting.key] ?? ''}
                 onChange={(e) => handleChange(setting.key, e.target.value)}
+                disabled={!canUpdate}
               />
             </div>
           );
         })}
 
-        <div className="flex justify-end pt-2">
-          <Button
-            onClick={handleSave}
-            disabled={!isDirty || isSaving}
-            className="w-full min-h-[48px] sm:w-auto"
-          >
-            {isSaving ? 'Saving…' : 'Save Changes'}
-          </Button>
-        </div>
+        {canUpdate && (
+          <div className="flex justify-end pt-2">
+            <Button
+              onClick={handleSave}
+              disabled={!canUpdate || !isDirty || isSaving}
+              className="w-full min-h-[48px] sm:w-auto"
+            >
+              {isSaving ? 'Saving…' : 'Save Changes'}
+            </Button>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -201,11 +209,13 @@ function HolidaySection() {
   const [newDate, setNewDate] = useState('');
   const [serverError, setServerError] = useState<string | null>(null);
 
-  const currentYear = new Date().getFullYear();
+  // Holidays are stored as IST YYYY-MM-DD; bucketing via new Date().getFullYear()
+  // would mis-assign Jan/Dec boundary dates for users west of UTC.
+  const currentYear = parseInt(todayIST().slice(0, 4), 10);
   const currentYearHolidays = useMemo(
     () =>
       (holidays ?? []).filter((dateStr) => {
-        const year = new Date(dateStr).getFullYear();
+        const year = parseInt(dateStr.slice(0, 4), 10);
         return year === currentYear;
       }).sort(),
     [holidays, currentYear],

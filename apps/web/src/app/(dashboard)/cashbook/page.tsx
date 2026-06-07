@@ -56,10 +56,10 @@ function CashbookContent() {
           )}
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <SummaryCard title="Opening Balance" paise={Number(data.openingBalancePaise)} />
-            <SummaryCard title="Cash Inflows" paise={Number(data.cashInflowsPaise)} />
-            <SummaryCard title="Cash Outflows" paise={Number(data.cashOutflowsPaise)} />
-            <SummaryCard title="Closing Balance" paise={Number(data.closingBalancePaise)} />
+            <SummaryCard title="Opening Balance" paise={data.openingBalancePaise} />
+            <SummaryCard title="Cash Inflows" paise={data.cashInflowsPaise} />
+            <SummaryCard title="Cash Outflows" paise={data.cashOutflowsPaise} />
+            <SummaryCard title="Closing Balance" paise={data.closingBalancePaise} />
           </div>
 
           <div className="rounded-lg border p-4 text-sm text-muted-foreground">
@@ -71,7 +71,7 @@ function CashbookContent() {
   );
 }
 
-function SummaryCard({ title, paise }: { title: string; paise: number }) {
+function SummaryCard({ title, paise }: { title: string; paise: string | number | bigint }) {
   return (
     <Card>
       <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">{title}</CardTitle></CardHeader>

@@ -269,15 +269,18 @@ describe('useAccounting Hook', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(mockGet).toHaveBeenCalledWith('/accounting/trial-balance');
-      expect(result.current.data).toHaveLength(6);
-      expect(result.current.data?.[0].accountCode).toBe('1000');
+      expect(result.current.data?.rows).toHaveLength(6);
+      expect(result.current.data?.rows[0].accountCode).toBe('1000');
+      expect(result.current.data?.isBalanced).toBe(true);
+      expect(result.current.data?.totalDebitPaise).toBe(16000000);
+      expect(result.current.data?.totalCreditPaise).toBe(16000000);
     });
 
-    it('fetches trial balance with date range', async () => {
+    it('fetches trial balance with asOfDate', async () => {
       mockGet.mockResolvedValueOnce(mockBackendTrialBalance);
 
       const { result } = renderHook(
-        () => useTrialBalance({ endDate: '2024-01-31' }),
+        () => useTrialBalance({ asOfDate: '2024-01-31' }),
         { wrapper }
       );
 
@@ -293,8 +296,8 @@ describe('useAccounting Hook', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      const totalDebits = result.current.data!.reduce((sum, row) => sum + row.debitPaise, 0);
-      const totalCredits = result.current.data!.reduce((sum, row) => sum + row.creditPaise, 0);
+      const totalDebits = result.current.data!.rows.reduce((sum, row) => sum + row.debitPaise, 0);
+      const totalCredits = result.current.data!.rows.reduce((sum, row) => sum + row.creditPaise, 0);
       expect(totalDebits).toBe(totalCredits);
     });
 
@@ -305,10 +308,27 @@ describe('useAccounting Hook', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      result.current.data?.forEach(row => {
+      result.current.data?.rows.forEach(row => {
         expect(Number.isInteger(row.debitPaise)).toBe(true);
         expect(Number.isInteger(row.creditPaise)).toBe(true);
       });
+    });
+
+    it('surfaces backend isBalanced=false flag', async () => {
+      mockGet.mockResolvedValueOnce({
+        ...mockBackendTrialBalance,
+        totalDebitBalancePaise: '16000000',
+        totalCreditBalancePaise: '15999999',
+        isBalanced: false,
+      });
+
+      const { result } = renderHook(() => useTrialBalance(), { wrapper });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(result.current.data?.isBalanced).toBe(false);
+      expect(result.current.data?.totalDebitPaise).toBe(16000000);
+      expect(result.current.data?.totalCreditPaise).toBe(15999999);
     });
 
     it('returns loading state initially', () => {

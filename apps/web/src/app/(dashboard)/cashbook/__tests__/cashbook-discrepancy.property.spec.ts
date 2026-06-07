@@ -14,12 +14,13 @@ import * as fc from 'fast-check';
  * extracted from the CashbookPage component.
  */
 
+// Mirrors the real CashbookSummary shape: paise fields are strings (BigInt JSON serialization).
 interface CashbookSummary {
   date: string;
-  openingBalancePaise: number;
-  cashInflowsPaise: number;
-  cashOutflowsPaise: number;
-  closingBalancePaise: number;
+  openingBalancePaise: string;
+  cashInflowsPaise: string;
+  cashOutflowsPaise: string;
+  closingBalancePaise: string;
   hasDiscrepancy: boolean;
   transactionCount: number;
 }
@@ -35,13 +36,15 @@ function shouldShowDiscrepancyWarning(summary: CashbookSummary): boolean {
 
 // ─── Generators ───────────────────────────────────────────────────────────────
 
+const paiseStringArb = fc.integer({ min: 0, max: 100_000_000 }).map((n) => n.toString());
+
 const cashbookSummaryArb = (hasDiscrepancy: boolean): fc.Arbitrary<CashbookSummary> =>
   fc.record({
     date: fc.date({ min: new Date('2020-01-01'), max: new Date('2030-12-31') }).map((d) => d.toISOString().slice(0, 10)),
-    openingBalancePaise: fc.integer({ min: 0, max: 100_000_000 }),
-    cashInflowsPaise: fc.integer({ min: 0, max: 100_000_000 }),
-    cashOutflowsPaise: fc.integer({ min: 0, max: 100_000_000 }),
-    closingBalancePaise: fc.integer({ min: 0, max: 100_000_000 }),
+    openingBalancePaise: paiseStringArb,
+    cashInflowsPaise: paiseStringArb,
+    cashOutflowsPaise: paiseStringArb,
+    closingBalancePaise: paiseStringArb,
     hasDiscrepancy: fc.constant(hasDiscrepancy),
     transactionCount: fc.integer({ min: 0, max: 10_000 }),
   });
@@ -93,10 +96,10 @@ describe('Property 18: Cashbook discrepancy warning', () => {
         (hasDiscrepancy, opening, inflows, outflows, closing) => {
           const summary: CashbookSummary = {
             date: '2024-01-15',
-            openingBalancePaise: opening,
-            cashInflowsPaise: inflows,
-            cashOutflowsPaise: outflows,
-            closingBalancePaise: closing,
+            openingBalancePaise: opening.toString(),
+            cashInflowsPaise: inflows.toString(),
+            cashOutflowsPaise: outflows.toString(),
+            closingBalancePaise: closing.toString(),
             hasDiscrepancy,
             transactionCount: 5,
           };

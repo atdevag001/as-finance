@@ -64,3 +64,32 @@ export function todayIST(): string {
   // en-CA locale formats as YYYY-MM-DD
   return formatter.format(now);
 }
+
+/**
+ * Returns tomorrow's date in IST as YYYY-MM-DD for HTML date inputs.
+ *
+ * Used as the `min` for first-EMI date pickers: the backend's disbursement
+ * and schedule-regeneration paths reject firstEmi <= today (strict greater-than),
+ * so the picker must forbid today to avoid a confusing post-submit error.
+ *
+ * @example tomorrowIST() → '2024-01-17'
+ */
+export function tomorrowIST(): string {
+  const now = new Date();
+  // Parse today's IST date-parts to avoid local-tz drift around midnight UTC.
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    timeZone: IST_TIMEZONE,
+  }).formatToParts(now);
+  const y = Number(parts.find((p) => p.type === 'year')!.value);
+  const m = Number(parts.find((p) => p.type === 'month')!.value);
+  const d = Number(parts.find((p) => p.type === 'day')!.value);
+  // UTC math avoids the local-tz DST landmine; the date components are pure.
+  const tomorrowUtc = new Date(Date.UTC(y, m - 1, d + 1));
+  const yy = tomorrowUtc.getUTCFullYear();
+  const mm = String(tomorrowUtc.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(tomorrowUtc.getUTCDate()).padStart(2, '0');
+  return `${yy}-${mm}-${dd}`;
+}

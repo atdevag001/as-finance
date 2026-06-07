@@ -10,7 +10,8 @@ import { usePenalties, useWaivePenalty, getPenaltyStatus, type Penalty } from '@
 import { useApprovers } from '@/hooks/useUsers';
 import { useGenerateForeclosureQuote, useExecuteForeclosure, usePendingForeclosure, type ForeclosureQuote } from '@/hooks/useForeclosures';
 import { useToast } from '@/providers/toast-provider';
-import { todayIST } from '@/lib/date-utils';
+import { useAuth } from '@/providers/auth-provider';
+import { tomorrowIST } from '@/lib/date-utils';
 import {
   StatusBadge,
   MoneyDisplay,
@@ -29,14 +30,24 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useQuery } from '@tanstack/react-query';
 import { apiClient, ApiClientError } from '@/lib/api-client';
 
-// Map backend error codes to user-friendly messages
+// Map backend error codes to user-friendly messages.
+// Keys MUST match BusinessRuleError.code emitted by the API (foreclosure.service,
+// disbursement.service, loan.service, penalty.service); a mismatch silently
+// falls through to the raw developer-facing message.
 const CODE_MESSAGES: Record<string, string> = {
   ALREADY_DISBURSED: 'This loan has already been disbursed.',
   COLLECTIONS_EXIST: 'Cannot perform this action because collections exist for this loan.',
   PERIOD_CLOSED: 'The accounting period for this date is closed.',
   QUOTE_STALE: 'The foreclosure quote is no longer current. Please generate a new quote.',
-  QUOTE_EXPIRED: 'The foreclosure quote has expired. Please generate a new quote.',
-  INVALID_TRANSITION: 'This action is not allowed in the loan’s current state.',
+  FORECLOSURE_QUOTE_EXPIRED: 'The foreclosure quote has expired. Please generate a new quote.',
+  INVALID_FORECLOSURE_STATUS: 'This foreclosure quote can no longer be executed (it may already be settled or cancelled).',
+  INVALID_LOAN_STATUS_FOR_FORECLOSURE: 'This loan is not in a state that allows foreclosure (must be active or overdue).',
+  INVALID_STATUS_TRANSITION: 'This action is not allowed in the loan’s current state.',
+  MAKER_CHECKER_VIOLATION: 'Maker-checker rule: you cannot approve an action you initiated. A different authorised user must do so.',
+  ACCOUNTS_NOT_CONFIGURED: 'Required chart-of-accounts entries are missing. Please contact your administrator.',
+  REBATE_EXCEEDS_DUES: 'The rebate exceeds the total dues for this loan.',
+  FIRST_EMI_DATE_NOT_FUTURE: 'First EMI date must be in the future.',
+  FIRST_EMI_DATE_BEFORE_DISBURSEMENT: 'First EMI date must be after the disbursement date.',
   TOKEN_REVOKED: 'Your session has been revoked. Please sign in again.',
 };
 
@@ -73,6 +84,7 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
   const { data: pendingForeclosure } = usePendingForeclosure(id, !!loan && ['active', 'overdue'].includes(loan.status));
   const { data: usersData } = useApprovers();
   const { showToast } = useToast();
+  const { user: currentUser } = useAuth();
 
   // Status history query
   const { data: statusHistory } = useQuery<StatusTransition[]>({
@@ -104,6 +116,11 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
   const [foreclosureConfirmOpen, setForeclosureConfirmOpen] = useState(false);
   const [quoteExpired, setQuoteExpired] = useState(false);
   const [foreclosurePaymentMode, setForeclosurePaymentMode] = useState<string>('cash');
+
+  // Rebate state — kept as a rupee string for the input; converted to paise on submit.
+  // Persisted across quote→execute so the operator's policy decision is not lost.
+  const [rebateRupees, setRebateRupees] = useState<string>('');
+  const [rebateReason, setRebateReason] = useState<string>('');
 
   // Penalty waiver state
   const [waivePenaltyOpen, setWaivePenaltyOpen] = useState(false);
@@ -204,6 +221,15 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
     }
   }
 
+  // Parse rebate rupee-string to paise. Returns null if blank, NaN if malformed.
+  function parseRebatePaise(input: string): number | null {
+    const trimmed = input.trim();
+    if (!trimmed) return null;
+    const n = Number(trimmed);
+    if (!Number.isFinite(n) || n < 0) return NaN;
+    return Math.round(n * 100);
+  }
+
   async function handleGenerateForeclosureQuote() {
     setActionError(null);
     try {
@@ -214,8 +240,18 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
         setForeclosureOpen(true);
         return;
       }
-      // Otherwise, generate a new quote
-      const quote = await generateQuote.mutateAsync({ loanId: id });
+      // Otherwise, generate a new quote (optionally with operator-set rebate)
+      const rebatePaise = parseRebatePaise(rebateRupees);
+      if (rebatePaise !== null && Number.isNaN(rebatePaise)) {
+        setActionError('Rebate must be a non-negative number.');
+        return;
+      }
+      const quote = await generateQuote.mutateAsync({
+        loanId: id,
+        ...(rebatePaise && rebatePaise > 0
+          ? { rebatePaise, rebateReason: rebateReason.trim() || undefined }
+          : {}),
+      });
       setForeclosureQuote(quote);
       setQuoteExpired(false);
       setForeclosureOpen(true);
@@ -229,15 +265,26 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
     setActionError(null);
     try {
       const idempotencyKey = crypto.randomUUID();
+      // Allow execute-time rebate override (server re-validates against quoted dues)
+      const rebatePaise = parseRebatePaise(rebateRupees);
+      if (rebatePaise !== null && Number.isNaN(rebatePaise)) {
+        setActionError('Rebate must be a non-negative number.');
+        return;
+      }
       await executeForeclosure.mutateAsync({
         foreclosureId: foreclosureQuote.foreclosureId,
         paymentMode: foreclosurePaymentMode,
         idempotencyKey,
+        ...(rebatePaise && rebatePaise > 0
+          ? { rebatePaise, rebateReason: rebateReason.trim() || undefined }
+          : {}),
       });
       setForeclosureConfirmOpen(false);
       setForeclosureOpen(false);
       setForeclosureQuote(null);
       setForeclosurePaymentMode('cash');
+      setRebateRupees('');
+      setRebateReason('');
       showToast({ message: 'Foreclosure completed. Loan is now closed.' });
     } catch (err) {
       setActionError(extractActionError(err, 'Failed to execute foreclosure'));
@@ -245,7 +292,13 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
   }
 
   async function handleWaivePenalty() {
-    if (!selectedPenalty || waiveReason.length < 10 || !waiveApproverId) return;
+    if (!selectedPenalty) return;
+    // Defensive: ConfirmDialog's `disabled` already gates the click, but a
+    // misclick on a stale render would otherwise be a silent no-op.
+    if (waiveReason.length < 10 || !waiveApproverId) {
+      setActionError('Please enter a reason of at least 10 characters and select an approver.');
+      return;
+    }
     setActionError(null);
     try {
       await waivePenalty.mutateAsync({ id: selectedPenalty.id, reason: waiveReason, approverId: waiveApproverId });
@@ -678,12 +731,17 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
                 <tbody>
                   {penalties.map((penalty) => {
                     const penaltyStatus = getPenaltyStatus(penalty);
+                    // Avoid a dead "—" column: resolve installment_number from the loan's schedule
+                    // client-side so audit/dispute review sees which installment was penalised.
+                    const installmentNumber = penalty.installment_id
+                      ? loan.schedules?.find((s) => s.id === penalty.installment_id)?.installment_number
+                      : undefined;
                     return (
                     <tr key={penalty.id} className="border-b last:border-0">
                       <td className="px-3 py-2"><DateDisplay date={penalty.created_at} /></td>
                       <td className="px-3 py-2 text-right"><MoneyDisplay paise={Number(penalty.amount_paise)} /></td>
                       <td className="px-3 py-2 hidden sm:table-cell">{penalty.penalty_period}</td>
-                      <td className="px-3 py-2 hidden md:table-cell">—</td>
+                      <td className="px-3 py-2 hidden md:table-cell">{installmentNumber ?? '—'}</td>
                       <td className="px-3 py-2">
                         <StatusBadge status={penaltyStatus} type="penalty" />
                       </td>
@@ -781,7 +839,7 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
             value={approveFirstEmiDate}
             onChange={(e) => setApproveFirstEmiDate(e.target.value)}
             disabled={isActionInProgress}
-            min={todayIST()}
+            min={tomorrowIST()}
             className="min-h-[44px] text-base"
           />
           <p className="text-xs text-muted-foreground">
@@ -899,7 +957,7 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
                   value={disburseFirstEmiDate}
                   onChange={(e) => setDisburseFirstEmiDate(e.target.value)}
                   disabled={isActionInProgress}
-                  min={todayIST()}
+                  min={tomorrowIST()}
                   className="min-h-[44px] text-base"
                 />
                 <p className="text-xs text-muted-foreground">
@@ -919,6 +977,8 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
           if (!open) {
             setForeclosureQuote(null);
             setQuoteExpired(false);
+            setRebateRupees('');
+            setRebateReason('');
           }
         }}
         title="Foreclosure Quote"
@@ -983,6 +1043,9 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
         confirmLabel="Execute Foreclosure"
         variant="destructive"
         loading={executeForeclosure.isPending}
+        // Force a rebate reason whenever a rebate is set — audit trail and
+        // backend rebateAuthorizedBy derivation rely on a clear policy intent.
+        disabled={!!parseRebatePaise(rebateRupees) && !rebateReason.trim()}
         onConfirm={handleExecuteForeclosure}
       >
         <div className="space-y-4 py-2">
@@ -999,6 +1062,39 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
               </SelectContent>
             </Select>
           </div>
+          {/* Rebate override — backend re-validates against quoted dues and
+              derives `rebateAuthorizedBy` from the JWT actor. */}
+          <div className="space-y-2">
+            <Label htmlFor="foreclosure-rebate">Rebate / Waiver (₹, optional)</Label>
+            <Input
+              id="foreclosure-rebate"
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="0.00"
+              value={rebateRupees}
+              onChange={(e) => setRebateRupees(e.target.value)}
+              disabled={executeForeclosure.isPending}
+            />
+            <p className="text-xs text-muted-foreground">
+              Optional discount on the settlement amount. Requires a reason if set.
+            </p>
+          </div>
+          {parseRebatePaise(rebateRupees) ? (
+            <div className="space-y-2">
+              <Label htmlFor="foreclosure-rebate-reason">Rebate Reason</Label>
+              <Input
+                id="foreclosure-rebate-reason"
+                placeholder="Reason for rebate (recorded in audit log)…"
+                value={rebateReason}
+                onChange={(e) => setRebateReason(e.target.value)}
+                disabled={executeForeclosure.isPending}
+              />
+              {!rebateReason.trim() && (
+                <p className="text-xs text-destructive">Reason required when applying a rebate.</p>
+              )}
+            </div>
+          ) : null}
         </div>
       </ConfirmDialog>
 
@@ -1017,6 +1113,9 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
         description={selectedPenalty ? `Waive penalty of ₹${(selectedPenalty.amount_paise / 100).toLocaleString('en-IN')} for ${selectedPenalty.penalty_period}` : ''}
         confirmLabel="Waive Penalty"
         loading={waivePenalty.isPending}
+        // Block the click when the form is invalid so the user is never left
+        // wondering why the confirm button silently does nothing.
+        disabled={waiveReason.length < 10 || !waiveApproverId}
         onConfirm={handleWaivePenalty}
       >
         <div className="space-y-4 py-2">
@@ -1040,15 +1139,17 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
                 <SelectValue placeholder="Select approver…" />
               </SelectTrigger>
               <SelectContent>
-                {usersData?.data?.filter(u => u.is_active).map((user) => (
-                  <SelectItem key={user.id} value={user.id}>
-                    {user.full_name} ({user.role.replace(/_/g, ' ')})
-                  </SelectItem>
-                ))}
+                {usersData?.data
+                  ?.filter((u) => u.is_active && u.id !== currentUser?.id)
+                  .map((user) => (
+                    <SelectItem key={user.id} value={user.id}>
+                      {user.full_name} ({user.role.replace(/_/g, ' ')})
+                    </SelectItem>
+                  ))}
               </SelectContent>
             </Select>
             {!waiveApproverId && (
-              <p className="text-xs text-muted-foreground">Required: Select user authorizing this waiver</p>
+              <p className="text-xs text-muted-foreground">Required: Select user authorizing this waiver (maker-checker — you cannot approve your own request)</p>
             )}
           </div>
         </div>
@@ -1086,7 +1187,7 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
             value={regenerateFirstEmiDate}
             onChange={(e) => setRegenerateFirstEmiDate(e.target.value)}
             disabled={isActionInProgress}
-            min={todayIST()}
+            min={tomorrowIST()}
             className="min-h-[44px] text-base"
           />
           {loan.disbursement_date && (

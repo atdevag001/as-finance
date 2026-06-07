@@ -24,9 +24,11 @@ import { hasPermission } from '@/lib/permissions';
 import { useNotifications, useRetryNotification } from '@/hooks/useNotifications';
 import { useToast } from '@/providers/toast-provider';
 
+// Mirrors OutboxStatus enum so ops can surface mid-batch 'processing' rows.
 const STATUS_OPTIONS = [
   { value: 'all', label: 'All Statuses' },
   { value: 'pending', label: 'Pending' },
+  { value: 'processing', label: 'Processing' },
   { value: 'sent', label: 'Sent' },
   { value: 'failed', label: 'Failed' },
   { value: 'dead_letter', label: 'Dead Letter' },

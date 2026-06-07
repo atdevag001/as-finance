@@ -40,7 +40,8 @@ export function useSetHolidays() {
     mutationFn: (holidays: string[]) =>
       apiClient.put('/settings/holidays', { holidays }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['settings', 'holidays'] });
+      // Prefix-invalidate so both ['settings'] and ['settings','holidays'] refetch.
+      qc.invalidateQueries({ queryKey: ['settings'] });
     },
   });
 }

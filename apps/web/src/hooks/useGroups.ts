@@ -13,13 +13,21 @@ export interface Group {
   created_at: string;
 }
 
+export interface GroupMemberLoan {
+  id: string;
+  loan_number: string;
+  outstanding_paise: number | null;
+}
+
 export interface GroupMember {
   id: string;
   customer_id: string;
   customer_name: string;
+  // Backward-compatible primary-loan fields; new code should iterate `loans` because a member can have multiple active group loans.
   loan_id?: string;
   loan_number?: string;
   outstanding_paise?: number;
+  loans?: GroupMemberLoan[];
 }
 
 export interface GroupDetail extends Group {
@@ -53,11 +61,16 @@ export function useGroups(params: { page?: number } = {}) {
   });
 }
 
+// Large take so all active groups appear in picker dropdowns (backend defaults to 20, which silently truncates the loan-creation group selector).
+const GROUPS_LIST_TAKE = 500;
+
 export function useGroupsList() {
   return useQuery<Group[]>({
     queryKey: ['groups', 'list'],
     queryFn: async () => {
-      const result = await apiClient.get<PaginatedResult<Group> | Group[]>('/groups?status=active');
+      const result = await apiClient.get<PaginatedResult<Group> | Group[]>(
+        `/groups?status=active&take=${GROUPS_LIST_TAKE}`,
+      );
       const groups = Array.isArray(result) ? result : result.data ?? [];
       return groups.filter(g => g.status === 'active');
     },

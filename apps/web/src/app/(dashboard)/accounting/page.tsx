@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/providers/auth-provider';
 import { hasPermission } from '@/lib/permissions';
 import { useChartOfAccounts, useDaybook } from '@/hooks/useAccounting';
-import { todayIST } from '@/lib/date-utils';
+import { todayIST, formatDateIST } from '@/lib/date-utils';
 
 export default function AccountingPage() {
   const { user } = useAuth();
@@ -121,7 +121,7 @@ function AccountingContent() {
                   <CardHeader className="py-3">
                     <div className="flex justify-between text-sm">
                       <CardTitle className="text-sm font-medium">{je.description}</CardTitle>
-                      <span className="text-muted-foreground">{je.entry_date}</span>
+                      <span className="text-muted-foreground">{formatDateIST(je.entry_date)}</span>
                     </div>
                   </CardHeader>
                   <CardContent className="pt-0">

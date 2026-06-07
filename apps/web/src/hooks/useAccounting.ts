@@ -36,6 +36,14 @@ export interface TrialBalanceRow {
   creditPaise: number;
 }
 
+// Surface backend-computed totals + isBalanced so the UI can warn on imbalance instead of silently rendering mismatched totals.
+export interface TrialBalanceReport {
+  rows: TrialBalanceRow[];
+  totalDebitPaise: number;
+  totalCreditPaise: number;
+  isBalanced: boolean;
+}
+
 export interface ProfitLossReport {
   income: { category: string; totalPaise: number }[];
   expenses: { category: string; totalPaise: number }[];
@@ -114,12 +122,13 @@ export function useDaybook(params: DateRangeParams = {}) {
   });
 }
 
-export function useTrialBalance(params: DateRangeParams = {}) {
-  return useQuery<TrialBalanceRow[]>({
-    queryKey: ['accounting', 'trial-balance', params.endDate],
+// Trial balance is a point-in-time report; only asOfDate is meaningful (no date range).
+export function useTrialBalance(params: { asOfDate?: string } = {}) {
+  return useQuery<TrialBalanceReport>({
+    queryKey: ['accounting', 'trial-balance', params.asOfDate],
     queryFn: async () => {
       const query = new URLSearchParams();
-      if (params.endDate) query.set('asOfDate', params.endDate);
+      if (params.asOfDate) query.set('asOfDate', params.asOfDate);
       const qs = query.toString();
       const url = `/accounting/trial-balance${qs ? `?${qs}` : ''}`;
 
@@ -138,12 +147,17 @@ export function useTrialBalance(params: DateRangeParams = {}) {
       }
 
       const response = await apiClient.get<BackendTrialBalanceResponse>(url);
-      return response.rows.map((row) => ({
-        accountCode: row.code,
-        accountName: row.name,
-        debitPaise: Number(row.debitBalancePaise),
-        creditPaise: Number(row.creditBalancePaise),
-      }));
+      return {
+        rows: response.rows.map((row) => ({
+          accountCode: row.code,
+          accountName: row.name,
+          debitPaise: Number(row.debitBalancePaise),
+          creditPaise: Number(row.creditBalancePaise),
+        })),
+        totalDebitPaise: Number(response.totalDebitBalancePaise),
+        totalCreditPaise: Number(response.totalCreditBalancePaise),
+        isBalanced: response.isBalanced,
+      };
     },
   });
 }

@@ -283,7 +283,8 @@ export default function NewLoanPage() {
                   {productsLoading ? 'Loading products…' : 'Select loan product'}
                 </option>
                 {(Array.isArray(loanProducts) ? loanProducts : [])
-                  .filter((p): p is typeof p & { current_version_id: string } => !!p.current_version_id)
+                  // Hide deactivated products so users cannot select them (backend would reject)
+                  .filter((p): p is typeof p & { current_version_id: string } => !!p.current_version_id && p.is_active)
                   .map((p) => (
                   <option key={p.current_version_id} value={p.current_version_id}>
                     {p.name} — {p.current_version?.interest_type === 'flat' ? 'Flat' : 'Reducing'} @{' '}

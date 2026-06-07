@@ -61,10 +61,18 @@ export function usePendingForeclosure(loanId: string, enabled = true) {
   });
 }
 
+export interface GenerateForeclosureQuoteInput {
+  loanId: string;
+  rebatePaise?: number;
+  rebateReason?: string;
+  // Server-derived from JWT actor; client value ignored by the API.
+  rebateAuthorizedBy?: string;
+}
+
 export function useGenerateForeclosureQuote() {
-  return useMutation<ForeclosureQuote, Error, { loanId: string }>({
-    mutationFn: ({ loanId }) =>
-      apiClient.post<ForeclosureQuote>('/foreclosures/quote', { loanId }),
+  return useMutation<ForeclosureQuote, Error, GenerateForeclosureQuoteInput>({
+    mutationFn: (input) =>
+      apiClient.post<ForeclosureQuote>('/foreclosures/quote', input),
   });
 }
 

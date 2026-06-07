@@ -93,6 +93,8 @@ export default function ChangePasswordPage() {
     } catch (err) {
       if (err instanceof ApiClientError) {
         switch (err.body?.code) {
+          // Backend throws INVALID_CURRENT_PASSWORD; keep INVALID_CREDENTIALS as a defensive fallback.
+          case 'INVALID_CURRENT_PASSWORD':
           case 'INVALID_CREDENTIALS':
             setError('Current password is incorrect.');
             break;

@@ -12,7 +12,8 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { todayIST } from '@/lib/date-utils';
 
-interface GroupMember { id: string; customer_name: string; loan_id?: string; loan_number?: string; outstanding_paise?: number; }
+interface GroupMemberLoan { id: string; loan_number: string; outstanding_paise: number | null; }
+interface GroupMember { id: string; customer_name: string; loan_id?: string; loan_number?: string; outstanding_paise?: number; loans?: GroupMemberLoan[]; }
 interface GroupDetail { id: string; name: string; members: GroupMember[]; }
 
 export default function GroupCollectPage({ params }: { params: Promise<{ id: string }> }) {
@@ -39,12 +40,10 @@ export default function GroupCollectPage({ params }: { params: Promise<{ id: str
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const memberBreakdown = (group?.members ?? [])
-      .filter((m) => m.loan_id && amounts[m.id] && Number(amounts[m.id]) > 0)
-      .map((m) => ({
-        loanId: m.loan_id!,
-        amountPaise: Math.round(Number(amounts[m.id]) * 100),
-      }));
+    // amounts is keyed by loanId; iterate every loan a member has to support multiple active group loans per member.
+    const memberBreakdown = Object.entries(amounts)
+      .filter(([, v]) => v && Number(v) > 0)
+      .map(([loanId, v]) => ({ loanId, amountPaise: Math.round(Number(v) * 100) }));
     if (memberBreakdown.length === 0) return;
     const totalAmountPaise = memberBreakdown.reduce((sum, item) => sum + item.amountPaise, 0);
     mutation.mutate({
@@ -73,42 +72,53 @@ export default function GroupCollectPage({ params }: { params: Promise<{ id: str
         <Card>
           <CardHeader><CardTitle className="text-base">Member Payments</CardTitle></CardHeader>
           <CardContent className="space-y-4">
-            {group.members.map((m) => (
-              <div key={m.id} className="rounded-lg border bg-card p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
+            {group.members.flatMap((m) => {
+              const memberLoans = m.loans && m.loans.length > 0
+                ? m.loans
+                : m.loan_id ? [{ id: m.loan_id, loan_number: m.loan_number ?? '', outstanding_paise: m.outstanding_paise ?? null }] : [];
+              if (memberLoans.length === 0) {
+                return [(
+                  <div key={m.id} className="rounded-lg border bg-card p-4">
                     <p className="font-semibold text-foreground">{m.customer_name}</p>
-                    <p className="text-sm text-muted-foreground">{m.loan_number ?? 'No active loan'}</p>
-                    {m.outstanding_paise != null && (
-                      <p className="mt-1 text-sm font-medium text-primary">
-                        Due: <MoneyDisplay paise={m.outstanding_paise} />
-                      </p>
-                    )}
+                    <p className="text-sm text-muted-foreground">No active loan</p>
                   </div>
-                  {m.loan_id && (
+                )];
+              }
+              return memberLoans.map((l) => (
+                <div key={`${m.id}:${l.id}`} className="rounded-lg border bg-card p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-foreground">{m.customer_name}</p>
+                      <p className="text-sm text-muted-foreground">{l.loan_number || l.id.slice(0, 8)}</p>
+                      {l.outstanding_paise != null && (
+                        <p className="mt-1 text-sm font-medium text-primary">
+                          Due: <MoneyDisplay paise={l.outstanding_paise} />
+                        </p>
+                      )}
+                    </div>
                     <div className="shrink-0">
                       <Input
                         type="number"
                         inputMode="decimal"
                         placeholder="₹ Amount"
                         className="w-32 text-right font-medium"
-                        value={amounts[m.id] ?? ''}
-                        onChange={(e) => setAmounts((prev) => ({ ...prev, [m.id]: e.target.value }))}
+                        value={amounts[l.id] ?? ''}
+                        onChange={(e) => setAmounts((prev) => ({ ...prev, [l.id]: e.target.value }))}
                       />
-                      {m.outstanding_paise != null && (
+                      {l.outstanding_paise != null && (
                         <button
                           type="button"
                           className="mt-1 text-xs text-primary hover:underline"
-                          onClick={() => setAmounts((prev) => ({ ...prev, [m.id]: ((m.outstanding_paise ?? 0) / 100).toFixed(2) }))}
+                          onClick={() => setAmounts((prev) => ({ ...prev, [l.id]: ((l.outstanding_paise ?? 0) / 100).toFixed(2) }))}
                         >
                           Fill due amount
                         </button>
                       )}
                     </div>
-                  )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ));
+            })}
           </CardContent>
         </Card>
 

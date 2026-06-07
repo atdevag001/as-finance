@@ -13,6 +13,10 @@ import { useHandovers, useCreateHandover, useVerifyHandover } from '@/hooks/useC
 import { useToast } from '@/providers/toast-provider';
 import { useApprovers } from '@/hooks/useUsers';
 import { todayIST } from '@/lib/date-utils';
+import { PERMISSIONS } from '@as-finance/shared/constants';
+
+// Source of truth for "who can receive a handover" is the same permission the verify endpoint checks.
+const HANDOVER_VERIFIER_ROLES = new Set<string>(PERMISSIONS['handover.verify'] as readonly string[]);
 
 export default function HandoversPage() {
   const { user } = useAuth();
@@ -28,7 +32,7 @@ export default function HandoversPage() {
 
 function HandoversContent() {
   const { showToast } = useToast();
-  const { data: handovers, isLoading, error } = useHandovers();
+  const { data: handovers, isLoading, error } = useHandovers({ verificationStatus: 'pending' });
   const { data: usersData } = useApprovers();
   const createHandover = useCreateHandover();
   const verifyHandover = useVerifyHandover();
@@ -45,9 +49,9 @@ function HandoversContent() {
 
   const totalAmountPaise = Math.round(parseFloat(amountRupees || '0') * 100);
 
-  // Filter users who can receive handovers (managers, accountants, admins)
+  // Derived from PERMISSIONS so the UI list can never drift from the backend's verify-permission roles.
   const receivingOfficers = usersData?.data?.filter(
-    (u) => ['manager', 'accountant', 'super_admin', 'branch_manager'].includes(u.role) && u.is_active
+    (u) => HANDOVER_VERIFIER_ROLES.has(u.role) && u.is_active
   ) ?? [];
 
   async function handleInitiate() {
@@ -115,7 +119,8 @@ function HandoversContent() {
     }
   }
 
-  const pendingHandovers = handovers?.filter((h) => h.verification_status === 'pending') ?? [];
+  // useHandovers already filtered server-side; aliasing keeps downstream JSX readable.
+  const pendingHandovers = handovers ?? [];
 
   return (
     <div className="space-y-4">

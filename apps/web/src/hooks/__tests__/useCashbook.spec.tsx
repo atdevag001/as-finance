@@ -59,12 +59,13 @@ describe('useCashbook Hook', () => {
   });
 
   describe('useDailySummary', () => {
+    // Paise fields are strings to mirror BigInt JSON serialization from the API.
     const mockSummary = {
       date: '2024-01-15',
-      openingBalancePaise: 100000,
-      cashInflowsPaise: 500000,
-      cashOutflowsPaise: 200000,
-      closingBalancePaise: 400000,
+      openingBalancePaise: '100000',
+      cashInflowsPaise: '500000',
+      cashOutflowsPaise: '200000',
+      closingBalancePaise: '400000',
       hasDiscrepancy: false,
       transactionCount: 15,
     };
@@ -115,9 +116,12 @@ describe('useCashbook Hook', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       const summary = result.current.data!;
+      // Paise are bigint-precision strings; use BigInt arithmetic to avoid 2^53 truncation.
       const expectedClosing =
-        summary.openingBalancePaise + summary.cashInflowsPaise - summary.cashOutflowsPaise;
-      expect(summary.closingBalancePaise).toBe(expectedClosing);
+        BigInt(summary.openingBalancePaise) +
+        BigInt(summary.cashInflowsPaise) -
+        BigInt(summary.cashOutflowsPaise);
+      expect(BigInt(summary.closingBalancePaise)).toBe(expectedClosing);
     });
 
     it('detects discrepancy state', async () => {
@@ -131,7 +135,7 @@ describe('useCashbook Hook', () => {
       expect(result.current.data?.hasDiscrepancy).toBe(true);
     });
 
-    it('amounts are in paise (integers)', async () => {
+    it('amounts are integer paise strings (BigInt-safe)', async () => {
       mockGet.mockResolvedValueOnce(mockSummary);
 
       const { result } = renderHook(() => useDailySummary(), { wrapper });
@@ -139,10 +143,11 @@ describe('useCashbook Hook', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       const summary = result.current.data!;
-      expect(Number.isInteger(summary.openingBalancePaise)).toBe(true);
-      expect(Number.isInteger(summary.cashInflowsPaise)).toBe(true);
-      expect(Number.isInteger(summary.cashOutflowsPaise)).toBe(true);
-      expect(Number.isInteger(summary.closingBalancePaise)).toBe(true);
+      // Paise serialize from BigInt as decimal integer strings; verify they parse cleanly.
+      expect(summary.openingBalancePaise).toMatch(/^-?\d+$/);
+      expect(summary.cashInflowsPaise).toMatch(/^-?\d+$/);
+      expect(summary.cashOutflowsPaise).toMatch(/^-?\d+$/);
+      expect(summary.closingBalancePaise).toMatch(/^-?\d+$/);
     });
 
     it('returns loading state initially', () => {
@@ -163,13 +168,14 @@ describe('useCashbook Hook', () => {
   });
 
   describe('useHandovers', () => {
+    // total_amount_paise serializes to string (Prisma BigInt → JSON string).
     const mockHandovers = [
       {
         id: 'ho-1',
         collection_officer_id: 'user-1',
         collection_officer: { id: 'user-1', full_name: 'John Doe' },
         receiving_officer: { id: 'manager-1', full_name: 'Manager One' },
-        total_amount_paise: 250000,
+        total_amount_paise: '250000',
         handover_date: '2024-01-15',
         verification_status: 'pending',
         created_at: '2024-01-15T18:00:00.000Z',
@@ -179,7 +185,7 @@ describe('useCashbook Hook', () => {
         collection_officer_id: 'user-2',
         collection_officer: { id: 'user-2', full_name: 'Jane Smith' },
         receiving_officer: { id: 'manager-2', full_name: 'Manager Two' },
-        total_amount_paise: 180000,
+        total_amount_paise: '180000',
         handover_date: '2024-01-15',
         verification_status: 'verified',
         verified_at: '2024-01-15T17:30:00.000Z',
@@ -222,7 +228,7 @@ describe('useCashbook Hook', () => {
       });
     });
 
-    it('amounts are in paise', async () => {
+    it('amounts are integer paise strings (BigInt-safe)', async () => {
       mockGet.mockResolvedValueOnce(mockHandovers);
 
       const { result } = renderHook(() => useHandovers(), { wrapper });
@@ -230,7 +236,8 @@ describe('useCashbook Hook', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       result.current.data?.forEach(h => {
-        expect(Number.isInteger(h.total_amount_paise)).toBe(true);
+        // Prisma BigInt serializes to a decimal-integer string.
+        expect(h.total_amount_paise).toMatch(/^-?\d+$/);
       });
     });
 
@@ -266,15 +273,24 @@ describe('useCashbook Hook', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(mockPost).toHaveBeenCalledWith('/cashbook/expenses', {
-        category: 'office_supplies',
-        amount_paise: 50000,
-        description: 'Printer paper',
-        payment_mode: 'cash',
-      });
+      // Idempotency-Key is generated per-submit so we only assert its presence (not value) to dedupe double-clicks.
+      expect(mockPost).toHaveBeenCalledWith(
+        '/cashbook/expenses',
+        {
+          category: 'office_supplies',
+          amount_paise: 50000,
+          description: 'Printer paper',
+          payment_mode: 'cash',
+        },
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'Idempotency-Key': expect.any(String),
+          }),
+        }),
+      );
     });
 
-    it('invalidates cashbook queries on success', async () => {
+    it('invalidates cashbook and accounting queries on success', async () => {
       mockPost.mockResolvedValueOnce({ id: 'exp-1' });
 
       const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
@@ -286,6 +302,8 @@ describe('useCashbook Hook', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['cashbook'] });
+      // Expense posts a journal entry; downstream accounting reports must refresh.
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['accounting'] });
     });
 
     it('handles mutation error', async () => {
@@ -327,9 +345,13 @@ describe('useCashbook Hook', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(mockPost).toHaveBeenCalledWith('/cashbook/expenses', expect.objectContaining({
-        category,
-      }));
+      expect(mockPost).toHaveBeenCalledWith(
+        '/cashbook/expenses',
+        expect.objectContaining({ category }),
+        expect.objectContaining({
+          headers: expect.objectContaining({ 'Idempotency-Key': expect.any(String) }),
+        }),
+      );
     });
   });
 
@@ -346,13 +368,22 @@ describe('useCashbook Hook', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(mockPost).toHaveBeenCalledWith('/cashbook/handovers', {
-        amount_paise: 250000,
-        remarks: 'End of day cash handover',
-      });
+      // Idempotency-Key is generated per-submit so we only assert its presence (not value) to dedupe double-clicks.
+      expect(mockPost).toHaveBeenCalledWith(
+        '/cashbook/handovers',
+        {
+          amount_paise: 250000,
+          remarks: 'End of day cash handover',
+        },
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'Idempotency-Key': expect.any(String),
+          }),
+        }),
+      );
     });
 
-    it('invalidates cashbook queries on success', async () => {
+    it('invalidates cashbook and accounting queries on success', async () => {
       mockPost.mockResolvedValueOnce({ id: 'ho-new' });
 
       const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
@@ -364,6 +395,7 @@ describe('useCashbook Hook', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['cashbook'] });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['accounting'] });
     });
 
     it('handles mutation error', async () => {
@@ -425,7 +457,7 @@ describe('useCashbook Hook', () => {
       });
     });
 
-    it('invalidates cashbook queries on success', async () => {
+    it('invalidates cashbook and accounting queries on success', async () => {
       mockPatch.mockResolvedValueOnce({ id: 'ho-1', verification_status: 'verified' });
 
       const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
@@ -437,6 +469,7 @@ describe('useCashbook Hook', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['cashbook'] });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['accounting'] });
     });
 
     it('handles 404 error when handover not found', async () => {

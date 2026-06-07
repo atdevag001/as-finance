@@ -21,9 +21,13 @@ export function useCreateReversal() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['collections'] });
       qc.invalidateQueries({ queryKey: ['loans'] });
+      // Loan detail page reads ['loan', id] separately from ['loans']; reversal mutates cached_outstanding_paise/dpd/overdue_bucket.
+      qc.invalidateQueries({ queryKey: ['loan'] });
       qc.invalidateQueries({ queryKey: ['receipts'] });
       qc.invalidateQueries({ queryKey: ['penalties'] });
       qc.invalidateQueries({ queryKey: ['status-history'] });
+      // Reversal writes a 'collection_reversed' audit row that must surface immediately on the loan detail audit panel.
+      qc.invalidateQueries({ queryKey: ['audit-logs'] });
       qc.invalidateQueries({ queryKey: ['accounting'] });
       qc.invalidateQueries({ queryKey: ['dashboard'] });
     },

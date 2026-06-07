@@ -19,6 +19,9 @@ interface ConfirmDialogProps {
   cancelLabel?: string;
   variant?: 'default' | 'destructive';
   loading?: boolean;
+  // `disabled` blocks confirm without showing the spinner — use for form-invalid
+  // states so the user sees the static label, not a misleading "Processing…".
+  disabled?: boolean;
   onConfirm: () => void;
   children?: React.ReactNode;
 }
@@ -32,6 +35,7 @@ export function ConfirmDialog({
   cancelLabel = 'Cancel',
   variant = 'default',
   loading = false,
+  disabled = false,
   onConfirm,
   children,
 }: ConfirmDialogProps) {
@@ -55,7 +59,7 @@ export function ConfirmDialog({
           <Button
             variant={variant === 'destructive' ? 'destructive' : 'default'}
             onClick={onConfirm}
-            disabled={loading}
+            disabled={loading || disabled}
             className="w-full min-h-[44px] sm:w-auto sm:min-h-[40px]"
           >
             {loading ? (

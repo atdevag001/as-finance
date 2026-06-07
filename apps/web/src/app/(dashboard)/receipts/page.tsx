@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Eye } from 'lucide-react';
 import {
@@ -29,13 +29,27 @@ export default function ReceiptsPage() {
   return <ReceiptsContent />;
 }
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function ReceiptsContent() {
   const [page, setPage] = useState(1);
   const [loanIdFilter, setLoanIdFilter] = useState('');
+  const [debouncedLoanId, setDebouncedLoanId] = useState('');
+
+  // Debounce + UUID validation avoids hammering the API with 500s on partial input.
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      setDebouncedLoanId(UUID_REGEX.test(loanIdFilter.trim()) ? loanIdFilter.trim() : '');
+    }, 300);
+    return () => clearTimeout(handle);
+  }, [loanIdFilter]);
+
+  const trimmed = loanIdFilter.trim();
+  const isInvalidUuid = trimmed.length > 0 && !UUID_REGEX.test(trimmed);
 
   const { data, isLoading, error } = useReceipts({
     page,
-    loanId: loanIdFilter || undefined,
+    loanId: debouncedLoanId || undefined,
   });
 
   return (
@@ -43,15 +57,23 @@ function ReceiptsContent() {
       <h1 className="text-2xl font-bold">Receipts</h1>
 
       <div className="flex flex-wrap gap-2">
-        <Input
-          placeholder="Search by Loan ID (UUID)..."
-          value={loanIdFilter}
-          onChange={(e) => {
-            setLoanIdFilter(e.target.value);
-            setPage(1);
-          }}
-          className="w-72"
-        />
+        <div className="flex flex-col">
+          <Input
+            placeholder="Search by Loan ID (UUID)..."
+            value={loanIdFilter}
+            onChange={(e) => {
+              setLoanIdFilter(e.target.value);
+              setPage(1);
+            }}
+            className="w-72"
+            aria-invalid={isInvalidUuid}
+          />
+          {isInvalidUuid && (
+            <span className="mt-1 text-xs text-muted-foreground">
+              Enter a full UUID to search.
+            </span>
+          )}
+        </div>
       </div>
 
       {isLoading && (

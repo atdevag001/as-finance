@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Upload, ShieldBan, ShieldCheck, Plus, Pencil, Eye, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Upload, ShieldBan, ShieldCheck, Plus, Pencil, Eye, ExternalLink, Trash2 } from 'lucide-react';
 import { useCustomer, useUpdateCustomer, useAddFamilyMember, useAddGuarantor } from '@/hooks/useCustomers';
 import { StatusBadge, MoneyDisplay, LoadingSpinner, ErrorMessage, PermissionGate, ConfirmDialog, DateDisplay, TappablePhone } from '@/components/shared';
 import { Button } from '@/components/ui/button';
@@ -100,6 +100,11 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
 
   // View document loading state
   const [viewingDocId, setViewingDocId] = useState<string | null>(null);
+
+  // Delete document state — ConfirmDialog keyed by the doc pending deletion so
+  // we can show the document type/name in the confirmation copy.
+  const [deletingDoc, setDeletingDoc] = useState<{ fileId: string; document_type: string; file_name: string } | null>(null);
+  const [deleteInFlight, setDeleteInFlight] = useState(false);
 
   if (isLoading) return <div className="flex justify-center py-8"><LoadingSpinner size="lg" /></div>;
   if (error) {
@@ -223,7 +228,19 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
       for (const [key, value] of Object.entries(editFormData)) {
         if (value !== originalData[key]) {
           if (key === 'monthlyIncomeRupees') {
-            changedFields['monthlyIncomePaise'] = Math.round(parseFloat(value || '0') * 100);
+            // Guard against NaN/Infinity — JSON.stringify(NaN) serializes to null which the
+            // @IsOptional DTO silently accepts, dropping the field and losing user input.
+            const trimmed = value.trim();
+            if (trimmed === '') {
+              changedFields['monthlyIncomePaise'] = null;
+            } else {
+              const parsed = Number(trimmed);
+              if (!Number.isFinite(parsed) || parsed < 0) {
+                setEditError('Monthly income must be a non-negative number.');
+                return;
+              }
+              changedFields['monthlyIncomePaise'] = Math.round(parsed * 100);
+            }
           } else {
             changedFields[key] = value;
           }
@@ -316,6 +333,26 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
       }
     } finally {
       setViewingDocId(null);
+    }
+  }
+
+  async function handleDeleteDocument() {
+    if (!deletingDoc) return;
+    setDeleteInFlight(true);
+    try {
+      await apiClient.delete(`/documents/${deletingDoc.fileId}`);
+      showToast({ message: 'Document deleted.' });
+      queryClient.invalidateQueries({ queryKey: ['customers', id, 'documents'] });
+      setDeletingDoc(null);
+    } catch (err) {
+      const apiErr = err as { statusCode?: number; body?: { code?: string; message?: string } };
+      if (apiErr?.statusCode === 403 || apiErr?.body?.code === 'SCOPE_VIOLATION') {
+        showToast({ message: 'You do not have permission to delete this document.', variant: 'error' });
+      } else {
+        showToast({ message: (err as Error).message || 'Failed to delete document.', variant: 'error' });
+      }
+    } finally {
+      setDeleteInFlight(false);
     }
   }
 
@@ -463,21 +500,39 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
                           <DateDisplay date={doc.uploaded_at} />
                         </td>
                         <td className="px-3 py-2 text-right">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            disabled={viewingDocId === doc.id}
-                            onClick={() => handleViewDocument(doc.id, doc.fileId)}
-                          >
-                            {viewingDocId === doc.id ? (
-                              <LoadingSpinner size="sm" />
-                            ) : (
-                              <>
-                                <ExternalLink className="mr-1 h-4 w-4" />
-                                View
-                              </>
-                            )}
-                          </Button>
+                          <div className="flex justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={viewingDocId === doc.id}
+                              onClick={() => handleViewDocument(doc.id, doc.fileId)}
+                            >
+                              {viewingDocId === doc.id ? (
+                                <LoadingSpinner size="sm" />
+                              ) : (
+                                <>
+                                  <ExternalLink className="mr-1 h-4 w-4" />
+                                  View
+                                </>
+                              )}
+                            </Button>
+                            <PermissionGate permission="customer.upload_doc">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                aria-label={`Delete ${doc.document_type.replace(/_/g, ' ')}`}
+                                onClick={() =>
+                                  setDeletingDoc({
+                                    fileId: doc.fileId,
+                                    document_type: doc.document_type,
+                                    file_name: doc.file_name,
+                                  })
+                                }
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </PermissionGate>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -702,7 +757,9 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
               <Input
                 id="edit-monthlyIncomeRupees"
                 type="number"
-                inputMode="numeric"
+                inputMode="decimal"
+                min="0"
+                step="0.01"
                 value={editFormData['monthlyIncomeRupees'] ?? ''}
                 onChange={(e) => setEditFormData(prev => ({ ...prev, monthlyIncomeRupees: e.target.value }))}
               />
@@ -911,6 +968,22 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
           </div>
         </div>
       </ConfirmDialog>
+
+      {/* Delete Document Confirmation */}
+      <ConfirmDialog
+        open={!!deletingDoc}
+        onOpenChange={(open) => !open && !deleteInFlight && setDeletingDoc(null)}
+        title="Delete document?"
+        description={
+          deletingDoc
+            ? `Permanently remove "${deletingDoc.file_name}" (${deletingDoc.document_type.replace(/_/g, ' ')}) from this customer's documents. This cannot be undone from the UI.`
+            : ''
+        }
+        confirmLabel="Delete"
+        variant="destructive"
+        loading={deleteInFlight}
+        onConfirm={handleDeleteDocument}
+      />
     </div>
   );
 }

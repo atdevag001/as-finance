@@ -12,10 +12,8 @@ import { hasPermission } from '@/lib/permissions';
 import { useCreateExpense } from '@/hooks/useCashbook';
 import { useToast } from '@/providers/toast-provider';
 import { todayIST } from '@/lib/date-utils';
-
-const EXPENSE_CATEGORIES = [
-  'office_supplies', 'travel', 'salary', 'rent', 'utilities', 'maintenance', 'other',
-] as const;
+// Single source of truth shared with backend DTO whitelist (rejects unknown categories at API boundary).
+import { EXPENSE_CATEGORIES } from '@as-finance/shared';
 
 const PAYMENT_MODES = ['cash', 'bank_transfer', 'online'] as const;
 
