@@ -10,6 +10,7 @@ import { VerifyHandoverDto } from './dto/verify-handover.dto';
 import { BusinessRuleError, NotFoundError } from '../../common/errors';
 import { AccountingRepository } from '../accounting/accounting.repository';
 import { parseDateIST, todayIST } from '../../common/utils/date.util';
+import { JournalSourceType } from '@as-finance/shared';
 
 /**
  * Prisma transaction client type.
@@ -138,14 +139,15 @@ export class CashbookService {
 
     const result = await this.prisma.$transaction(async (tx: TxClient) => {
       // 1. Create journal entry: DR Expense, CR Cash/Bank.
-      //    sourceType is uppercased to match AccountingService.maybeWriteCashTransaction's
-      //    categoryMap; otherwise the auto-written cash_transactions row falls back to
-      //    'collection' and the cashbook miscounts the expense.
+      //    Use the typed enum const — the Prisma column is `JournalSourceType`
+      //    enum (lowercase 'expense'); passing the literal 'EXPENSE' broke the
+      //    insert with 'Invalid value for argument source_type'. The accounting
+      //    auto-mirror's categoryMap now keys on lowercase too.
       const journalEntry = await this.accountingService.createJournalEntry(
         {
           date: dto.date,
           description: `Expense: ${dto.category} - ${dto.description}`,
-          sourceType: 'EXPENSE' as never,
+          sourceType: JournalSourceType.EXPENSE,
           sourceId: expenseId,
           lines: [
             { accountId: expenseAccount.id, debitPaise: dto.amountPaise, creditPaise: 0 },

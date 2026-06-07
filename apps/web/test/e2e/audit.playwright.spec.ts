@@ -61,10 +61,12 @@ test.describe('Audit Module', () => {
       await auditorPage.goto('/audit');
       await expect(auditorPage.getByRole('heading', { name: 'Audit Log' })).toBeVisible({ timeout: 15_000 });
 
+      // Wait for either table or loading spinner to settle. The table only renders
+      // on lg+ viewports inside a div with `hidden lg:block` so use the th text directly.
       const table = auditorPage.locator('table');
-      if (await table.isVisible({ timeout: 5_000 }).catch(() => false)) {
-        await expect(auditorPage.getByText('Timestamp')).toBeVisible();
-        await expect(auditorPage.getByText('Action')).toBeVisible();
+      if (await table.first().isVisible({ timeout: 10_000 }).catch(() => false)) {
+        await expect(auditorPage.locator('th').filter({ hasText: 'Timestamp' })).toBeVisible();
+        await expect(auditorPage.locator('th').filter({ hasText: 'Action' })).toBeVisible();
       }
     });
 
@@ -96,29 +98,32 @@ test.describe('Audit Module', () => {
       await auditorPage.goto('/audit');
       await expect(auditorPage.getByRole('heading', { name: 'Audit Log' })).toBeVisible({ timeout: 15_000 });
 
-      await expect(auditorPage.getByPlaceholder(/entity/i)).toBeVisible({ timeout: 15_000 });
+      // Entity filter is a Select component (combobox) with aria-label
+      await expect(auditorPage.getByLabel('Filter by entity')).toBeVisible({ timeout: 15_000 });
     });
 
     test('has action filter input', async ({ auditorPage }) => {
       await auditorPage.goto('/audit');
       await expect(auditorPage.getByRole('heading', { name: 'Audit Log' })).toBeVisible({ timeout: 15_000 });
 
-      await expect(auditorPage.getByPlaceholder(/action/i)).toBeVisible({ timeout: 15_000 });
+      // Action filter is a Select component (combobox) with aria-label
+      await expect(auditorPage.getByLabel('Filter by action')).toBeVisible({ timeout: 15_000 });
     });
 
     test('has date filter input', async ({ auditorPage }) => {
       await auditorPage.goto('/audit');
       await expect(auditorPage.getByRole('heading', { name: 'Audit Log' })).toBeVisible({ timeout: 15_000 });
 
-      await expect(auditorPage.locator('input[type="date"]')).toBeVisible({ timeout: 15_000 });
+      await expect(auditorPage.locator('input[type="date"]').first()).toBeVisible({ timeout: 15_000 });
     });
 
     test('entity filter updates results', async ({ auditorPage }) => {
       await auditorPage.goto('/audit');
       await expect(auditorPage.getByRole('heading', { name: 'Audit Log' })).toBeVisible({ timeout: 15_000 });
 
-      const entityFilter = auditorPage.getByPlaceholder(/entity/i);
-      await entityFilter.fill('customer');
+      // Open the entity Select and choose an option
+      await auditorPage.getByLabel('Filter by entity').click();
+      await auditorPage.getByRole('option', { name: /customer/i }).first().click();
       await expect(auditorPage.getByRole('heading', { name: 'Audit Log' })).toBeVisible({ timeout: 15_000 });
 
       // Results should update (no error = success)
@@ -128,8 +133,10 @@ test.describe('Audit Module', () => {
       await auditorPage.goto('/audit');
       await expect(auditorPage.getByRole('heading', { name: 'Audit Log' })).toBeVisible({ timeout: 15_000 });
 
-      const actionFilter = auditorPage.getByPlaceholder(/action/i);
-      await actionFilter.fill('create');
+      // Open the action Select and choose any option (first non-"all" option)
+      await auditorPage.getByLabel('Filter by action').click();
+      // Pick the second item to skip "All actions"
+      await auditorPage.getByRole('option').nth(1).click();
       await expect(auditorPage.getByRole('heading', { name: 'Audit Log' })).toBeVisible({ timeout: 15_000 });
 
       // Results should update (no error = success)
@@ -139,7 +146,7 @@ test.describe('Audit Module', () => {
       await auditorPage.goto('/audit');
       await expect(auditorPage.getByRole('heading', { name: 'Audit Log' })).toBeVisible({ timeout: 15_000 });
 
-      const dateFilter = auditorPage.locator('input[type="date"]');
+      const dateFilter = auditorPage.locator('input[type="date"]').first();
       await dateFilter.fill('2024-01-01');
       await expect(auditorPage.getByRole('heading', { name: 'Audit Log' })).toBeVisible({ timeout: 15_000 });
 
@@ -150,9 +157,12 @@ test.describe('Audit Module', () => {
       await auditorPage.goto('/audit');
       await expect(auditorPage.getByRole('heading', { name: 'Audit Log' })).toBeVisible({ timeout: 15_000 });
 
-      // Apply multiple filters
-      await auditorPage.getByPlaceholder(/entity/i).fill('loan');
-      await auditorPage.getByPlaceholder(/action/i).fill('approve');
+      // Apply entity filter
+      await auditorPage.getByLabel('Filter by entity').click();
+      await auditorPage.getByRole('option', { name: /^loan$/i }).first().click();
+      // Apply action filter
+      await auditorPage.getByLabel('Filter by action').click();
+      await auditorPage.getByRole('option').nth(1).click();
       await expect(auditorPage.getByRole('heading', { name: 'Audit Log' })).toBeVisible({ timeout: 15_000 });
 
       // Results should update based on combined filters
@@ -163,12 +173,13 @@ test.describe('Audit Module', () => {
       await expect(auditorPage.getByRole('heading', { name: 'Audit Log' })).toBeVisible({ timeout: 15_000 });
 
       // Apply filter
-      const entityFilter = auditorPage.getByPlaceholder(/entity/i);
-      await entityFilter.fill('customer');
+      await auditorPage.getByLabel('Filter by entity').click();
+      await auditorPage.getByRole('option', { name: /customer/i }).first().click();
       await expect(auditorPage.getByRole('heading', { name: 'Audit Log' })).toBeVisible({ timeout: 15_000 });
 
-      // Clear filter
-      await entityFilter.fill('');
+      // Clear filter by choosing "All entities"
+      await auditorPage.getByLabel('Filter by entity').click();
+      await auditorPage.getByRole('option', { name: /all entities/i }).click();
       await expect(auditorPage.getByRole('heading', { name: 'Audit Log' })).toBeVisible({ timeout: 15_000 });
 
       // Should reset to first page

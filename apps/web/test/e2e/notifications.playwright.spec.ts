@@ -174,8 +174,11 @@ test.describe('Notifications Page', () => {
         await expect(adminPage.getByRole('columnheader', { name: /recipient/i })).toBeVisible();
         await expect(adminPage.getByRole('columnheader', { name: /status/i })).toBeVisible();
 
-        // First row should have a status badge
-        await expect(firstRow.locator('[class*="badge"], [class*="status"]')).toBeVisible();
+        // First row should have a status badge. StatusBadge renders a <span>
+        // with rounded-full + capitalize classes — no literal "badge" class.
+        await expect(
+          firstRow.locator('span.rounded-full.capitalize').first(),
+        ).toBeVisible();
       }
     });
   });
@@ -200,9 +203,17 @@ test.describe('Notifications Page', () => {
       await adminPage.goto('/notifications');
       await adminPage.waitForLoadState('networkidle');
 
+      // Wait for the heading so we know the page rendered before asserting pagination.
+      await expect(adminPage.getByRole('heading', { name: 'Notifications' })).toBeVisible({
+        timeout: 15_000,
+      });
+
       if (totalCount > 20) {
-        // Pagination should be visible
-        await expect(adminPage.getByText(/page \d+ of \d+/i)).toBeVisible({ timeout: 15_000 });
+        // Pagination should be visible — use .first() to tolerate any other "Page X of Y"
+        // text that might appear elsewhere on the page.
+        await expect(
+          adminPage.getByText(/page \d+ of \d+/i).first(),
+        ).toBeVisible({ timeout: 15_000 });
       } else {
         // Few/no notifications, pagination may not show or show "Page 1 of 1"
         // This is acceptable behavior
@@ -215,8 +226,12 @@ test.describe('Notifications Page', () => {
       await fieldOfficerPage.goto('/notifications');
       await fieldOfficerPage.waitForLoadState('domcontentloaded');
 
-      // Should show access denied or redirect
-      const accessDenied = fieldOfficerPage.getByText(/access denied|not authorized|permission/i);
+      // Should show access denied or redirect. AccessDenied renders both a heading
+      // and a paragraph that match /access denied|permission/i, so .or() resolves
+      // to multiple elements and triggers strict mode — use .first() to pick one.
+      const accessDenied = fieldOfficerPage
+        .getByText(/access denied|not authorized|permission/i)
+        .first();
       const redirectedAway = fieldOfficerPage.getByRole('heading', { name: 'Dashboard' });
 
       await expect(accessDenied.or(redirectedAway)).toBeVisible({ timeout: 15_000 });
@@ -490,9 +505,13 @@ test.describe('Notifications Page', () => {
       await auditorPage.goto('/notifications');
 
       // Auditor either has notification.read (sees rows but no Retry button) or
-      // is denied entirely. Both outcomes satisfy "cannot retry".
+      // is denied entirely. Both outcomes satisfy "cannot retry". AccessDenied
+      // renders both a heading and a paragraph matching /access denied|permission/i,
+      // so we use .first() to avoid strict-mode violations in .or().
       const heading = auditorPage.getByRole('heading', { name: 'Notifications' });
-      const denied = auditorPage.getByText(/access denied|not authorized|permission/i);
+      const denied = auditorPage
+        .getByText(/access denied|not authorized|permission/i)
+        .first();
       await expect(heading.or(denied)).toBeVisible({ timeout: 15_000 });
 
       if (await heading.isVisible()) {

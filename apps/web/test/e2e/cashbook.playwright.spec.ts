@@ -223,32 +223,40 @@ test.describe('Cashbook Module', () => {
       await expect(accountantPage.getByRole('heading', { name: /cash handovers/i })).toBeVisible({ timeout: 15_000 });
     });
 
-    test('shows initiate handover form', async ({ accountantPage }) => {
-      await accountantPage.goto('/cashbook/handovers');
-      await accountantPage.waitForLoadState('domcontentloaded');
+    test('shows initiate handover form', async ({ managerPage }) => {
+      // Form is gated by PermissionGate("handover.create") — accountants do NOT
+      // hold that permission (only super_admin / manager / collection_officer
+      // do), so the form is intentionally absent for accountants. Use manager
+      // here because manager has BOTH handover.create AND
+      // accounting.manage_cashbook so the page renders and the form is visible.
+      await managerPage.goto('/cashbook/handovers');
+      await managerPage.waitForLoadState('domcontentloaded');
 
       // Wait for the heading first
-      await expect(accountantPage.getByRole('heading', { name: 'Cash Handovers' })).toBeVisible({ timeout: 30_000 });
+      await expect(managerPage.getByRole('heading', { name: 'Cash Handovers' })).toBeVisible({ timeout: 30_000 });
 
       // The "Initiate Handover" is a CardTitle - find the form elements
-      await expect(accountantPage.locator('input[type="number"]').first()).toBeVisible({ timeout: 15_000 });
+      await expect(managerPage.locator('input[type="number"]').first()).toBeVisible({ timeout: 15_000 });
       // Button text is "Initiate Handover"
-      await expect(accountantPage.getByRole('button', { name: 'Initiate Handover' })).toBeVisible({ timeout: 10_000 });
+      await expect(managerPage.getByRole('button', { name: 'Initiate Handover' })).toBeVisible({ timeout: 10_000 });
     });
 
-    test('validates handover amount is required', async ({ accountantPage }) => {
-      await accountantPage.goto('/cashbook/handovers');
-      await accountantPage.waitForLoadState('domcontentloaded');
+    test('validates handover amount is required', async ({ managerPage }) => {
+      // Same role-gating reason as above: the Initiate Handover button is
+      // inside <PermissionGate permission="handover.create"> which excludes
+      // accountants. Manager has the permission.
+      await managerPage.goto('/cashbook/handovers');
+      await managerPage.waitForLoadState('domcontentloaded');
 
       // Wait for the page to load
-      await expect(accountantPage.getByRole('heading', { name: 'Cash Handovers' })).toBeVisible({ timeout: 30_000 });
+      await expect(managerPage.getByRole('heading', { name: 'Cash Handovers' })).toBeVisible({ timeout: 30_000 });
 
       // Click submit without entering amount (or with 0)
-      await accountantPage.getByRole('button', { name: 'Initiate Handover' }).click();
+      await managerPage.getByRole('button', { name: 'Initiate Handover' }).click();
 
       // Should show validation error - look for specific text
       await expect(
-        accountantPage.getByText(/Amount must be greater than zero/i),
+        managerPage.getByText(/Amount must be greater than zero/i),
       ).toBeVisible({ timeout: 15_000 });
     });
 

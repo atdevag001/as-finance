@@ -126,14 +126,17 @@ test.describe('Loan Products Module', () => {
       await adminPage.goto('/loan-products/new');
       await adminPage.waitForLoadState('domcontentloaded');
 
-      await expect(adminPage.getByText('Product Name')).toBeVisible({ timeout: 15_000 });
-      await expect(adminPage.getByText('Interest Type')).toBeVisible();
-      await expect(adminPage.getByText('Annual Rate')).toBeVisible();
-      await expect(adminPage.getByText('Repayment Frequency')).toBeVisible();
-      await expect(adminPage.getByText('Min Principal')).toBeVisible();
-      await expect(adminPage.getByText('Max Principal')).toBeVisible();
-      await expect(adminPage.getByText('Min Tenure')).toBeVisible();
-      await expect(adminPage.getByText('Max Tenure')).toBeVisible();
+      // Use label locators (form has <Label htmlFor="..."> elements) to avoid
+      // strict-mode violations with other matching text on the page
+      // (e.g. "Enter annual rate to calculate" hint matches /annual rate/).
+      await expect(adminPage.locator('label[for="name"]')).toBeVisible({ timeout: 15_000 });
+      await expect(adminPage.locator('label[for="interestType"]')).toBeVisible();
+      await expect(adminPage.locator('label[for="annualRate"]')).toBeVisible();
+      await expect(adminPage.locator('label[for="repaymentFrequency"]')).toBeVisible();
+      await expect(adminPage.locator('label[for="minPrincipal"]')).toBeVisible();
+      await expect(adminPage.locator('label[for="maxPrincipal"]')).toBeVisible();
+      await expect(adminPage.locator('label[for="minTenureMonths"]')).toBeVisible();
+      await expect(adminPage.locator('label[for="maxTenureMonths"]')).toBeVisible();
     });
 
     test('interest type dropdown has flat and reducing balance options', async ({ adminPage }) => {
@@ -144,7 +147,7 @@ test.describe('Loan Products Module', () => {
       await expect(adminPage.getByText('Interest Type')).toBeVisible({ timeout: 15_000 });
 
       // Click the select trigger to open dropdown
-      const interestTypeSelect = adminPage.locator('#interest_type');
+      const interestTypeSelect = adminPage.locator('#interestType');
       await interestTypeSelect.click();
 
       // Radix UI renders options in a portal - use role selectors
@@ -160,7 +163,7 @@ test.describe('Loan Products Module', () => {
       await expect(adminPage.getByText('Repayment Frequency')).toBeVisible({ timeout: 15_000 });
 
       // Click the select trigger to open dropdown
-      const frequencySelect = adminPage.locator('#frequency');
+      const frequencySelect = adminPage.locator('#repaymentFrequency');
       await frequencySelect.click();
 
       // Radix UI renders options in a portal - use role selectors
@@ -176,11 +179,11 @@ test.describe('Loan Products Module', () => {
       await expect(adminPage.getByText('Product Name')).toBeVisible({ timeout: 30_000 });
 
       // Use locators by ID since labels include extra text like (%) and *
-      await adminPage.locator('#annual_rate').fill('24');
-      await adminPage.locator('#min_principal').fill('5000');
-      await adminPage.locator('#max_principal').fill('100000');
-      await adminPage.locator('#min_tenure_months').fill('3');
-      await adminPage.locator('#max_tenure_months').fill('24');
+      await adminPage.locator('#annualRate').fill('24');
+      await adminPage.locator('#minPrincipal').fill('5000');
+      await adminPage.locator('#maxPrincipal').fill('100000');
+      await adminPage.locator('#minTenureMonths').fill('3');
+      await adminPage.locator('#maxTenureMonths').fill('24');
 
       await adminPage.getByRole('button', { name: /create product/i }).click();
 
@@ -198,11 +201,11 @@ test.describe('Loan Products Module', () => {
 
       // Use locators by ID since labels include extra text like (%) and *
       await adminPage.locator('#name').fill('Test Product');
-      await adminPage.locator('#annual_rate').fill('0');
-      await adminPage.locator('#min_principal').fill('5000');
-      await adminPage.locator('#max_principal').fill('100000');
-      await adminPage.locator('#min_tenure_months').fill('3');
-      await adminPage.locator('#max_tenure_months').fill('24');
+      await adminPage.locator('#annualRate').fill('0');
+      await adminPage.locator('#minPrincipal').fill('5000');
+      await adminPage.locator('#maxPrincipal').fill('100000');
+      await adminPage.locator('#minTenureMonths').fill('3');
+      await adminPage.locator('#maxTenureMonths').fill('24');
 
       await adminPage.getByRole('button', { name: /create product/i }).click();
 
@@ -220,11 +223,11 @@ test.describe('Loan Products Module', () => {
 
       // Use locators by ID since labels include extra text like (Rs) and *
       await adminPage.locator('#name').fill('Test Product');
-      await adminPage.locator('#annual_rate').fill('24');
-      await adminPage.locator('#min_principal').fill('100000');
-      await adminPage.locator('#max_principal').fill('5000');
-      await adminPage.locator('#min_tenure_months').fill('3');
-      await adminPage.locator('#max_tenure_months').fill('24');
+      await adminPage.locator('#annualRate').fill('24');
+      await adminPage.locator('#minPrincipal').fill('100000');
+      await adminPage.locator('#maxPrincipal').fill('5000');
+      await adminPage.locator('#minTenureMonths').fill('3');
+      await adminPage.locator('#maxTenureMonths').fill('24');
 
       await adminPage.getByRole('button', { name: /create product/i }).click();
 
@@ -242,11 +245,11 @@ test.describe('Loan Products Module', () => {
 
       // Use locators by ID since labels include extra text like (months) and *
       await adminPage.locator('#name').fill('Test Product');
-      await adminPage.locator('#annual_rate').fill('24');
-      await adminPage.locator('#min_principal').fill('5000');
-      await adminPage.locator('#max_principal').fill('100000');
-      await adminPage.locator('#min_tenure_months').fill('24');
-      await adminPage.locator('#max_tenure_months').fill('3');
+      await adminPage.locator('#annualRate').fill('24');
+      await adminPage.locator('#minPrincipal').fill('5000');
+      await adminPage.locator('#maxPrincipal').fill('100000');
+      await adminPage.locator('#minTenureMonths').fill('24');
+      await adminPage.locator('#maxTenureMonths').fill('3');
 
       await adminPage.getByRole('button', { name: /create product/i }).click();
 

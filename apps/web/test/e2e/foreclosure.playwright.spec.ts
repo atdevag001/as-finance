@@ -69,8 +69,15 @@ async function createLoan(
 /**
  * Helper: Advance loan to active status.
  * Workflow: draft -> submit -> review -> approve -> disburse -> active
+ *
+ * Maker-checker rules:
+ * - The approver cannot be the creator of the loan.
+ * - The disburser cannot be the approver of the loan.
+ * Only super_admin bypasses maker-checker, so we use it for the approve step
+ * and let manager handle disburse without violating the rule.
  */
 async function activateLoan(foToken: string, managerToken: string, loanId: string): Promise<void> {
+  const approverToken = await getTokenForRole('super_admin');
   await fetch(`${API_BASE}/loans/${loanId}/submit`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${foToken}`, ...(await csrfHeadersFor(foToken)) },
@@ -81,7 +88,7 @@ async function activateLoan(foToken: string, managerToken: string, loanId: strin
   });
   await fetch(`${API_BASE}/loans/${loanId}/approve`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${managerToken}`, ...(await csrfHeadersFor(managerToken)) },
+    headers: { Authorization: `Bearer ${approverToken}`, ...(await csrfHeadersFor(approverToken)) },
   });
   await fetch(`${API_BASE}/loans/${loanId}/disburse`, {
     method: 'POST',
@@ -158,9 +165,12 @@ test.describe('Foreclosure', () => {
       const dialog = managerPage.getByRole('dialog');
       await expect(dialog).toBeVisible({ timeout: 15_000 });
 
-      // Quote breakdown should show
-      await expect(dialog.getByText(/outstanding principal/i)).toBeVisible();
-      await expect(dialog.getByText(/settlement amount/i)).toBeVisible();
+      // Quote breakdown only renders after the POST /foreclosures/quote
+      // response resolves and the dialog's child block (gated on
+      // `foreclosureQuote && (...)`) mounts. Give the API call enough
+      // headroom instead of relying on the 5s default.
+      await expect(dialog.getByText(/outstanding principal/i)).toBeVisible({ timeout: 15_000 });
+      await expect(dialog.getByText(/settlement amount/i)).toBeVisible({ timeout: 15_000 });
     });
 
     test('quote shows expiry time', async ({ managerPage }) => {
@@ -269,7 +279,19 @@ test.describe('Foreclosure', () => {
 
       await fieldOfficerPage.goto(`/loans/${loanId}`);
       await fieldOfficerPage.waitForLoadState('domcontentloaded');
-      await expect(fieldOfficerPage.locator('span', { hasText: /^active$/i }).first()).toBeVisible({ timeout: 30_000 });
+
+      // Field officers have a customer-assignment scope filter — the loan's
+      // customer is not assigned to this field officer, so the page renders
+      // the scope error banner instead of the loan detail. Wait for either
+      // the loan to load (active span) OR the scope/access banner so the
+      // assertion isn't racing the network. Either way, the Foreclosure
+      // button must not be visible — which is what this permission test
+      // is verifying.
+      await expect(
+        fieldOfficerPage.locator(
+          'span:has-text("active"), :text("can only access"), :text("Access denied"), :text("Forbidden")',
+        ).first(),
+      ).toBeVisible({ timeout: 30_000 });
 
       // Foreclosure button should NOT be visible
       await expect(fieldOfficerPage.getByRole('button', { name: /foreclosure/i })).not.toBeVisible();

@@ -1,4 +1,5 @@
 import { test, expect, apiRequest, getTokenForRole } from './fixtures';
+import type { Page } from '@playwright/test';
 
 /**
  * Settings Module — Playwright E2E Tests
@@ -12,37 +13,54 @@ import { test, expect, apiRequest, getTokenForRole } from './fixtures';
  * Uses pre-authenticated fixtures for faster, more reliable tests.
  */
 
+/**
+ * Navigate to a route and recover from the rare race where /auth/refresh
+ * returns 429 and the page redirects to /login before the storage-state
+ * cookies are fully applied. Reload up to twice if we landed on login.
+ */
+async function gotoWithAuthRetry(page: Page, path: string): Promise<void> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await page.goto(path);
+    // Wait for either the dashboard layout or login form to settle.
+    await page.waitForLoadState('domcontentloaded');
+    // If we landed on /login due to refresh-token rate-limit (429), wait
+    // a beat for the limiter window and retry.
+    if (!/\/login/.test(page.url())) {
+      return;
+    }
+    await page.waitForTimeout(1500);
+  }
+}
+
 test.describe('Settings Module', () => {
   test.describe('Page Access', () => {
     test('admin can access settings', async ({ adminPage }) => {
-      await adminPage.goto('/settings');
-      await expect(adminPage.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible({ timeout: 10_000 });
+      await gotoWithAuthRetry(adminPage, '/settings');
+      await expect(adminPage.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible({ timeout: 15_000 });
     });
 
     test('manager can access settings', async ({ managerPage }) => {
-      await managerPage.goto('/settings');
-      await expect(managerPage.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible({ timeout: 10_000 });
+      await gotoWithAuthRetry(managerPage, '/settings');
+      await expect(managerPage.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible({ timeout: 15_000 });
     });
 
     test('field_officer gets Access Denied', async ({ fieldOfficerPage }) => {
-      await fieldOfficerPage.goto('/settings');
-      await expect(fieldOfficerPage.getByRole('heading', { name: 'Access Denied' })).toBeVisible({ timeout: 10_000 });
+      await gotoWithAuthRetry(fieldOfficerPage, '/settings');
+      await expect(fieldOfficerPage.getByRole('heading', { name: 'Access Denied' })).toBeVisible({ timeout: 15_000 });
     });
   });
 
   test.describe('System Settings', () => {
     test('displays settings page', async ({ adminPage }) => {
-      await adminPage.goto('/settings');
-      await adminPage.waitForLoadState('networkidle');
+      await gotoWithAuthRetry(adminPage, '/settings');
       // Page should show Settings heading
-      await expect(adminPage.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible({ timeout: 10_000 });
+      await expect(adminPage.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible({ timeout: 15_000 });
     });
 
     test('settings page loads without error', async ({ adminPage }) => {
-      await adminPage.goto('/settings');
-      await adminPage.waitForLoadState('networkidle');
+      await gotoWithAuthRetry(adminPage, '/settings');
       // Page should not show error
-      await expect(adminPage.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible({ timeout: 10_000 });
+      await expect(adminPage.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible({ timeout: 15_000 });
       // Check that there's no error alert
       const errorAlert = adminPage.locator('[role="alert"]').first();
       const hasError = await errorAlert.isVisible().catch(() => false);
@@ -50,9 +68,8 @@ test.describe('Settings Module', () => {
     });
 
     test('save button is visible if present', async ({ adminPage }) => {
-      await adminPage.goto('/settings');
-      await adminPage.waitForLoadState('networkidle');
-      await expect(adminPage.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible({ timeout: 10_000 });
+      await gotoWithAuthRetry(adminPage, '/settings');
+      await expect(adminPage.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible({ timeout: 15_000 });
       // Save button may or may not be present depending on settings content
       const saveButton = adminPage.getByRole('button', { name: /save/i });
       // Just verify the page loaded
@@ -61,18 +78,16 @@ test.describe('Settings Module', () => {
 
   test.describe('Holiday Calendar', () => {
     test('settings page accessible to admin', async ({ adminPage }) => {
-      await adminPage.goto('/settings');
-      await adminPage.waitForLoadState('networkidle');
+      await gotoWithAuthRetry(adminPage, '/settings');
       // Settings page should be accessible - use exact match to avoid matching "System Settings"
-      await expect(adminPage.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible({ timeout: 10_000 });
+      await expect(adminPage.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible({ timeout: 15_000 });
     });
   });
 
   test.describe('Permission-based visibility', () => {
     test('manager can access settings', async ({ managerPage }) => {
-      await managerPage.goto('/settings');
-      await managerPage.waitForLoadState('networkidle');
-      await expect(managerPage.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible({ timeout: 10_000 });
+      await gotoWithAuthRetry(managerPage, '/settings');
+      await expect(managerPage.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible({ timeout: 15_000 });
     });
   });
 
@@ -131,7 +146,7 @@ test.describe('Settings Module', () => {
       // dirty-state check trips and the Save button enables.
       const newValue = originalValue === 20 ? 25 : 20;
 
-      await adminPage.goto('/settings');
+      await gotoWithAuthRetry(adminPage, '/settings');
       await expect(
         adminPage.getByRole('heading', { name: 'Settings', exact: true }),
       ).toBeVisible({ timeout: 15_000 });
@@ -181,7 +196,7 @@ test.describe('Settings Module', () => {
     test('manager (read-only) sees inputs disabled and Save button not rendered', async ({
       managerPage,
     }) => {
-      await managerPage.goto('/settings');
+      await gotoWithAuthRetry(managerPage, '/settings');
       await expect(
         managerPage.getByRole('heading', { name: 'Settings', exact: true }),
       ).toBeVisible({ timeout: 15_000 });

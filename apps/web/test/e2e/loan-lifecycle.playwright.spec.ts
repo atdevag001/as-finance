@@ -2,6 +2,17 @@ import { test, expect } from './fixtures';
 import { getTokenForRole, createTestCustomer, apiRequest, csrfHeadersFor } from './fixtures';
 
 /**
+ * Decode a JWT and return the `sub` (user id) claim.
+ * Avoids hammering /auth/me from each test.
+ */
+function getUserIdFromToken(token: string): string {
+  const parts = token.split('.');
+  if (parts.length < 2) throw new Error('Invalid JWT');
+  const payload = JSON.parse(Buffer.from(parts[1]!, 'base64url').toString('utf8')) as { sub: string };
+  return payload.sub;
+}
+
+/**
  * Loan Lifecycle — Comprehensive E2E Tests
  *
  * Tests the complete loan lifecycle from creation to closure:
@@ -123,15 +134,26 @@ async function loanAction(
 /**
  * Helper: Advance loan through review to approval.
  * Loan state: submitted → under_review → approved
+ *
+ * The audit enforces maker-checker: the user who approves a loan cannot
+ * be the same user who later disburses it. Since most tests use
+ * `managerPage` to perform the UI disburse action, we route the API
+ * approve step through `super_admin` so the manager can still click
+ * Disburse in the UI without tripping MAKER_CHECKER_VIOLATION.
  */
 async function approveLoan(foToken: string, managerToken: string, loanId: string): Promise<void> {
   await loanAction(foToken, loanId, 'submit');
   await loanAction(managerToken, loanId, 'review');
-  await loanAction(managerToken, loanId, 'approve');
+  const approverToken = await getTokenForRole('super_admin');
+  await loanAction(approverToken, loanId, 'approve');
 }
 
 /**
  * Helper: Advance loan to active status (disbursed).
+ * Uses super_admin to disburse so the approver (also super_admin) does
+ * not equal the disburser, satisfying the API's maker-checker rule —
+ * wait, that would still violate it. The trick: `approveLoan` above
+ * uses super_admin to approve, so we use managerToken to disburse here.
  */
 async function activateLoan(foToken: string, managerToken: string, loanId: string): Promise<void> {
   await approveLoan(foToken, managerToken, loanId);
@@ -170,17 +192,34 @@ test.describe('Loan Lifecycle', () => {
   let managerToken: string;
   let productVersionId: string;
 
+  let foUserId: string;
+
   test.beforeAll(async () => {
     foToken = await getTokenForRole('field_officer');
     managerToken = await getTokenForRole('manager');
     productVersionId = await getProductVersionId(foToken);
+    foUserId = getUserIdFromToken(foToken);
   });
 
   /**
-   * Helper: Create a unique customer for each test to avoid concurrent loan limits.
+   * Helper: Create a unique customer for each test to avoid concurrent
+   * loan limits. The customer is explicitly assigned to the field
+   * officer so the `fieldOfficerPage` tests can view the resulting
+   * loan (the API enforces SCOPE_VIOLATION on unassigned customers
+   * for restricted roles like field_officer).
+   *
+   * We first create via the shared fixture (handles Aadhaar/PAN
+   * generation + uniqueness), then PATCH the assignedOfficerId so the
+   * field officer becomes the owner. The PATCH is performed as manager
+   * to bypass per-customer scope.
    */
   async function createUniqueCustomer(): Promise<string> {
-    return createTestCustomer(foToken);
+    const id = await createTestCustomer(foToken);
+    // Assign to field officer so `fieldOfficerPage` can view the loan.
+    await apiRequest('PATCH', `/customers/${id}`, managerToken, {
+      assignedOfficerId: foUserId,
+    });
+    return id;
   }
 
   test.describe('Status Transitions', () => {
@@ -625,8 +664,11 @@ test.describe('Loan Lifecycle', () => {
       // Wait for receipt table to have data - look for receipt number pattern (RCP-YYYY-NNNNN)
       await expect(collectionOfficerPage.getByText(/RCP-\d{4}-\d{5}/)).toBeVisible({ timeout: 15_000 });
 
-      // Verify the receipt amount shows
-      await expect(collectionOfficerPage.getByText(/₹5,000/).first()).toBeVisible();
+      // Verify the receipt amount shows inside the Receipts table (the
+      // page renders many ₹5,000 elements across collection history, EMI
+      // schedule and summary cards; first() can land on a hidden one).
+      const receiptsTable = collectionOfficerPage.locator('table').filter({ hasText: 'Receipt #' });
+      await expect(receiptsTable.getByText(/₹5,000/).first()).toBeVisible();
     });
 
     test('receipt number links to receipt detail page', async ({ collectionOfficerPage }) => {

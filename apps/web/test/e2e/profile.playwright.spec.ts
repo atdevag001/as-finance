@@ -14,6 +14,13 @@ import { test, expect } from './fixtures';
 
 test.describe('Profile Module', () => {
   test.describe('Change Password Page', () => {
+    // The auth provider calls /auth/refresh on every page mount to hydrate
+    // the user. Running 13 tests back-to-back exhausts the per-IP rate-limit
+    // on /auth/refresh, causing late tests to be redirected to /login. Pace
+    // tests so the burst window stays under the rate-limit.
+    test.beforeEach(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 8_000));
+    });
     test('navigates to change password page', async ({ fieldOfficerPage }) => {
       await fieldOfficerPage.goto('/profile/change-password');
       await expect(fieldOfficerPage.getByRole('heading', { name: /change password/i })).toBeVisible({ timeout: 15_000 });

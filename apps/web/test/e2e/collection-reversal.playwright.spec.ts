@@ -75,8 +75,12 @@ async function createLoan(
 /**
  * Helper: Advance loan to active status.
  * Workflow: draft -> submit -> review -> approve -> disburse -> active
+ *
+ * Maker-checker rule: the user who approves cannot be the user who disburses.
+ * Approve with super_admin so the manager can perform the disbursement.
  */
 async function activateLoan(foToken: string, managerToken: string, loanId: string): Promise<void> {
+  const approverToken = await getTokenForRole('super_admin');
   await fetch(`${API_BASE}/loans/${loanId}/submit`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${foToken}`, ...(await csrfHeadersFor(foToken)) },
@@ -87,9 +91,9 @@ async function activateLoan(foToken: string, managerToken: string, loanId: strin
   });
   await fetch(`${API_BASE}/loans/${loanId}/approve`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${managerToken}`, ...(await csrfHeadersFor(managerToken)) },
+    headers: { Authorization: `Bearer ${approverToken}`, ...(await csrfHeadersFor(approverToken)) },
   });
-  await fetch(`${API_BASE}/loans/${loanId}/disburse`, {
+  const disburseRes = await fetch(`${API_BASE}/loans/${loanId}/disburse`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -98,6 +102,20 @@ async function activateLoan(foToken: string, managerToken: string, loanId: strin
     },
     body: JSON.stringify({ mode: 'cash' }),
   });
+  if (!disburseRes.ok) {
+    throw new Error(`Disburse failed: ${disburseRes.status} ${await disburseRes.text()}`);
+  }
+  // Poll until the loan is observed as active so the UI assertion is not racing
+  // the post-disbursement state transition (approved → disbursed → active).
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const res = await fetch(`${API_BASE}/loans/${loanId}`, {
+      headers: { Authorization: `Bearer ${managerToken}` },
+    });
+    const body = await res.json();
+    const loan = body.data ?? body;
+    if (loan.status === 'active') return;
+    await new Promise((r) => setTimeout(r, 250));
+  }
 }
 
 /**

@@ -48,12 +48,14 @@ test.describe('Accounting Module', () => {
 
     test('field_officer gets Access Denied', async ({ fieldOfficerPage }) => {
       await fieldOfficerPage.goto('/accounting');
-      await expect(fieldOfficerPage.getByRole('heading', { name: 'Access Denied' })).toBeVisible({ timeout: 15_000 });
+      await fieldOfficerPage.waitForLoadState('networkidle');
+      await expect(fieldOfficerPage.getByRole('heading', { name: /access denied/i })).toBeVisible({ timeout: 20_000 });
     });
 
     test('auditor can view chart of accounts (read-only)', async ({ auditorPage }) => {
       await auditorPage.goto('/accounting');
-      await expect(auditorPage.getByRole('heading', { name: 'Accounting' })).toBeVisible({ timeout: 15_000 });
+      await auditorPage.waitForLoadState('networkidle');
+      await expect(auditorPage.getByRole('heading', { name: 'Accounting' })).toBeVisible({ timeout: 20_000 });
     });
   });
 
@@ -107,10 +109,12 @@ test.describe('Accounting Module', () => {
       await accountantPage.waitForLoadState('networkidle');
       await expect(accountantPage.getByRole('heading', { name: 'Trial Balance' })).toBeVisible({ timeout: 15_000 });
 
-      const table = accountantPage.locator('table');
+      const table = accountantPage.locator('table').first();
       if (await table.isVisible()) {
-        await expect(accountantPage.getByText('Debit')).toBeVisible();
-        await expect(accountantPage.getByText('Credit')).toBeVisible();
+        // Use columnheader role to target the desktop table headers specifically,
+        // avoiding strict-mode hits on mobile card "Debit:" / "Credit:" spans.
+        await expect(accountantPage.getByRole('columnheader', { name: 'Debit' })).toBeVisible();
+        await expect(accountantPage.getByRole('columnheader', { name: 'Credit' })).toBeVisible();
       }
     });
 
@@ -167,12 +171,14 @@ test.describe('Accounting Module', () => {
     test('displays assets, liabilities, equity sections', async ({ accountantPage }) => {
       await accountantPage.goto('/accounting/balance-sheet');
       await accountantPage.waitForLoadState('networkidle');
-      // Verify page loaded - may show data, empty state, or validation error
+      // Verify page loaded - the Balance Sheet h1 heading is always rendered.
+      await expect(accountantPage.getByRole('heading', { name: /balance sheet/i })).toBeVisible({ timeout: 15_000 });
+      // Then verify at least one section heading rendered (Assets card, when data loads).
+      // .first() avoids strict-mode violations from the multiple sibling section cards.
       await expect(
         accountantPage.getByRole('heading', { name: /assets/i })
-          .or(accountantPage.getByRole('heading', { name: /liabilities/i }))
-          .or(accountantPage.getByText(/no data/i).first())
-          .or(accountantPage.locator('[role="alert"]').first()),
+          .or(accountantPage.getByText(/no data/i))
+          .first(),
       ).toBeVisible({ timeout: 15_000 });
     });
   });

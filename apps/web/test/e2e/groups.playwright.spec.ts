@@ -44,7 +44,9 @@ test.describe('Groups Module', () => {
       await managerPage.goto('/groups');
 
       await expect(managerPage.getByRole('heading', { name: 'Groups' })).toBeVisible({ timeout: 15_000 });
-      await expect(managerPage.getByRole('link', { name: /new group/i })).toBeVisible();
+      // Use exact match — table rows may contain group names like "E2E New Group 23048378"
+      // which would otherwise produce a strict-mode violation against the create link.
+      await expect(managerPage.getByRole('link', { name: 'New Group', exact: true })).toBeVisible();
     });
 
     test('auditor does NOT see "New Group" button', async ({ auditorPage }) => {
@@ -59,7 +61,8 @@ test.describe('Groups Module', () => {
 
       // If groups page loaded, new group button should NOT be visible
       if (await heading.isVisible()) {
-        await expect(auditorPage.getByRole('link', { name: /new group/i })).not.toBeVisible();
+        // Exact match — table may contain group names that include "New Group".
+        await expect(auditorPage.getByRole('link', { name: 'New Group', exact: true })).toHaveCount(0);
       }
     });
 
@@ -127,9 +130,13 @@ test.describe('Groups Module', () => {
         await groupLink.click();
         await managerPage.waitForURL(/\/groups\/[^/]+$/, { timeout: 15_000 });
 
-        // Members section should be visible
+        // Members section should be visible. Use heading role + .first() so we don't
+        // collide with the "Members" label inside the Group Info card.
         await expect(
-          managerPage.getByText('Members').or(managerPage.getByText('No members yet')),
+          managerPage
+            .getByRole('heading', { name: /^members$/i })
+            .or(managerPage.getByText(/no members yet/i))
+            .first(),
         ).toBeVisible({ timeout: 10_000 });
       }
     });
@@ -145,9 +152,14 @@ test.describe('Groups Module', () => {
         await groupLink.click();
         await managerPage.waitForURL(/\/groups\/[^/]+$/, { timeout: 15_000 });
 
-        // Collection history section should be visible
+        // Collection history section should be visible. Both the heading and the
+        // "No group collections yet" placeholder can be present simultaneously, so
+        // pick the first match to avoid a strict-mode violation on `.or()`.
         await expect(
-          managerPage.getByText('Collection History').or(managerPage.getByText('No group collections yet')),
+          managerPage
+            .getByRole('heading', { name: /collection history/i })
+            .or(managerPage.getByText(/no group collections yet/i))
+            .first(),
         ).toBeVisible({ timeout: 10_000 });
       }
     });

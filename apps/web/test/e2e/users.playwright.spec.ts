@@ -32,6 +32,12 @@ test.describe('Users Module', () => {
     test('displays users table with columns', async ({ adminPage }) => {
       await adminPage.goto('/users');
       await adminPage.waitForLoadState('domcontentloaded');
+      // If auth refresh was rate-limited (429), page may redirect to /login. Retry once.
+      if (adminPage.url().includes('/login')) {
+        await adminPage.waitForTimeout(1500);
+        await adminPage.goto('/users');
+        await adminPage.waitForLoadState('domcontentloaded');
+      }
       await expect(adminPage.getByRole('heading', { name: /user management/i })).toBeVisible({ timeout: 30_000 });
       // Table headers
       const table = adminPage.locator('table');
@@ -95,6 +101,11 @@ test.describe('Users Module', () => {
     test('form has all required fields', async ({ adminPage }) => {
       await adminPage.goto('/users/new');
       await adminPage.waitForLoadState('domcontentloaded');
+      if (adminPage.url().includes('/login')) {
+        await adminPage.waitForTimeout(1500);
+        await adminPage.goto('/users/new');
+        await adminPage.waitForLoadState('domcontentloaded');
+      }
       // Wait for form to load
       await expect(adminPage.getByRole('heading', { name: /create user/i })).toBeVisible({ timeout: 30_000 });
       // Labels have asterisks, e.g. "Username *" - check inputs exist by name
@@ -108,6 +119,11 @@ test.describe('Users Module', () => {
     test('role dropdown has all 7 roles', async ({ adminPage }) => {
       await adminPage.goto('/users/new');
       await adminPage.waitForLoadState('domcontentloaded');
+      if (adminPage.url().includes('/login')) {
+        await adminPage.waitForTimeout(1500);
+        await adminPage.goto('/users/new');
+        await adminPage.waitForLoadState('domcontentloaded');
+      }
       const roleSelect = adminPage.locator('select').first();
       if (await roleSelect.isVisible()) {
         const options = await roleSelect.locator('option').allTextContents();
@@ -119,6 +135,11 @@ test.describe('Users Module', () => {
     test('validates username is required', async ({ adminPage }) => {
       await adminPage.goto('/users/new');
       await adminPage.waitForLoadState('domcontentloaded');
+      if (adminPage.url().includes('/login')) {
+        await adminPage.waitForTimeout(1500);
+        await adminPage.goto('/users/new');
+        await adminPage.waitForLoadState('domcontentloaded');
+      }
       // Wait for form to load
       await expect(adminPage.locator('input[name="username"]')).toBeVisible({ timeout: 30_000 });
       // Fill other fields but not username (use name attribute since labels lack htmlFor)
@@ -136,6 +157,11 @@ test.describe('Users Module', () => {
     test('validates username minimum length', async ({ adminPage }) => {
       await adminPage.goto('/users/new');
       await adminPage.waitForLoadState('domcontentloaded');
+      if (adminPage.url().includes('/login')) {
+        await adminPage.waitForTimeout(1500);
+        await adminPage.goto('/users/new');
+        await adminPage.waitForLoadState('domcontentloaded');
+      }
       // Wait for form to load
       await expect(adminPage.locator('input[name="username"]')).toBeVisible({ timeout: 30_000 });
       // Fill username with only 2 characters (use name attribute since labels lack htmlFor)
@@ -156,6 +182,11 @@ test.describe('Users Module', () => {
     test('validates password strength - minimum 8 characters', async ({ adminPage }) => {
       await adminPage.goto('/users/new');
       await adminPage.waitForLoadState('domcontentloaded');
+      if (adminPage.url().includes('/login')) {
+        await adminPage.waitForTimeout(1500);
+        await adminPage.goto('/users/new');
+        await adminPage.waitForLoadState('domcontentloaded');
+      }
       // Wait for form to load
       await expect(adminPage.locator('input[name="username"]')).toBeVisible({ timeout: 30_000 });
       await adminPage.locator('input[name="username"]').fill('testuser');
@@ -172,6 +203,11 @@ test.describe('Users Module', () => {
     test('validates password strength - requires uppercase', async ({ adminPage }) => {
       await adminPage.goto('/users/new');
       await adminPage.waitForLoadState('domcontentloaded');
+      if (adminPage.url().includes('/login')) {
+        await adminPage.waitForTimeout(1500);
+        await adminPage.goto('/users/new');
+        await adminPage.waitForLoadState('domcontentloaded');
+      }
       // Wait for form to load
       await expect(adminPage.locator('input[name="username"]')).toBeVisible({ timeout: 30_000 });
       await adminPage.locator('input[name="username"]').fill('testuser');
@@ -188,6 +224,12 @@ test.describe('Users Module', () => {
     test('validates password strength - requires digit', async ({ adminPage }) => {
       await adminPage.goto('/users/new');
       await adminPage.waitForLoadState('domcontentloaded');
+      // If auth refresh was rate-limited (429), page may redirect to /login. Retry once.
+      if (adminPage.url().includes('/login')) {
+        await adminPage.waitForTimeout(1500);
+        await adminPage.goto('/users/new');
+        await adminPage.waitForLoadState('domcontentloaded');
+      }
       // Wait for form to load
       await expect(adminPage.locator('input[name="username"]')).toBeVisible({ timeout: 30_000 });
       await adminPage.locator('input[name="username"]').fill('testuser');
@@ -204,6 +246,11 @@ test.describe('Users Module', () => {
     test('validates role is required', async ({ adminPage }) => {
       await adminPage.goto('/users/new');
       await adminPage.waitForLoadState('domcontentloaded');
+      if (adminPage.url().includes('/login')) {
+        await adminPage.waitForTimeout(1500);
+        await adminPage.goto('/users/new');
+        await adminPage.waitForLoadState('domcontentloaded');
+      }
       // Wait for form to load
       await expect(adminPage.locator('input[name="username"]')).toBeVisible({ timeout: 30_000 });
       await adminPage.locator('input[name="username"]').fill('testuser');
@@ -221,6 +268,11 @@ test.describe('Users Module', () => {
     test('mobile field accepts only 10 digits', async ({ adminPage }) => {
       await adminPage.goto('/users/new');
       await adminPage.waitForLoadState('domcontentloaded');
+      if (adminPage.url().includes('/login')) {
+        await adminPage.waitForTimeout(1500);
+        await adminPage.goto('/users/new');
+        await adminPage.waitForLoadState('domcontentloaded');
+      }
       // Wait for form to load
       await expect(adminPage.locator('input[name="username"]')).toBeVisible({ timeout: 30_000 });
       await adminPage.locator('input[name="mobile"]').fill('123456789'); // Only 9 digits
