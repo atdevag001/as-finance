@@ -1,4 +1,11 @@
-import { IsDefined, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsDefined,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 
 /**
  * Keys that — if used inside a JSON setting value — would mutate the
@@ -78,6 +85,9 @@ export class UpdateSettingDto {
 }
 
 export class UpdateHolidaysDto {
+  // @IsArray asserts array-ness so a scalar string cannot slip past @IsString({each:true}).
+  @IsArray()
+  @ArrayMaxSize(1000)
   @IsNotEmpty()
   @IsString({ each: true })
   holidays!: string[];

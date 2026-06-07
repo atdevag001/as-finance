@@ -32,6 +32,7 @@ export interface AuditLogQueryParams {
   endDate?: Date;
 }
 
+// Bare select for create() — list reads include the actor relation for the UI.
 const AUDIT_LOG_SELECT = {
   id: true,
   action_type: true,
@@ -46,6 +47,12 @@ const AUDIT_LOG_SELECT = {
   remarks: true,
   approval_id: true,
   created_at: true,
+};
+
+// Joins actor user so the audit viewer can show a human name instead of a UUID.
+const AUDIT_LOG_LIST_SELECT = {
+  ...AUDIT_LOG_SELECT,
+  actor: { select: { id: true, full_name: true, email: true } },
 };
 
 @Injectable()
@@ -98,7 +105,7 @@ export class AuditRepository {
         skip: params.skip ?? 0,
         take: params.take ?? 50,
         orderBy: { created_at: 'desc' },
-        select: AUDIT_LOG_SELECT,
+        select: AUDIT_LOG_LIST_SELECT,
       }),
       this.prisma['audit_logs'].count({ where }),
     ]);

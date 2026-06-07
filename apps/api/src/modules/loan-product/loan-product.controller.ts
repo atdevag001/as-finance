@@ -36,7 +36,7 @@ export class LoanProductController {
   }
 
   @Get()
-  @RequirePermission('loan.read')
+  @RequirePermission('loan_product.read')
   @ApiOperation({ summary: 'List loan products' })
   async findAll(
     @Query('skip') skip?: string,
@@ -51,7 +51,7 @@ export class LoanProductController {
   }
 
   @Get(':id')
-  @RequirePermission('loan.read')
+  @RequirePermission('loan_product.read')
   @ApiOperation({ summary: 'Get loan product by ID' })
   @ApiResponse({ status: 200, description: 'Loan product found' })
   @ApiResponse({ status: 404, description: 'Loan product not found' })

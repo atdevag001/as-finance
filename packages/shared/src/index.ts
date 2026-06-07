@@ -31,6 +31,7 @@ export {
 
 // Constants
 export { PERMISSIONS } from './constants/index.js';
+export { EXPENSE_CATEGORIES, type ExpenseCategory } from './constants/index.js';
 
 // Utilities
 export { maskAadhaar, maskPan, maskMobile } from './utils/masking.js';

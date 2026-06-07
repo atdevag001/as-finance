@@ -8,9 +8,11 @@ export class LoginDto {
   @MaxLength(100)
   username!: string;
 
-  @ApiProperty({ description: 'User password' })
+  @ApiProperty({
+    description: 'User password (max 72 bytes — bcrypt truncation limit)',
+  })
   @IsString()
   @IsNotEmpty()
-  @MaxLength(128)
+  @MaxLength(72)
   password!: string;
 }

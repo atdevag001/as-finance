@@ -1,5 +1,6 @@
-import { IsString, IsUUID, IsOptional, IsInt, Min } from 'class-validator';
+import { IsString, IsUUID, IsOptional, IsInt, Min, IsEnum, MinLength, ValidateIf } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { PaymentMode } from '@as-finance/shared';
 
 export class ExecuteForeclosureDto {
   @ApiProperty({ description: 'Foreclosure quote ID to execute' })
@@ -12,9 +13,12 @@ export class ExecuteForeclosureDto {
   @Min(0)
   rebatePaise?: number;
 
-  @ApiPropertyOptional({ description: 'Reason for rebate' })
-  @IsOptional()
+  // M-rebate-audit: when a rebate is applied the reason is mandatory so the
+  // financial waiver leaves a non-empty audit trail (no silent "no reason").
+  @ApiPropertyOptional({ description: 'Reason for rebate (required when rebatePaise > 0)' })
+  @ValidateIf((o) => (o.rebatePaise ?? 0) > 0)
   @IsString()
+  @MinLength(5)
   rebateReason?: string;
 
   /**
@@ -31,9 +35,11 @@ export class ExecuteForeclosureDto {
   @IsUUID()
   rebateAuthorizedBy?: string;
 
-  @ApiProperty({ description: 'Payment mode for settlement' })
-  @IsString()
-  paymentMode!: string;
+  // M-paymentmode-enum: constrain to the Prisma PaymentMode enum so invalid
+  // values 400 at the boundary instead of triggering an opaque Prisma 500.
+  @ApiProperty({ description: 'Payment mode for settlement', enum: PaymentMode })
+  @IsEnum(PaymentMode, { message: 'paymentMode must be cash, bank_transfer, or online' })
+  paymentMode!: PaymentMode;
 
   @ApiProperty({ description: 'Idempotency key for duplicate prevention' })
   @IsString()

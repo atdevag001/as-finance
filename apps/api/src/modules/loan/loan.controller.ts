@@ -11,7 +11,6 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { Request } from 'express';
-import { randomUUID } from 'crypto';
 import { LoanService } from './loan.service';
 import { DisbursementService } from '../disbursement/disbursement.service';
 import { CreateLoanDto } from './dto/create-loan.dto';
@@ -161,8 +160,9 @@ export class LoanController {
     @Body() dto: DisburseLoanDto,
     @Req() req: Request & { user: JwtPayload },
   ) {
-    // Use client-provided key or auto-generate one
-    const idempotencyKey = dto.idempotencyKey ?? `disburse-${id}-${randomUUID()}`;
+    // Deterministic per-loan fallback so client retries (double-click, network blip)
+    // hit the idempotency cache and return the original success body instead of a 409.
+    const idempotencyKey = dto.idempotencyKey ?? `disburse-${id}`;
     return this.disbursementService.disburse(
       {
         loanId: id,

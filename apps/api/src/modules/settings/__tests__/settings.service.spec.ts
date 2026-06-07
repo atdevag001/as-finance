@@ -159,12 +159,21 @@ describe('SettingsService', () => {
       expect(result).toEqual(['2024-12-25']);
     });
 
-    it('should accept full ISO datetime strings', async () => {
-      (repo.upsert as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    it('should reject full ISO datetime strings (must be strict YYYY-MM-DD)', async () => {
+      await expect(service.setHolidays(['2024-12-25T00:00:00.000Z'], 'u1')).rejects.toThrow(
+        ValidationError,
+      );
+    });
 
-      const result = await service.setHolidays(['2024-12-25T00:00:00.000Z'], 'u1');
+    it('should reject non-ISO date formats like "January 26 2024"', async () => {
+      await expect(service.setHolidays(['January 26 2024'], 'u1')).rejects.toThrow(ValidationError);
+      await expect(service.setHolidays(['1/26/2024'], 'u1')).rejects.toThrow(ValidationError);
+    });
 
-      expect(result).toEqual(['2024-12-25T00:00:00.000Z']);
+    it('should reject rolled-over invalid dates like 2024-02-30 and 2024-04-31', async () => {
+      await expect(service.setHolidays(['2024-02-30'], 'u1')).rejects.toThrow(ValidationError);
+      await expect(service.setHolidays(['2024-04-31'], 'u1')).rejects.toThrow(ValidationError);
+      await expect(service.setHolidays(['2024-13-01'], 'u1')).rejects.toThrow(ValidationError);
     });
 
     /**

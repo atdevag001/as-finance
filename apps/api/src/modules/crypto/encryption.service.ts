@@ -4,14 +4,20 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 const IV_LEN = 12; // 96-bit IV for GCM (NIST recommended)
 const KEY_LEN = 32; // AES-256
 const AUTH_TAG_LEN = 16;
+const VERSION_PREFIX = 'v1:'; // Format version: AAD-bound payloads. Bump if envelope changes.
 
 /**
  * AES-256-GCM PII encryption service.
  *
- * Format: base64(iv) ":" base64(ciphertext) ":" base64(tag)
+ * Format: "v1:" base64(iv) ":" base64(ciphertext) ":" base64(tag)
  *
  * Key sourced from ENCRYPTION_KEY env (base64-encoded 32 bytes).
  * Key MUST differ from JWT_SECRET (enforced by env validation).
+ *
+ * AAD binding: callers MUST pass a stable per-record context string (e.g.
+ * `customer:${id}:aadhaar`) to encrypt()/decrypt(). The AAD is fed into the
+ * GCM tag so a ciphertext for one (record, field) cannot be transplanted into
+ * another row/column — decrypt() will throw on tag mismatch.
  *
  * Losing the key = permanent loss of all encrypted PII. Back it up securely.
  */
@@ -55,26 +61,46 @@ export class EncryptionService {
     this.key = buf;
   }
 
-  /** Encrypt UTF-8 plaintext. Returns "iv:ciphertext:tag" all base64. */
-  encrypt(plaintext: string): string {
+  /**
+   * Encrypt UTF-8 plaintext bound to a stable AAD context.
+   * Returns "v1:iv:ciphertext:tag" (iv/ct/tag base64).
+   * The AAD MUST uniquely identify the (record, field) — e.g. `customer:${id}:aadhaar` —
+   * so a ciphertext cannot be transplanted to another row/column.
+   */
+  encrypt(plaintext: string, aad: string): string {
     if (typeof plaintext !== 'string') {
       throw new TypeError('encrypt() requires a string');
     }
+    if (typeof aad !== 'string' || aad.length === 0) {
+      throw new TypeError('encrypt() requires a non-empty AAD context string');
+    }
     const iv = randomBytes(IV_LEN);
     const cipher = createCipheriv('aes-256-gcm', this.key, iv);
+    cipher.setAAD(Buffer.from(aad, 'utf8'));
     const ct = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
     const tag = cipher.getAuthTag();
-    return `${iv.toString('base64')}:${ct.toString('base64')}:${tag.toString('base64')}`;
+    return `${VERSION_PREFIX}${iv.toString('base64')}:${ct.toString('base64')}:${tag.toString('base64')}`;
   }
 
-  /** Decrypt "iv:ciphertext:tag" base64 triplet back to UTF-8 plaintext. */
-  decrypt(ciphertext: string): string {
+  /**
+   * Decrypt "v1:iv:ciphertext:tag" payload using the same AAD passed at encrypt time.
+   * Throws on tag mismatch (wrong key, tampered ciphertext, or AAD mismatch /
+   * cross-record transplant attempt).
+   */
+  decrypt(ciphertext: string, aad: string): string {
     if (typeof ciphertext !== 'string') {
       throw new TypeError('decrypt() requires a string');
     }
-    const parts = ciphertext.split(':');
+    if (typeof aad !== 'string' || aad.length === 0) {
+      throw new TypeError('decrypt() requires a non-empty AAD context string');
+    }
+    if (!ciphertext.startsWith(VERSION_PREFIX)) {
+      throw new Error('Unsupported ciphertext version (expected v1:)');
+    }
+    const body = ciphertext.slice(VERSION_PREFIX.length);
+    const parts = body.split(':');
     if (parts.length !== 3) {
-      throw new Error('Invalid ciphertext format (expected iv:ct:tag)');
+      throw new Error('Invalid ciphertext format (expected v1:iv:ct:tag)');
     }
     const [ivB64, ctB64, tagB64] = parts;
     const iv = Buffer.from(ivB64!, 'base64');
@@ -83,6 +109,7 @@ export class EncryptionService {
     if (iv.length !== IV_LEN) throw new Error('Invalid IV length');
     if (tag.length !== AUTH_TAG_LEN) throw new Error('Invalid auth tag length');
     const decipher = createDecipheriv('aes-256-gcm', this.key, iv);
+    decipher.setAAD(Buffer.from(aad, 'utf8'));
     decipher.setAuthTag(tag);
     return Buffer.concat([decipher.update(ct), decipher.final()]).toString('utf8');
   }

@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
 import * as crypto from 'crypto';
@@ -268,12 +268,13 @@ export class AuthService {
     }
 
     // Reject common/breached passwords (complexity is enforced by DTO validators).
+    // Use BusinessRuleError so GlobalExceptionFilter preserves the COMMON_PASSWORD code
+    // (HttpException's response payload `code` is stripped by the filter).
     if (isCommonPassword(dto.newPassword)) {
-      throw new BadRequestException({
-        message:
-          'This password appears in common breach lists. Choose a less predictable one.',
-        code: 'COMMON_PASSWORD',
-      });
+      throw new BusinessRuleError(
+        'This password appears in common breach lists. Choose a less predictable one.',
+        'COMMON_PASSWORD',
+      );
     }
 
     // Reject re-use of current password

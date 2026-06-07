@@ -186,45 +186,39 @@ export class AccountingRepository {
   }
 
   /**
-   * Get all journal lines with account info for a date range.
-   * Used for P&L and balance sheet calculations.
+   * Get aggregated debit/credit totals per account for a date range.
+   * Used for P&L. DB-side groupBy avoids loading millions of rows into memory.
    */
-  async getJournalLinesWithAccounts(filter: { startDate?: Date; endDate?: Date }) {
-    const where: Record<string, unknown> = {};
-    if (filter.startDate || filter.endDate) {
-      const dateFilter: Record<string, Date> = {};
-      if (filter.startDate) dateFilter['gte'] = filter.startDate;
-      if (filter.endDate) dateFilter['lte'] = filter.endDate;
-      where['journal_entry'] = { entry_date: dateFilter };
-    }
+  async getAccountTotalsForRange(filter: { startDate?: Date; endDate?: Date }) {
+    const dateFilter: Record<string, Date> = {};
+    if (filter.startDate) dateFilter['gte'] = filter.startDate;
+    if (filter.endDate) dateFilter['lte'] = filter.endDate;
 
-    return this.prisma.journal_lines.findMany({
-      where,
-      select: {
+    return this.prisma.journal_lines.groupBy({
+      by: ['account_id'],
+      where: Object.keys(dateFilter).length
+        ? { journal_entry: { entry_date: dateFilter } }
+        : {},
+      _sum: {
         debit_paise: true,
         credit_paise: true,
-        account: {
-          select: { id: true, code: true, name: true, category: true },
-        },
       },
     });
   }
 
   /**
-   * Get all journal lines with account info up to a point in time.
-   * Used for balance sheet calculation.
+   * Get aggregated debit/credit totals per account up to a point in time.
+   * Used for balance sheet. DB-side groupBy avoids unbounded in-memory aggregation.
    */
-  async getJournalLinesUpTo(asOfDate: Date) {
-    return this.prisma.journal_lines.findMany({
+  async getAccountTotalsUpTo(asOfDate: Date) {
+    return this.prisma.journal_lines.groupBy({
+      by: ['account_id'],
       where: {
         journal_entry: { entry_date: { lte: asOfDate } },
       },
-      select: {
+      _sum: {
         debit_paise: true,
         credit_paise: true,
-        account: {
-          select: { id: true, code: true, name: true, category: true },
-        },
       },
     });
   }

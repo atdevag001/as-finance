@@ -49,7 +49,7 @@ export class ReceiptService {
    * @returns Created receipt record
    */
   async generateReceipt(data: GenerateReceiptInput, tx?: TxClient) {
-    const receiptNumber = await this.receiptRepository.generateReceiptNumber(tx);
+    const receiptNumber = await this.receiptRepository.generateReceiptNumber(data.paymentDate, tx);
 
     const createData: CreateReceiptData = {
       receipt_number: receiptNumber,

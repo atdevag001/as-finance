@@ -124,7 +124,7 @@ describe('ReceiptService', () => {
       const input = makeReceiptInput();
       await service.generateReceipt(input, fakeTx);
 
-      expect(repo.generateReceiptNumber).toHaveBeenCalledWith(fakeTx);
+      expect(repo.generateReceiptNumber).toHaveBeenCalledWith(input.paymentDate, fakeTx);
       expect(repo.create).toHaveBeenCalledWith(expect.any(Object), fakeTx);
     });
 

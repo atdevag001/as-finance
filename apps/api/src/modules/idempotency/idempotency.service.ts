@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 
@@ -48,8 +49,9 @@ export class IdempotencyService {
    * Returns `null` when the key has not been stored yet.
    */
   async find(key: string): Promise<IdempotencyResult | null> {
-    const record = await this.prisma.idempotency_keys.findUnique({
-      where: { key },
+    // Filter expired rows server-side so stale TTL'd keys never replay a cached body.
+    const record = await this.prisma.idempotency_keys.findFirst({
+      where: { key, expires_at: { gt: new Date() } },
     });
 
     if (!record) return null;
@@ -103,13 +105,21 @@ export class IdempotencyService {
           operationType,
         });
 
-        // Wait briefly for the competing transaction to commit
+        // Inside a tx the conflict has already aborted the underlying Postgres
+        // transaction; any further statement on `tx` fails, and a SELECT on
+        // `this.prisma` would return a cached body while the caller's tx still
+        // poisons on commit. Propagate so the outer tx rolls back cleanly and
+        // the controller falls back to find() to return the cached body.
+        if (tx) {
+          throw error;
+        }
+
+        // Outside a tx: wait briefly for the competing writer to commit, then
+        // return the already-committed cached result.
         await this.delay(RETRY_DELAY_MS);
 
-        // Retry SELECT on the main prisma client (not the tx client,
-        // since the competing write may be in a different transaction)
-        const existing = await this.prisma.idempotency_keys.findUnique({
-          where: { key },
+        const existing = await this.prisma.idempotency_keys.findFirst({
+          where: { key, expires_at: { gt: new Date() } },
         });
 
         if (existing) {
@@ -130,8 +140,10 @@ export class IdempotencyService {
   /**
    * Remove expired idempotency keys (24-hour TTL).
    *
-   * Intended to be called by a background job (e.g. cron / interval).
+   * Runs hourly via @nestjs/schedule so the table cannot grow unbounded —
+   * without this the per-row TTL is dead weight.
    */
+  @Cron(CronExpression.EVERY_HOUR)
   async cleanupExpired(): Promise<number> {
     const result = await this.prisma.idempotency_keys.deleteMany({
       where: {

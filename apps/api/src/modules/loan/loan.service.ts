@@ -431,16 +431,11 @@ export class LoanService {
     let totalPayablePaise = 0;
     if (loan.product_version) {
       const pv = loan.product_version;
-      // Use provided firstEmiDate or default to current date
-      // The schedule generator adds 1 frequency period to startDate for the first EMI
-      // So if user wants first EMI on May 27, we need to calculate the startDate accordingly
       let scheduleStartDate = new Date();
       if (dto.firstEmiDate) {
-        // User provided a specific first EMI date
-        // We need to set startDate such that first EMI falls on the desired date
-        // For monthly: startDate = firstEmiDate - 1 month
-        // For weekly: startDate = firstEmiDate - 7 days
-        // For daily: startDate = firstEmiDate - 1 day
+        // Use UTC-midnight parse for schedule math — addMonthsClamped's local-TZ
+        // getters would otherwise read parseDateIST's prev-UTC-day instant as the
+        // wrong calendar day on UTC hosts. Same pattern as disbursement.service.
         const firstEmi = new Date(dto.firstEmiDate);
         scheduleStartDate = this.calculateStartDateFromFirstEmi(firstEmi, pv.repayment_frequency);
       }
@@ -871,21 +866,23 @@ export class LoanService {
       );
     }
 
-    // Validate first EMI date is in the future
-    const firstEmi = new Date(firstEmiDate);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    if (firstEmi <= today) {
+    // Validate first EMI date is in the future — anchor both sides to IST midnight
+    // so the check matches the IST business calendar used by penalty/disbursement.
+    const firstEmiIST = parseDateIST(firstEmiDate);
+    if (firstEmiIST <= todayISTDate()) {
       throw new BusinessRuleError(
         'First EMI date must be in the future',
         'FIRST_EMI_DATE_NOT_FUTURE',
       );
     }
 
-    // If loan is disbursed, first EMI date must be after disbursement date
+    // If loan is disbursed, first EMI date must be after disbursement date.
+    // disbursement_date is a @db.Date column — read its YYYY-MM-DD slice and
+    // re-parse via parseDateIST so the comparison stays in IST.
     if (loan.disbursement_date) {
-      const disbursementDate = new Date(loan.disbursement_date);
-      if (firstEmi <= disbursementDate) {
+      const disbDateStr = loan.disbursement_date.toISOString().split('T')[0]!;
+      const disbursementDateIST = parseDateIST(disbDateStr);
+      if (firstEmiIST <= disbursementDateIST) {
         throw new BusinessRuleError(
           'First EMI date must be after disbursement date',
           'FIRST_EMI_DATE_BEFORE_DISBURSEMENT',
@@ -903,8 +900,11 @@ export class LoanService {
 
     const pv = loan.product_version;
 
-    // Calculate start date from first EMI date
-    const scheduleStartDate = this.calculateStartDateFromFirstEmi(firstEmi, pv.repayment_frequency);
+    // Use UTC-midnight parse for schedule math — addMonthsClamped's local-TZ
+    // getters would otherwise read parseDateIST's prev-UTC-day instant as the
+    // wrong calendar day on UTC hosts. Same pattern as disbursement.service.
+    const firstEmiCalendar = new Date(firstEmiDate);
+    const scheduleStartDate = this.calculateStartDateFromFirstEmi(firstEmiCalendar, pv.repayment_frequency);
 
     // Honour configured bank holidays so regenerated EMI due dates skip them.
     const holidays = await this.getHolidaysForSchedule();
@@ -938,6 +938,40 @@ export class LoanService {
       if (!locked) {
         throw new NotFoundError(`Loan not found: ${loanId}`);
       }
+
+      // Re-validate invariants under the FOR UPDATE lock — a concurrent
+      // disburse/foreclose/close could have flipped status or stamped a
+      // disbursement_date between the initial read and the lock. Without these
+      // re-checks the FOR UPDATE lock only serializes the write, not the read.
+      if (!['approved', 'active'].includes(locked.status)) {
+        throw new BusinessRuleError(
+          `Schedule can only be regenerated for approved or active loans. Current status: ${locked.status}`,
+          'INVALID_LOAN_STATUS_FOR_REGENERATION',
+        );
+      }
+      if (locked.version !== loan.version) {
+        throw new BusinessRuleError(
+          'Loan was modified concurrently — please retry',
+          'LOAN_CONCURRENTLY_MODIFIED',
+        );
+      }
+      // Re-fetch disbursement_date under lock — it may have been set since the
+      // pre-lock read by a concurrent disbursement.
+      const fresh = await tx.loans.findUnique({
+        where: { id: loanId },
+        select: { disbursement_date: true },
+      });
+      if (fresh?.disbursement_date) {
+        const disbDateStr = fresh.disbursement_date.toISOString().split('T')[0]!;
+        const disbursementDateIST = parseDateIST(disbDateStr);
+        if (firstEmiIST <= disbursementDateIST) {
+          throw new BusinessRuleError(
+            'First EMI date must be after disbursement date',
+            'FIRST_EMI_DATE_BEFORE_DISBURSEMENT',
+          );
+        }
+      }
+
       // Re-check that no collections appeared while we were computing the new schedule
       const collectionsCount = await tx.collections.count({
         where: { loan_id: loanId, status: 'posted' as never },
@@ -991,25 +1025,29 @@ export class LoanService {
           version: { increment: 1 },
         },
       });
-    });
 
-    // Record audit log
-    await this.loanRepository.createAuditLog({
-      action_type: 'loan_approved', // Using existing action type for audit
-      actor_id: actorId,
-      actor_role: actorRole,
-      target_entity: 'loan',
-      target_id: loanId,
-      before_state: {
-        first_due_date: oldFirstDueDate?.toISOString(),
-        schedule_count: oldSchedule.length,
-      },
-      after_state: {
-        first_due_date: firstDueDate?.toISOString(),
-        schedule_count: schedule.length,
-        regenerated: true,
-      },
-      remarks: `Schedule regenerated with new first EMI date: ${firstEmiDate}`,
+      // Audit log MUST commit/roll back with the schedule write — keep inside tx
+      // so a transient DB error cannot leave the financial change unaudited.
+      await this.loanRepository.createAuditLog(
+        {
+          action_type: 'loan_schedule_regenerated',
+          actor_id: actorId,
+          actor_role: actorRole,
+          target_entity: 'loan',
+          target_id: loanId,
+          before_state: {
+            first_due_date: oldFirstDueDate?.toISOString(),
+            schedule_count: oldSchedule.length,
+          },
+          after_state: {
+            first_due_date: firstDueDate?.toISOString(),
+            schedule_count: schedule.length,
+            regenerated: true,
+          },
+          remarks: `Schedule regenerated with new first EMI date: ${firstEmiDate}`,
+        },
+        tx,
+      );
     });
 
     return {

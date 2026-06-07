@@ -1,4 +1,4 @@
-import { IsString, IsUUID, MinLength } from 'class-validator';
+import { IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 /**
@@ -14,6 +14,7 @@ export class ReverseCollectionDto {
   @ApiProperty({ description: 'Mandatory reason for the reversal' })
   @IsString()
   @MinLength(1, { message: 'Reversal reason is required' })
+  @MaxLength(1000, { message: 'Reversal reason must be 1000 characters or less' })
   reason!: string;
 
   @ApiProperty({ description: 'Idempotency key for duplicate prevention' })

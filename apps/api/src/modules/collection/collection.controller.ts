@@ -1,4 +1,5 @@
-import { Controller, Post, Get, Body, Query, Req, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Get, Body, Query, Req, Res, HttpStatus } from '@nestjs/common';
+import { Response } from 'express';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { CollectionService } from './collection.service';
 import { PostCollectionDto } from './dto/post-collection.dto';
@@ -28,7 +29,6 @@ export class CollectionController {
 
   @Post()
   @RequirePermission('collection.create')
-  @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Post a collection (payment) against a loan' })
   @ApiResponse({ status: 201, description: 'Collection posted successfully' })
   @ApiResponse({ status: 400, description: 'Validation or business rule error' })
@@ -37,7 +37,15 @@ export class CollectionController {
   async postCollection(
     @Body() dto: PostCollectionDto,
     @Req() req: { user: { sub: string; role: string } },
+    @Res({ passthrough: true }) res: Response,
   ) {
-    return this.collectionService.postCollection(dto, req.user.sub, req.user.role);
+    const { statusCode, data } = await this.collectionService.postCollection(
+      dto,
+      req.user.sub,
+      req.user.role,
+    );
+    // Honor cached idempotency status so retries replay their original HTTP code, not a hard-coded 201.
+    res.status(statusCode ?? HttpStatus.CREATED);
+    return data;
   }
 }

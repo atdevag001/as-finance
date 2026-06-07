@@ -1,7 +1,8 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
+import { Controller, Get, Param, ParseUUIDPipe, Query } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { ReceiptService } from './receipt.service';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
+import { ListReceiptsDto } from './dto/list-receipts.dto';
 
 @ApiTags('receipts')
 @Controller('receipts')
@@ -11,19 +12,12 @@ export class ReceiptController {
   @Get()
   @RequirePermission('receipt.read')
   @ApiOperation({ summary: 'List receipts with pagination and filters' })
-  @ApiQuery({ name: 'loanId', required: false })
-  @ApiQuery({ name: 'skip', required: false })
-  @ApiQuery({ name: 'take', required: false })
   @ApiResponse({ status: 200, description: 'List of receipts' })
-  async listReceipts(
-    @Query('loanId') loanId?: string,
-    @Query('skip') skip?: string,
-    @Query('take') take?: string,
-  ) {
+  async listReceipts(@Query() query: ListReceiptsDto) {
     return this.receiptService.listReceipts({
-      loanId,
-      skip: skip ? parseInt(skip, 10) : 0,
-      take: take ? parseInt(take, 10) : 20,
+      loanId: query.loanId,
+      skip: query.skip ?? 0,
+      take: query.take ?? 20,
     });
   }
 
@@ -32,7 +26,7 @@ export class ReceiptController {
   @ApiOperation({ summary: 'Get receipt by ID' })
   @ApiResponse({ status: 200, description: 'Receipt details' })
   @ApiResponse({ status: 404, description: 'Receipt not found' })
-  async getReceipt(@Param('id') id: string) {
+  async getReceipt(@Param('id', ParseUUIDPipe) id: string) {
     return this.receiptService.getReceiptById(id);
   }
 
@@ -41,7 +35,7 @@ export class ReceiptController {
   @ApiOperation({ summary: 'Get receipt in printable format (thermal/A4)' })
   @ApiResponse({ status: 200, description: 'Printable receipt data' })
   @ApiResponse({ status: 404, description: 'Receipt not found' })
-  async getReceiptForPrint(@Param('id') id: string) {
+  async getReceiptForPrint(@Param('id', ParseUUIDPipe) id: string) {
     return this.receiptService.getReceiptForPrint(id);
   }
 }

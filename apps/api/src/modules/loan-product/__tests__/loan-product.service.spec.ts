@@ -685,10 +685,32 @@ describe('LoanProductService', () => {
       await expect(service.validateRateBounds(100)).rejects.toThrow(ValidationError);
     });
 
-    it('should ignore non-numeric setting values', async () => {
+    it('should throw BusinessRuleError when setting is present but unusable', async () => {
       mockRepository.getSetting.mockResolvedValue('not-a-number');
 
-      await expect(service.validateRateBounds(5000)).resolves.toBeUndefined();
+      await expect(service.validateRateBounds(5000)).rejects.toThrow(BusinessRuleError);
+    });
+
+    it('should coerce numeric strings stored in settings.value', async () => {
+      mockRepository.getSetting.mockImplementation((key: string) => {
+        if (key === 'max_annual_rate_bps') return Promise.resolve('3600');
+        return Promise.resolve(null);
+      });
+
+      await expect(service.validateRateBounds(5000)).rejects.toThrow(ValidationError);
+      await expect(service.validateRateBounds(1200)).resolves.toBeUndefined();
+    });
+
+    it('should coerce objects with a numeric value/amount/bps field', async () => {
+      mockRepository.getSetting.mockImplementation((key: string) => {
+        if (key === 'max_annual_rate_bps') return Promise.resolve({ value: 3600 });
+        if (key === 'min_annual_rate_bps') return Promise.resolve({ amount: 500 });
+        return Promise.resolve(null);
+      });
+
+      await expect(service.validateRateBounds(5000)).rejects.toThrow(ValidationError);
+      await expect(service.validateRateBounds(100)).rejects.toThrow(ValidationError);
+      await expect(service.validateRateBounds(1200)).resolves.toBeUndefined();
     });
   });
 });

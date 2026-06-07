@@ -64,14 +64,20 @@ export class ReceiptRepository {
    * Format: RCP-{year}-{padded_number} (e.g., RCP-2024-00001)
    *
    * Uses PostgreSQL sequence `receipt_number_seq` for gap-free, concurrent-safe numbering.
+   * Year is derived from `paymentDate` in IST (Asia/Kolkata) — the business's canonical
+   * timezone — so receipts are attributed to the fiscal/calendar year the user perceived,
+   * not the server's local-time year at generation moment.
    */
-  async generateReceiptNumber(tx?: TxClient): Promise<string> {
+  async generateReceiptNumber(paymentDate?: Date, tx?: TxClient): Promise<string> {
     const client = tx ?? this.prisma;
     const result = await (client).$queryRaw<
       { nextval: bigint }[]
     >`SELECT nextval('receipt_number_seq')`;
     const seq = Number(result[0]!.nextval);
-    const year = new Date().getFullYear();
+    const year = new Intl.DateTimeFormat('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+    }).format(paymentDate ?? new Date());
     const padded = String(seq).padStart(5, '0');
     return `RCP-${year}-${padded}`;
   }

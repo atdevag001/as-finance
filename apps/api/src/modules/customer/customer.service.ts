@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { UserRole } from '@as-finance/shared';
 import { CustomerRepository, UpdateCustomerData } from './customer.repository';
 import { CreateCustomerDto } from './dto/create-customer.dto';
@@ -18,6 +19,14 @@ import { parseDateIST } from '../../common/utils/date.util';
 /** Extract last 4 characters from a string. */
 function lastFour(value: string): string {
   return value.slice(-4);
+}
+
+/** AAD binders so a ciphertext is cryptographically pinned to its (record, field). */
+function customerAad(customerId: string, field: 'aadhaar' | 'pan'): string {
+  return `customer:${customerId}:${field}`;
+}
+function guarantorAad(guarantorId: string, field: 'aadhaar'): string {
+  return `guarantor:${guarantorId}:${field}`;
 }
 
 @Injectable()
@@ -79,12 +88,20 @@ export class CustomerService {
       });
     }
 
-    // Encrypt sensitive fields
-    const aadhaarEncrypted = this.crypto.encrypt(dto.aadhaarNumber);
-    const panEncrypted = dto.panNumber ? this.crypto.encrypt(dto.panNumber) : undefined;
+    // Pre-generate the customer id so encrypt-time AAD binds to the actual row id
+    // (DB-generated UUIDs would only be known after insert, which is too late).
+    const customerId = randomUUID();
+    const aadhaarEncrypted = this.crypto.encrypt(
+      dto.aadhaarNumber,
+      customerAad(customerId, 'aadhaar'),
+    );
+    const panEncrypted = dto.panNumber
+      ? this.crypto.encrypt(dto.panNumber, customerAad(customerId, 'pan'))
+      : undefined;
     const panLastFour = dto.panNumber ? lastFour(dto.panNumber) : undefined;
 
     const customer = await this.customerRepository.create({
+      id: customerId,
       full_name: dto.fullName,
       father_or_husband_name: dto.fatherOrHusbandName,
       mobile: dto.mobile,
@@ -221,7 +238,10 @@ export class CustomerService {
     if (dto.mobile !== undefined) updateData.mobile = dto.mobile;
     if (dto.alternateMobile !== undefined) updateData.alternate_mobile = dto.alternateMobile;
     if (dto.panNumber !== undefined) {
-      updateData.pan_number_encrypted = this.crypto.encrypt(dto.panNumber);
+      updateData.pan_number_encrypted = this.crypto.encrypt(
+        dto.panNumber,
+        customerAad(id, 'pan'),
+      );
       updateData.pan_last_four = lastFour(dto.panNumber);
     }
     if (dto.dob !== undefined) updateData.dob = parseDateIST(dto.dob);
@@ -240,7 +260,8 @@ export class CustomerService {
     if (dto.assignedOfficerId !== undefined) updateData.assigned_officer_id = dto.assignedOfficerId;
     if (dto.notes !== undefined) updateData.notes = dto.notes;
 
-    const updated = await this.customerRepository.update(id, updateData);
+    // Pass expectedVersion through so concurrent edits raise CONFLICT_OPTIMISTIC_LOCK instead of last-write-wins.
+    const updated = await this.customerRepository.update(id, updateData, dto.version);
 
     // Record before/after state in audit log
     await this.customerRepository.createAuditLog({
@@ -329,7 +350,7 @@ export class CustomerService {
     }
     this.assertScope(customer, actorId, actorRole);
 
-    return this.customerRepository.createFamilyMember({
+    const familyMember = await this.customerRepository.createFamilyMember({
       customer_id: customerId,
       name: dto.name,
       relationship: dto.relationship,
@@ -337,6 +358,20 @@ export class CustomerService {
       occupation: dto.occupation,
       income_contribution: dto.incomeContribution,
     });
+
+    // Audit every mutation: attaching family members is KYC-relevant and must be traceable.
+    if (actorId && actorRole) {
+      await this.customerRepository.createAuditLog({
+        action_type: 'family_member_added',
+        actor_id: actorId,
+        actor_role: actorRole,
+        target_entity: 'customer',
+        target_id: customerId,
+        after_state: familyMember,
+      });
+    }
+
+    return familyMember;
   }
 
   async addGuarantor(
@@ -356,16 +391,36 @@ export class CustomerService {
       throw new ValidationError('Aadhaar must be exactly 12 digits', 'INVALID_AADHAAR');
     }
 
-    return this.customerRepository.createGuarantor({
+    // Pre-generate guarantor id so encrypt-time AAD pins ciphertext to this exact row.
+    const guarantorId = randomUUID();
+    const guarantor = await this.customerRepository.createGuarantor({
+      id: guarantorId,
       customer_id: customerId,
       name: dto.name,
       relationship: dto.relationship,
       mobile: dto.mobile,
-      aadhaar_number_encrypted: this.crypto.encrypt(dto.aadhaarNumber),
+      aadhaar_number_encrypted: this.crypto.encrypt(
+        dto.aadhaarNumber,
+        guarantorAad(guarantorId, 'aadhaar'),
+      ),
       aadhaar_last_four: lastFour(dto.aadhaarNumber),
       address: dto.address,
       photo_file_id: dto.photoFileId,
     });
+
+    // Audit every mutation: guarantor attach pulls a fresh Aadhaar into the system and must be traceable.
+    if (actorId && actorRole) {
+      await this.customerRepository.createAuditLog({
+        action_type: 'guarantor_added',
+        actor_id: actorId,
+        actor_role: actorRole,
+        target_entity: 'customer',
+        target_id: customerId,
+        after_state: guarantor,
+      });
+    }
+
+    return guarantor;
   }
 
   /**

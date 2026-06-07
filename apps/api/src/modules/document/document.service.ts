@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Readable } from 'stream';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../../database/prisma.service';
@@ -74,6 +74,7 @@ export function containsEmbeddedScripts(buffer: Buffer): boolean {
 @Injectable()
 export class DocumentService {
   private readonly bucket: string;
+  private readonly logger = new Logger(DocumentService.name);
 
   constructor(
     private readonly prisma: PrismaService,
@@ -85,11 +86,15 @@ export class DocumentService {
   /**
    * Upload a document with server-side MIME validation via magic bytes,
    * file size validation, randomized filename, and S3 storage.
+   *
+   * actorRole is required so document_uploaded audit entries record the
+   * acting principal alongside the actor id (compliance / forensics).
    */
   async upload(
     file: Express.Multer.File,
     dto: UploadDocumentDto,
     actorId: string,
+    actorRole: string,
   ) {
     // Validate file size
     if (!isFileSizeValid(file.size)) {
@@ -120,6 +125,15 @@ export class DocumentService {
       );
     }
 
+    // Validate KYC-specific fields BEFORE touching S3 so an invalid documentType
+    // can never orphan a file_metadata row + S3 object on the failure path.
+    const isKycLink = dto.prefix === 'kyc' && dto.customerId && dto.documentType;
+    if (dto.prefix === 'kyc' && dto.documentType && !VALID_DOC_TYPES.includes(dto.documentType)) {
+      throw new ValidationError(
+        `Invalid document type "${dto.documentType}". Must be one of: ${VALID_DOC_TYPES.join(', ')}`,
+      );
+    }
+
     // Generate randomized filename preserving extension
     const ext = this.getExtension(detectedMime);
     const storedFilename = `${randomUUID()}${ext}`;
@@ -133,35 +147,74 @@ export class DocumentService {
       contentType: detectedMime,
     });
 
-    // Create file_metadata record
-    const metadata = await this.prisma.file_metadata.create({
-      data: {
-        original_filename: file.originalname,
-        stored_filename: storedFilename,
+    // Persist metadata + KYC link atomically; on any DB failure delete the S3
+    // object so we never leave an orphaned upload behind.
+    const metadata = await this.prisma
+      .$transaction(async (tx) => {
+        const created = await tx.file_metadata.create({
+          data: {
+            original_filename: file.originalname,
+            stored_filename: storedFilename,
+            mime_type: detectedMime,
+            size_bytes: file.size,
+            bucket: this.bucket,
+            key,
+            uploaded_by: actorId,
+          },
+        });
+
+        if (isKycLink) {
+          // Replace semantics: soft-delete any prior active row of the same
+          // document_type so verifiers see exactly one canonical file per type
+          // (schema has no partial unique index — enforced at the service).
+          await tx.customer_documents.updateMany({
+            where: {
+              customer_id: dto.customerId!,
+              document_type: dto.documentType as never,
+              is_active: true,
+            },
+            data: { is_active: false },
+          });
+
+          await tx.customer_documents.create({
+            data: {
+              customer_id: dto.customerId!,
+              document_type: dto.documentType as never,
+              file_id: created.id,
+            },
+          });
+        }
+
+        return created;
+      })
+      .catch(async (err: unknown) => {
+        // Compensating delete to avoid orphan S3 objects when the DB write fails.
+        try {
+          await this.storage.delete(this.bucket, key);
+        } catch (cleanupErr) {
+          this.logger.error(
+            `Failed to delete orphan S3 object ${key} after metadata write failure`,
+            cleanupErr as Error,
+          );
+        }
+        throw err;
+      });
+
+    // Audit trail for KYC/document forensics — captures who uploaded what.
+    await this.writeAuditLog({
+      action_type: 'document_uploaded',
+      actor_id: actorId,
+      actor_role: actorRole,
+      target_id: metadata.id,
+      after_state: {
+        file_id: metadata.id,
+        customer_id: dto.customerId ?? null,
+        document_type: dto.documentType ?? null,
+        prefix: dto.prefix,
         mime_type: detectedMime,
         size_bytes: file.size,
-        bucket: this.bucket,
-        key,
-        uploaded_by: actorId,
       },
     });
-
-    // If this is a KYC document for a customer, create the link
-    if (dto.prefix === 'kyc' && dto.customerId && dto.documentType) {
-      if (!VALID_DOC_TYPES.includes(dto.documentType)) {
-        throw new ValidationError(
-          `Invalid document type "${dto.documentType}". Must be one of: ${VALID_DOC_TYPES.join(', ')}`,
-        );
-      }
-
-      await this.prisma.customer_documents.create({
-        data: {
-          customer_id: dto.customerId,
-          document_type: dto.documentType as never,
-          file_id: metadata.id,
-        },
-      });
-    }
 
     return metadata;
   }
@@ -213,15 +266,27 @@ export class DocumentService {
   async softDelete(fileId: string, actorId: string, actorRole: string): Promise<void> {
     const metadata = await this.loadMetadataWithScope(fileId, actorId, actorRole);
 
-    await this.prisma.file_metadata.update({
-      where: { id: metadata.id },
-      data: { is_active: false },
-    });
+    // Atomic so we never leave an inactive file_metadata with active
+    // customer_documents rows (ghost row that lists in the UI but 404s on view).
+    await this.prisma.$transaction([
+      this.prisma.file_metadata.update({
+        where: { id: metadata.id },
+        data: { is_active: false },
+      }),
+      this.prisma.customer_documents.updateMany({
+        where: { file_id: metadata.id },
+        data: { is_active: false },
+      }),
+    ]);
 
-    // Also soft-delete linked customer_documents rows so they don't orphan in the UI
-    await this.prisma.customer_documents.updateMany({
-      where: { file_id: metadata.id },
-      data: { is_active: false },
+    // Audit trail — captures who deleted sensitive KYC/document data.
+    await this.writeAuditLog({
+      action_type: 'document_deleted',
+      actor_id: actorId,
+      actor_role: actorRole,
+      target_id: metadata.id,
+      before_state: { file_id: metadata.id, is_active: true },
+      after_state: { file_id: metadata.id, is_active: false },
     });
   }
 
@@ -343,6 +408,41 @@ export class DocumentService {
         return '.pdf';
       default:
         return '';
+    }
+  }
+
+  /**
+   * Append an audit_logs row for document lifecycle events. Defensive: a
+   * failure here must not roll back the underlying upload/delete (which has
+   * already committed), so we log and swallow.
+   */
+  private async writeAuditLog(entry: {
+    action_type: 'document_uploaded' | 'document_deleted';
+    actor_id: string;
+    actor_role: string;
+    target_id: string;
+    before_state?: unknown;
+    after_state?: unknown;
+  }): Promise<void> {
+    try {
+      await this.prisma['audit_logs'].create({
+        data: {
+          action_type: entry.action_type,
+          actor_id: entry.actor_id,
+          actor_role: entry.actor_role,
+          target_entity: 'document',
+          target_id: entry.target_id,
+          ip_address: '0.0.0.0',
+          request_id: '00000000-0000-0000-0000-000000000000',
+          before_state: entry.before_state as never,
+          after_state: entry.after_state as never,
+        } as never,
+      });
+    } catch (err) {
+      this.logger.error(
+        `Failed to write audit log for ${entry.action_type} (${entry.target_id})`,
+        err as Error,
+      );
     }
   }
 }

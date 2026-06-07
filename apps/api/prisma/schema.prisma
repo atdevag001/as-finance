@@ -140,6 +140,7 @@ enum AuditAction {
   loan_foreclosed
   loan_overdue
   loan_defaulted
+  loan_schedule_regenerated
   loan_product_created
   loan_product_updated
   loan_product_deactivated
@@ -644,6 +645,9 @@ model disbursements {
   loan              loans           @relation(fields: [loan_id], references: [id])
   disbursed_by_user users           @relation(fields: [disbursed_by], references: [id])
   journal_entry     journal_entries @relation(fields: [journal_entry_id], references: [id])
+
+  // Disbursement report filters by date range and orders desc — avoids seq scan + sort.
+  @@index([disbursed_at(sort: Desc)], name: "idx_disbursements_disbursed_at")
 }
 
 /// Collection (payment) records — append-only, reversals are separate records
@@ -737,6 +741,8 @@ model receipts {
   @@index([payment_date], name: "idx_receipts_payment_date")
   @@index([compensating_receipt_id], name: "idx_receipts_compensating_receipt_id")
   @@index([original_receipt_id], name: "idx_receipts_original_receipt_id")
+  // findAll/findByLoanId paginate with ORDER BY created_at DESC — index avoids seq scan + sort
+  @@index([created_at(sort: Desc)], name: "idx_receipts_created_at_desc")
 }
 
 /// Penalty records — append-only, waivers tracked in-place
@@ -1028,6 +1034,8 @@ model outbox_messages {
   @@index([status], name: "idx_outbox_status")
   @@index([next_retry_at], name: "idx_outbox_next_retry")
   @@index([source_type, source_id], name: "idx_outbox_source")
+  // Partial composite index for fetchProcessableBatch's OR-of-AND + ORDER BY created_at
+  // poll query is emitted via raw SQL migration (Prisma cannot express partial indexes).
 }
 
 /// SMS message templates with variable placeholders

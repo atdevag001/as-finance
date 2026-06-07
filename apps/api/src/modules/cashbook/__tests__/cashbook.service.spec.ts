@@ -167,6 +167,15 @@ describe('CashbookService', () => {
   function createMocks() {
     const prisma = {
       $transaction: vi.fn((fn: (tx: unknown) => Promise<unknown>) => fn({})),
+      // Default receiving officer is active accountant — service now validates this
+      // before creating a handover (Bug fix: loose FK validation).
+      users: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: 'user-2',
+          is_active: true,
+          role: 'accountant',
+        }),
+      },
     };
 
     const cashbookRepository = {
@@ -417,6 +426,56 @@ describe('CashbookService', () => {
           }),
         }),
       );
+    });
+
+    it('should reject when receiving officer does not exist', async () => {
+      const { service, prisma, cashbookRepository } = createMocks();
+      prisma.users.findUnique.mockResolvedValueOnce(null);
+
+      await expect(
+        service.createHandover(
+          { totalAmountPaise: 50000, receivingOfficerId: 'missing-uuid', handoverDate: '2024-01-15' },
+          'user-1',
+          'collection_officer',
+        ),
+      ).rejects.toThrow('Receiving officer not found');
+      expect(cashbookRepository.createHandover).not.toHaveBeenCalled();
+    });
+
+    it('should reject when receiving officer is inactive', async () => {
+      const { service, prisma, cashbookRepository } = createMocks();
+      prisma.users.findUnique.mockResolvedValueOnce({
+        id: 'user-2',
+        is_active: false,
+        role: 'accountant',
+      });
+
+      await expect(
+        service.createHandover(
+          { totalAmountPaise: 50000, receivingOfficerId: 'user-2', handoverDate: '2024-01-15' },
+          'user-1',
+          'collection_officer',
+        ),
+      ).rejects.toThrow('not active');
+      expect(cashbookRepository.createHandover).not.toHaveBeenCalled();
+    });
+
+    it('should reject when receiving officer role is not permitted', async () => {
+      const { service, prisma, cashbookRepository } = createMocks();
+      prisma.users.findUnique.mockResolvedValueOnce({
+        id: 'user-2',
+        is_active: true,
+        role: 'field_officer',
+      });
+
+      await expect(
+        service.createHandover(
+          { totalAmountPaise: 50000, receivingOfficerId: 'user-2', handoverDate: '2024-01-15' },
+          'user-1',
+          'collection_officer',
+        ),
+      ).rejects.toThrow('not permitted to receive cash handovers');
+      expect(cashbookRepository.createHandover).not.toHaveBeenCalled();
     });
   });
 

@@ -45,10 +45,12 @@ export class CreateUserDto {
   @MaxLength(200)
   email?: string;
 
-  @ApiProperty({ description: 'Mobile number' })
+  @ApiProperty({ description: 'Mobile number (Indian format: 10 digits starting with 6-9)' })
   @IsString()
   @IsNotEmpty()
-  @MaxLength(15)
+  @MaxLength(10)
+  // Mirror frontend mobileSchema so direct API callers (Swagger/curl) cannot bypass format checks.
+  @Matches(/^[6-9]\d{9}$/, { message: 'Invalid Indian mobile number' })
   mobile!: string;
 
   @ApiProperty({ enum: UserRole, description: 'User role' })

@@ -28,10 +28,6 @@ function makeBalance(account_id: string, debit: bigint, credit: bigint) {
   return { account_id, _sum: { debit_paise: debit, credit_paise: credit } } as never;
 }
 
-function makeLine(debit: bigint, credit: bigint, account: { id: string; code: string; name: string; category: string }) {
-  return { debit_paise: debit, credit_paise: credit, account } as never;
-}
-
 describe('AccountingService', () => {
   let service: AccountingService;
   let repo: AccountingRepository;
@@ -56,8 +52,8 @@ describe('AccountingService', () => {
       findJournalEntriesByDateRange: vi.fn().mockResolvedValue([]),
       findJournalEntries: vi.fn().mockResolvedValue({ data: [], total: 0 }),
       getAccountBalances: vi.fn().mockResolvedValue([]),
-      getJournalLinesWithAccounts: vi.fn().mockResolvedValue([]),
-      getJournalLinesUpTo: vi.fn().mockResolvedValue([]),
+      getAccountTotalsForRange: vi.fn().mockResolvedValue([]),
+      getAccountTotalsUpTo: vi.fn().mockResolvedValue([]),
     } as unknown as AccountingRepository;
 
     // PrismaService mock for the period-close lookup + cash-tx auto-write.
@@ -292,9 +288,13 @@ describe('AccountingService', () => {
   // --- Requirement 21.4: getProfitAndLoss ---
   describe('getProfitAndLoss', () => {
     it('should calculate net profit as income minus expenses', async () => {
-      vi.mocked(repo.getJournalLinesWithAccounts).mockResolvedValue([
-        makeLine(0n, 50000n, { id: 'i1', code: '4001', name: 'Interest Income', category: 'income' }),
-        makeLine(20000n, 0n, { id: 'e1', code: '5001', name: 'Salary Expense', category: 'expense' }),
+      vi.mocked(repo.findAllAccounts).mockResolvedValue([
+        makeAccount('i1', '4001', 'Interest Income', 'income'),
+        makeAccount('e1', '5001', 'Salary Expense', 'expense'),
+      ] as never);
+      vi.mocked(repo.getAccountTotalsForRange).mockResolvedValue([
+        makeBalance('i1', 0n, 50000n),
+        makeBalance('e1', 20000n, 0n),
       ]);
 
       const result = await service.getProfitAndLoss('2024-01-01', '2024-06-30');
@@ -306,7 +306,7 @@ describe('AccountingService', () => {
     });
 
     it('should return zero when no income or expense lines exist', async () => {
-      vi.mocked(repo.getJournalLinesWithAccounts).mockResolvedValue([]);
+      vi.mocked(repo.getAccountTotalsForRange).mockResolvedValue([]);
 
       const result = await service.getProfitAndLoss('2024-01-01', '2024-06-30');
       expect(result.totalIncomePaise).toBe('0');
@@ -317,11 +317,17 @@ describe('AccountingService', () => {
     });
 
     it('should aggregate multiple income and expense accounts', async () => {
-      vi.mocked(repo.getJournalLinesWithAccounts).mockResolvedValue([
-        makeLine(0n, 30000n, { id: 'i1', code: '4001', name: 'Interest Income', category: 'income' }),
-        makeLine(0n, 20000n, { id: 'i2', code: '4002', name: 'Fee Income', category: 'income' }),
-        makeLine(10000n, 0n, { id: 'e1', code: '5001', name: 'Salary', category: 'expense' }),
-        makeLine(5000n, 0n, { id: 'e2', code: '5002', name: 'Rent', category: 'expense' }),
+      vi.mocked(repo.findAllAccounts).mockResolvedValue([
+        makeAccount('i1', '4001', 'Interest Income', 'income'),
+        makeAccount('i2', '4002', 'Fee Income', 'income'),
+        makeAccount('e1', '5001', 'Salary', 'expense'),
+        makeAccount('e2', '5002', 'Rent', 'expense'),
+      ] as never);
+      vi.mocked(repo.getAccountTotalsForRange).mockResolvedValue([
+        makeBalance('i1', 0n, 30000n),
+        makeBalance('i2', 0n, 20000n),
+        makeBalance('e1', 10000n, 0n),
+        makeBalance('e2', 5000n, 0n),
       ]);
 
       const result = await service.getProfitAndLoss('2024-01-01', '2024-12-31');
@@ -333,9 +339,13 @@ describe('AccountingService', () => {
     });
 
     it('should show net loss when expenses exceed income', async () => {
-      vi.mocked(repo.getJournalLinesWithAccounts).mockResolvedValue([
-        makeLine(0n, 10000n, { id: 'i1', code: '4001', name: 'Income', category: 'income' }),
-        makeLine(50000n, 0n, { id: 'e1', code: '5001', name: 'Expense', category: 'expense' }),
+      vi.mocked(repo.findAllAccounts).mockResolvedValue([
+        makeAccount('i1', '4001', 'Income', 'income'),
+        makeAccount('e1', '5001', 'Expense', 'expense'),
+      ] as never);
+      vi.mocked(repo.getAccountTotalsForRange).mockResolvedValue([
+        makeBalance('i1', 0n, 10000n),
+        makeBalance('e1', 50000n, 0n),
       ]);
 
       const result = await service.getProfitAndLoss('2024-01-01', '2024-06-30');
@@ -343,10 +353,15 @@ describe('AccountingService', () => {
     });
 
     it('should ignore non-income/non-expense accounts', async () => {
-      vi.mocked(repo.getJournalLinesWithAccounts).mockResolvedValue([
-        makeLine(100000n, 0n, { id: 'a1', code: '1100', name: 'Cash', category: 'asset' }),
-        makeLine(0n, 100000n, { id: 'l1', code: '2100', name: 'Payable', category: 'liability' }),
-        makeLine(0n, 50000n, { id: 'i1', code: '4001', name: 'Income', category: 'income' }),
+      vi.mocked(repo.findAllAccounts).mockResolvedValue([
+        makeAccount('a1', '1100', 'Cash', 'asset'),
+        makeAccount('l1', '2100', 'Payable', 'liability'),
+        makeAccount('i1', '4001', 'Income', 'income'),
+      ] as never);
+      vi.mocked(repo.getAccountTotalsForRange).mockResolvedValue([
+        makeBalance('a1', 100000n, 0n),
+        makeBalance('l1', 0n, 100000n),
+        makeBalance('i1', 0n, 50000n),
       ]);
 
       const result = await service.getProfitAndLoss('2024-01-01', '2024-06-30');
@@ -355,10 +370,13 @@ describe('AccountingService', () => {
       expect(result.totalIncomePaise).toBe('50000');
     });
 
-    it('should accumulate multiple lines for the same account', async () => {
-      vi.mocked(repo.getJournalLinesWithAccounts).mockResolvedValue([
-        makeLine(0n, 30000n, { id: 'i1', code: '4001', name: 'Interest Income', category: 'income' }),
-        makeLine(0n, 20000n, { id: 'i1', code: '4001', name: 'Interest Income', category: 'income' }),
+    it('should reflect DB-side aggregated totals per account', async () => {
+      vi.mocked(repo.findAllAccounts).mockResolvedValue([
+        makeAccount('i1', '4001', 'Interest Income', 'income'),
+      ] as never);
+      // groupBy already collapses the two journal lines (30k + 20k credits)
+      vi.mocked(repo.getAccountTotalsForRange).mockResolvedValue([
+        makeBalance('i1', 0n, 50000n),
       ]);
 
       const result = await service.getProfitAndLoss('2024-01-01', '2024-06-30');
@@ -370,11 +388,17 @@ describe('AccountingService', () => {
   // --- Requirement 21.5: getBalanceSheet ---
   describe('getBalanceSheet', () => {
     it('should satisfy assets = liabilities + equity + retained earnings', async () => {
-      vi.mocked(repo.getJournalLinesUpTo).mockResolvedValue([
-        makeLine(1000000n, 0n, { id: 'a1', code: '1100', name: 'Loans Receivable', category: 'asset' }),
-        makeLine(0n, 500000n, { id: 'eq1', code: '3001', name: "Owner's Equity", category: 'equity' }),
-        makeLine(0n, 600000n, { id: 'i1', code: '4001', name: 'Interest Income', category: 'income' }),
-        makeLine(100000n, 0n, { id: 'e1', code: '5001', name: 'Salary Expense', category: 'expense' }),
+      vi.mocked(repo.findAllAccounts).mockResolvedValue([
+        makeAccount('a1', '1100', 'Loans Receivable', 'asset'),
+        makeAccount('eq1', '3001', "Owner's Equity", 'equity'),
+        makeAccount('i1', '4001', 'Interest Income', 'income'),
+        makeAccount('e1', '5001', 'Salary Expense', 'expense'),
+      ] as never);
+      vi.mocked(repo.getAccountTotalsUpTo).mockResolvedValue([
+        makeBalance('a1', 1000000n, 0n),
+        makeBalance('eq1', 0n, 500000n),
+        makeBalance('i1', 0n, 600000n),
+        makeBalance('e1', 100000n, 0n),
       ]);
 
       const result = await service.getBalanceSheet('2024-06-30');
@@ -386,7 +410,7 @@ describe('AccountingService', () => {
     });
 
     it('should return empty balance sheet when no entries exist', async () => {
-      vi.mocked(repo.getJournalLinesUpTo).mockResolvedValue([]);
+      vi.mocked(repo.getAccountTotalsUpTo).mockResolvedValue([]);
 
       const result = await service.getBalanceSheet('2024-06-30');
       expect(result.isBalanced).toBe(true);
@@ -398,17 +422,22 @@ describe('AccountingService', () => {
     });
 
     it('should use current date when asOfDate is not provided', async () => {
-      vi.mocked(repo.getJournalLinesUpTo).mockResolvedValue([]);
+      vi.mocked(repo.getAccountTotalsUpTo).mockResolvedValue([]);
 
       const result = await service.getBalanceSheet();
       expect(result.asOfDate).toBe(new Date().toISOString().split('T')[0]);
     });
 
     it('should include liabilities in the equation', async () => {
-      vi.mocked(repo.getJournalLinesUpTo).mockResolvedValue([
-        makeLine(200000n, 0n, { id: 'a1', code: '1100', name: 'Cash', category: 'asset' }),
-        makeLine(0n, 100000n, { id: 'l1', code: '2100', name: 'Loan Payable', category: 'liability' }),
-        makeLine(0n, 100000n, { id: 'eq1', code: '3001', name: 'Equity', category: 'equity' }),
+      vi.mocked(repo.findAllAccounts).mockResolvedValue([
+        makeAccount('a1', '1100', 'Cash', 'asset'),
+        makeAccount('l1', '2100', 'Loan Payable', 'liability'),
+        makeAccount('eq1', '3001', 'Equity', 'equity'),
+      ] as never);
+      vi.mocked(repo.getAccountTotalsUpTo).mockResolvedValue([
+        makeBalance('a1', 200000n, 0n),
+        makeBalance('l1', 0n, 100000n),
+        makeBalance('eq1', 0n, 100000n),
       ]);
 
       const result = await service.getBalanceSheet('2024-12-31');
@@ -421,9 +450,13 @@ describe('AccountingService', () => {
     });
 
     it('should detect unbalanced balance sheet', async () => {
-      vi.mocked(repo.getJournalLinesUpTo).mockResolvedValue([
-        makeLine(500000n, 0n, { id: 'a1', code: '1100', name: 'Cash', category: 'asset' }),
-        makeLine(0n, 100000n, { id: 'eq1', code: '3001', name: 'Equity', category: 'equity' }),
+      vi.mocked(repo.findAllAccounts).mockResolvedValue([
+        makeAccount('a1', '1100', 'Cash', 'asset'),
+        makeAccount('eq1', '3001', 'Equity', 'equity'),
+      ] as never);
+      vi.mocked(repo.getAccountTotalsUpTo).mockResolvedValue([
+        makeBalance('a1', 500000n, 0n),
+        makeBalance('eq1', 0n, 100000n),
       ]);
 
       const result = await service.getBalanceSheet('2024-06-30');
@@ -431,11 +464,15 @@ describe('AccountingService', () => {
       expect(result.isBalanced).toBe(false);
     });
 
-    it('should accumulate multiple lines for the same account', async () => {
-      vi.mocked(repo.getJournalLinesUpTo).mockResolvedValue([
-        makeLine(100000n, 0n, { id: 'a1', code: '1100', name: 'Cash', category: 'asset' }),
-        makeLine(200000n, 0n, { id: 'a1', code: '1100', name: 'Cash', category: 'asset' }),
-        makeLine(0n, 300000n, { id: 'eq1', code: '3001', name: 'Equity', category: 'equity' }),
+    it('should reflect DB-side aggregated totals per account', async () => {
+      vi.mocked(repo.findAllAccounts).mockResolvedValue([
+        makeAccount('a1', '1100', 'Cash', 'asset'),
+        makeAccount('eq1', '3001', 'Equity', 'equity'),
+      ] as never);
+      // groupBy already collapses the two journal lines into a single (300k debit) row
+      vi.mocked(repo.getAccountTotalsUpTo).mockResolvedValue([
+        makeBalance('a1', 300000n, 0n),
+        makeBalance('eq1', 0n, 300000n),
       ]);
 
       const result = await service.getBalanceSheet('2024-06-30');

@@ -15,6 +15,7 @@ import { GroupService } from './group.service';
 import { CreateGroupDto } from './dto/create-group.dto';
 import { AddGroupMemberDto } from './dto/add-group-member.dto';
 import { PostGroupCollectionDto } from './dto/post-group-collection.dto';
+import { ListGroupsQueryDto } from './dto/list-groups-query.dto';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 
 @ApiTags('groups')
@@ -43,18 +44,9 @@ export class GroupController {
   @ApiQuery({ name: 'take', required: false, type: Number })
   @ApiQuery({ name: 'status', required: false, type: String })
   @ApiQuery({ name: 'branchArea', required: false, type: String })
-  async findAll(
-    @Query('skip') skip?: string,
-    @Query('take') take?: string,
-    @Query('status') status?: string,
-    @Query('branchArea') branchArea?: string,
-  ) {
-    return this.groupService.findAll({
-      skip: skip ? parseInt(skip, 10) : undefined,
-      take: take ? parseInt(take, 10) : undefined,
-      status,
-      branchArea,
-    });
+  async findAll(@Query() query: ListGroupsQueryDto) {
+    // DTO enforces int + range (0..100) so NaN / unbounded scans cannot reach Prisma.
+    return this.groupService.findAll(query);
   }
 
   @Get(':id')

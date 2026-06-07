@@ -11,6 +11,7 @@ import {
   HttpStatus,
   UseInterceptors,
   UploadedFile,
+  BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiConsumes } from '@nestjs/swagger';
@@ -48,7 +49,16 @@ const DOCUMENT_UPLOAD_OPTIONS = {
     cb: (err: Error | null, accept: boolean) => void,
   ) => {
     if (!DOCUMENT_UPLOAD_ALLOWED_MIMES.has(file.mimetype)) {
-      cb(new Error('INVALID_MIME_TYPE'), false);
+      // Throw a typed HttpException so GlobalExceptionFilter returns 400 with a
+      // stable client-readable code instead of mapping a plain Error to 500.
+      cb(
+        new BadRequestException({
+          statusCode: 400,
+          code: 'INVALID_MIME_TYPE',
+          message: 'Only JPEG, PNG, and PDF are allowed',
+        }),
+        false,
+      );
       return;
     }
     cb(null, true);
@@ -73,7 +83,12 @@ export class DocumentController {
     @Body() dto: UploadDocumentDto,
     @Req() req: Request & { user: JwtPayload },
   ) {
-    const metadata = await this.documentService.upload(file, dto, req.user.sub);
+    const metadata = await this.documentService.upload(
+      file,
+      dto,
+      req.user.sub,
+      req.user.role,
+    );
     return { data: metadata };
   }
 

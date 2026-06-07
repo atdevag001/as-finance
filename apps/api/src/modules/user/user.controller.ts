@@ -55,6 +55,7 @@ export class UserController {
       skip: query.skip,
       take: query.take,
       role: query.role,
+      search: query.search,
     });
   }
 

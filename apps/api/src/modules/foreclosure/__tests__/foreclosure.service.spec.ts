@@ -630,35 +630,62 @@ describe('ForeclosureService', () => {
       expect(mockForeclosureRepo.findAccountByCode).toHaveBeenCalledWith('1002', expect.anything());
     });
 
-    it('applies rebate override from execution dto', async () => {
+    it('rejects rebate override that does not match the quote', async () => {
+      // POST-FIX: execute-time rebate overrides are no longer accepted — operator
+      // must regenerate the quote with the desired rebate so the customer-facing
+      // settlement number always matches what got posted.
       setupSuccessfulExecution();
-      await service.executeForeclosure(
-        {
-          foreclosureId: 'fc-1', paymentMode: 'cash', idempotencyKey: 'key-3',
-          rebatePaise: 2000, rebateReason: 'Override rebate', rebateAuthorizedBy: 'mgr-1',
-        },
-        'user-2', 'manager',
-      );
-      // Foreclosure should be updated with the override rebate
-      expect(mockForeclosureRepo.updateForeclosure).toHaveBeenCalledWith(
-        'fc-1',
-        expect.objectContaining({ rebate_paise: 2000, rebate_reason: 'Override rebate' }),
-        expect.anything(),
-      );
+      await expect(
+        service.executeForeclosure(
+          {
+            foreclosureId: 'fc-1', paymentMode: 'cash', idempotencyKey: 'key-3',
+            rebatePaise: 2000, rebateReason: 'Override rebate', rebateAuthorizedBy: 'mgr-1',
+          },
+          'user-2', 'manager',
+        ),
+      ).rejects.toThrow(/Rebate override at execution is not permitted/);
     });
 
-    it('creates rebate audit log when rebate > 0', async () => {
-      setupSuccessfulExecution();
+    it('creates rebate audit log when the quote already carries a rebate', async () => {
+      // Quote built with a 3000 rebate baked in; execute proceeds without an
+      // override, but the rebate audit log still fires from the quoted value.
+      mockForeclosureRepo.findById.mockResolvedValue({
+        id: 'fc-1', loan_id: 'loan-1', status: 'quote',
+        requested_by: 'user-1',
+        quote_expires_at: new Date(Date.now() + 86400000),
+        outstanding_principal_paise: 100000n,
+        accrued_interest_paise: 12000n,
+        pending_penalties_paise: 800n,
+        rebate_paise: 3000n,
+        settlement_amount_paise: 109800n,
+        rebate_reason: 'Loyalty discount',
+        rebate_authorized_by: 'mgr-1',
+      });
+      mockForeclosureRepo.lockLoanForUpdate.mockResolvedValue({
+        id: 'loan-1', status: 'active', cached_outstanding_paise: 112800n,
+      });
+      mockForeclosureRepo.getLoanForForeclosure.mockResolvedValue(buildLoan());
+      mockForeclosureRepo.getPendingPenalties.mockResolvedValue([
+        { id: 'pen-1', amount_paise: 500n },
+        { id: 'pen-2', amount_paise: 300n },
+      ]);
+      mockForeclosureRepo.findAccountByCode.mockImplementation((code: string) => {
+        const accts: Record<string, any> = {
+          '1001': { id: 'acc-cash', code: '1001', name: 'Cash', category: 'asset' },
+          '1100': { id: 'acc-lr', code: '1100', name: 'Loans Receivable', category: 'asset' },
+          '4001': { id: 'acc-ii', code: '4001', name: 'Interest Income', category: 'income' },
+          '4003': { id: 'acc-pi', code: '4003', name: 'Penalty Income', category: 'income' },
+          '5007': { id: 'acc-discount', code: '5007', name: 'Foreclosure Discount Expense', category: 'expense' },
+        };
+        return Promise.resolve(accts[code] ?? null);
+      });
       await service.executeForeclosure(
         {
           foreclosureId: 'fc-1', paymentMode: 'cash', idempotencyKey: 'key-4',
-          rebatePaise: 3000, rebateReason: 'Loyalty discount',
         },
         'user-2', 'manager',
       );
-      // Should have at least 2 audit log calls: one for rebate, one for main
       const auditCalls = mockAuditService.createAuditLog.mock.calls;
-      expect(auditCalls.length).toBeGreaterThanOrEqual(2);
       const rebateCall = auditCalls.find(
         (c: any[]) => c[0]?.after_state?.rebate_paise === 3000,
       );
@@ -841,8 +868,9 @@ describe('ForeclosureService', () => {
     });
 
     it('books rebate as Discount Expense + credits full principal (not principal − rebate)', async () => {
-      // Quote matches live (no rebate): 100000 principal + 12000 interest.
-      // Execution applies a 10000 rebate override → settlement drops to 102000.
+      // Quote already carries the 10000 rebate (execute-time overrides are now
+      // refused). Verify the JE: full 100000 principal credited to Loans
+      // Receivable, the 10000 rebate booked as a Discount Expense debit.
       mockForeclosureRepo.findById.mockResolvedValue({
         id: 'fc-1', loan_id: 'loan-1', status: 'quote',
         requested_by: 'user-1',
@@ -850,9 +878,10 @@ describe('ForeclosureService', () => {
         outstanding_principal_paise: 100000n,
         accrued_interest_paise: 12000n,
         pending_penalties_paise: 0n,
-        rebate_paise: 0n,
-        settlement_amount_paise: 112000n,
-        rebate_reason: null, rebate_authorized_by: null,
+        rebate_paise: 10000n,
+        settlement_amount_paise: 102000n,
+        rebate_reason: 'Loyalty',
+        rebate_authorized_by: 'mgr-1',
       });
       mockForeclosureRepo.lockLoanForUpdate.mockResolvedValue({
         id: 'loan-1', status: 'active', cached_outstanding_paise: 112000n,
@@ -870,11 +899,9 @@ describe('ForeclosureService', () => {
         return Promise.resolve(accts[code] ?? null);
       });
 
-      // Execute with rebate override of 10000
       await service.executeForeclosure(
         {
           foreclosureId: 'fc-1', paymentMode: 'cash', idempotencyKey: 'key-jl-6',
-          rebatePaise: 10000,
         },
         'user-2', 'manager',
       );

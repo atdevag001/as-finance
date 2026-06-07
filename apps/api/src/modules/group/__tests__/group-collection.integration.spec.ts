@@ -35,6 +35,7 @@ function createMockGroupRepo() {
     deactivateMember: vi.fn(),
     hasActiveGroupLoans: vi.fn(),
     findAll: vi.fn(),
+    lockGroupForUpdate: vi.fn().mockResolvedValue({ id: 'grp-1' }),
   };
 }
 

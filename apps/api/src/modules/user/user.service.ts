@@ -109,7 +109,7 @@ export class UserService {
     return created;
   }
 
-  async findAll(params: { skip?: number; take?: number; role?: string }) {
+  async findAll(params: { skip?: number; take?: number; role?: string; search?: string }) {
     return this.userRepository.findAll(params);
   }
 
@@ -159,6 +159,35 @@ export class UserService {
       this.validateRoleAssignment(actorRole, dto.role!);
     }
 
+    // JwtAuthGuard rejects inactive users; self-deactivation would lock the actor out.
+    if (id === actorId && dto.isActive === false) {
+      throw new BusinessRuleError(
+        'Cannot deactivate your own account',
+        'SELF_DEACTIVATION',
+      );
+    }
+
+    // Prevent removing the last active super_admin (deactivation OR role downgrade)
+    // since no one would remain who can re-enable that role.
+    const deactivatingSuperAdmin =
+      user.role === UserRole.SUPER_ADMIN && dto.isActive === false && user.is_active;
+    const demotingSuperAdmin =
+      user.role === UserRole.SUPER_ADMIN &&
+      roleChanged &&
+      dto.role !== UserRole.SUPER_ADMIN &&
+      user.is_active;
+    if (deactivatingSuperAdmin || demotingSuperAdmin) {
+      const activeSuperAdmins = await this.userRepository.countActiveByRole(
+        UserRole.SUPER_ADMIN,
+      );
+      if (activeSuperAdmins <= 1) {
+        throw new BusinessRuleError(
+          'Cannot deactivate or demote the last active super_admin',
+          'LAST_SUPER_ADMIN',
+        );
+      }
+    }
+
     // Check uniqueness for mobile/email if changed
     if (dto.mobile && dto.mobile !== user.mobile) {
       const existing = await this.userRepository.findByMobile(dto.mobile);
@@ -167,6 +196,8 @@ export class UserService {
       }
     }
 
+    // Truthy email triggers uniqueness check; null means "clear" (no check needed);
+    // undefined means "leave unchanged".
     if (dto.email && dto.email !== user.email) {
       const existing = await this.userRepository.findByEmail(dto.email);
       if (existing && existing.id !== id) {
@@ -174,13 +205,19 @@ export class UserService {
       }
     }
 
-    const updated = await this.userRepository.update(id, {
-      full_name: dto.fullName,
-      email: dto.email,
-      mobile: dto.mobile,
-      role: dto.role,
-      is_active: dto.isActive,
-    });
+    // Pass expectedVersion so concurrent edits raise CONFLICT_OPTIMISTIC_LOCK instead of last-write-wins.
+    const updated = await this.userRepository.update(
+      id,
+      {
+        full_name: dto.fullName,
+        // Preserve explicit null so the repo can clear the column.
+        ...(dto.email !== undefined ? { email: dto.email } : {}),
+        mobile: dto.mobile,
+        role: dto.role,
+        is_active: dto.isActive,
+      },
+      dto.version,
+    );
 
     // Compliance: emit audit trail for every user mutation. AuditAction enum
     // lacks USER_UPDATED, so all updates flow through USER_ROLE_CHANGED — the

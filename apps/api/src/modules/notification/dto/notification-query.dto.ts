@@ -1,6 +1,7 @@
-import { IsOptional, IsString, IsInt, Min, Max } from 'class-validator';
+import { IsOptional, IsInt, IsEnum, Min, Max } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { NotificationEvent, OutboxStatus } from '@as-finance/shared';
 
 export class NotificationQueryDto {
   @ApiPropertyOptional({ description: 'Number of records to skip' })
@@ -18,13 +19,14 @@ export class NotificationQueryDto {
   @Max(100)
   take?: number;
 
-  @ApiPropertyOptional({ description: 'Filter by outbox status' })
+  // Enum-validate filters so invalid values surface as 400s instead of silently returning empty result sets.
+  @ApiPropertyOptional({ enum: OutboxStatus, description: 'Filter by outbox status' })
   @IsOptional()
-  @IsString()
-  status?: string;
+  @IsEnum(OutboxStatus)
+  status?: OutboxStatus;
 
-  @ApiPropertyOptional({ description: 'Filter by notification event type' })
+  @ApiPropertyOptional({ enum: NotificationEvent, description: 'Filter by notification event type' })
   @IsOptional()
-  @IsString()
-  eventType?: string;
+  @IsEnum(NotificationEvent)
+  eventType?: NotificationEvent;
 }

@@ -192,9 +192,13 @@ async function seedUsers() {
       // must never silently downgrade an existing user's password to the
       // publicly-known DEFAULT_PASSWORD. New rows still get bcrypt(DEFAULT_PASSWORD)
       // via the create branch.
+      // Reset lockout/activation fields so re-seed restores a known-good login state.
       update: {
         full_name: user.fullName,
         role: user.role,
+        failed_login_attempts: 0,
+        locked_until: null,
+        is_active: true,
       },
       create: {
         username: user.username,

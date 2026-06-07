@@ -383,17 +383,30 @@ export class ForeclosureService {
       throw new NotFoundError(`Loan not found: ${foreclosure.loan_id}`);
     }
 
-    // Apply optional rebate override from execution request
-    const rebatePaise = dto.rebatePaise ?? Number(foreclosure.rebate_paise);
+    // M-rebate-override: Reject any execute-time rebate that differs from the
+    // quote's stored rebate. The maker who created the quote already reviewed
+    // the rebate against the ceiling and recorded a reason; allowing the
+    // executor to silently raise it bypasses the four-eyes audit trail and,
+    // combined with the settlement-clamp, lets a single approver waive
+    // arbitrary dues. Any change must go through a fresh quote.
+    const quotedRebatePaise = Number(foreclosure.rebate_paise);
+    if (dto.rebatePaise !== undefined && dto.rebatePaise !== quotedRebatePaise) {
+      throw new BusinessRuleError(
+        `Rebate override at execution is not permitted (quote=${quotedRebatePaise} paise, requested=${dto.rebatePaise} paise). Generate a new quote with the desired rebate.`,
+        'REBATE_OVERRIDE_REQUIRES_NEW_QUOTE',
+      );
+    }
+    const rebatePaise = quotedRebatePaise;
     const rebateReason = dto.rebateReason ?? foreclosure.rebate_reason ?? undefined;
-    // H13: rebate authorizer is the authenticated actor when a (possibly
-    // overridden) rebate is applied — never the client-supplied value. Falls
-    // back to the quote's stored authorizer only when no rebate is active.
+    // H13: rebate authorizer is the authenticated actor when a rebate is
+    // applied — never the client-supplied value. Falls back to the quote's
+    // stored authorizer only when no rebate is active.
     const rebateAuthorizedBy =
       rebatePaise > 0 ? actorId : (foreclosure.rebate_authorized_by ?? undefined);
 
     // H29: enforce rebate ceiling against the quoted components so the
     // settlement journal stays balanced (see buildSettlementJournalLines).
+    // Retained as defence-in-depth even though createQuote already validates.
     const quotedDuesPaise =
       Number(foreclosure.outstanding_principal_paise) +
       Number(foreclosure.accrued_interest_paise) +

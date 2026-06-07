@@ -35,8 +35,9 @@ export class GroupRepository {
   /**
    * Find a group by ID with members and basic info.
    */
-  async findById(id: string) {
-    return this.prisma.groups.findUnique({
+  async findById(id: string, tx?: TxClient) {
+    const client = tx ?? this.prisma;
+    return client.groups.findUnique({
       where: { id },
       include: {
         leader: {
@@ -81,6 +82,16 @@ export class GroupRepository {
   }
 
   /**
+   * Lock the group row using SELECT ... FOR UPDATE so concurrent membership writes serialize.
+   */
+  async lockGroupForUpdate(groupId: string, tx: TxClient): Promise<{ id: string } | null> {
+    const rows = await tx.$queryRaw<
+      { id: string }[]
+    >`SELECT id FROM groups WHERE id = ${groupId}::uuid FOR UPDATE`;
+    return rows[0] ?? null;
+  }
+
+  /**
    * Count active members in a group.
    */
   async countActiveMembers(groupId: string, tx?: TxClient): Promise<number> {
@@ -114,8 +125,9 @@ export class GroupRepository {
   /**
    * Find a group member by ID.
    */
-  async findMemberById(memberId: string) {
-    return this.prisma.group_members.findUnique({
+  async findMemberById(memberId: string, tx?: TxClient) {
+    const client = tx ?? this.prisma;
+    return client.group_members.findUnique({
       where: { id: memberId },
       include: {
         customer: { select: { id: true, full_name: true } },

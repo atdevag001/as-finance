@@ -38,6 +38,7 @@ function createMockRepository() {
     findByUsername: vi.fn(),
     findByMobile: vi.fn(),
     findByEmail: vi.fn(),
+    countActiveByRole: vi.fn().mockResolvedValue(2),
     update: vi.fn(),
     createAreaAssignment: vi.fn(),
     findAreaAssignment: vi.fn(),
@@ -377,9 +378,12 @@ describe('UserService', () => {
       );
 
       expect(result.is_active).toBe(false);
+      // Third arg is the optimistic-lock expectedVersion (undefined when the
+      // caller doesn't supply one), so we assert the call shape exactly.
       expect(mockRepo.update).toHaveBeenCalledWith(
         mockUserId,
         expect.objectContaining({ is_active: false }),
+        undefined,
       );
     });
 
@@ -607,6 +611,97 @@ describe('UserService', () => {
       );
 
       expect(result.is_active).toBe(true);
+    });
+
+    it('should prevent self-deactivation', async () => {
+      mockRepo.findById.mockResolvedValue({ ...mockUser, id: mockActorId });
+
+      await expect(
+        service.updateUser(
+          mockActorId,
+          { isActive: false },
+          mockActorId,
+          UserRole.SUPER_ADMIN,
+        ),
+      ).rejects.toThrow(BusinessRuleError);
+    });
+
+    it('should prevent deactivating the last active super_admin', async () => {
+      mockRepo.findById.mockResolvedValue({
+        ...mockUser,
+        role: UserRole.SUPER_ADMIN,
+      });
+      mockRepo.countActiveByRole.mockResolvedValue(1);
+
+      await expect(
+        service.updateUser(
+          mockUserId,
+          { isActive: false },
+          mockActorId,
+          UserRole.SUPER_ADMIN,
+        ),
+      ).rejects.toThrow(BusinessRuleError);
+    });
+
+    it('should allow deactivating a super_admin when others are still active', async () => {
+      mockRepo.findById.mockResolvedValue({
+        ...mockUser,
+        role: UserRole.SUPER_ADMIN,
+      });
+      mockRepo.countActiveByRole.mockResolvedValue(2);
+      mockRepo.update.mockResolvedValue({
+        ...mockUser,
+        role: UserRole.SUPER_ADMIN,
+        is_active: false,
+      });
+
+      const result = await service.updateUser(
+        mockUserId,
+        { isActive: false },
+        mockActorId,
+        UserRole.SUPER_ADMIN,
+      );
+
+      expect(result.is_active).toBe(false);
+    });
+  });
+
+  describe('optimistic locking', () => {
+    it('should forward version to repository.update', async () => {
+      mockRepo.findById.mockResolvedValue(mockUser);
+      mockRepo.update.mockResolvedValue({ ...mockUser, full_name: 'Updated' });
+
+      await service.updateUser(
+        mockUserId,
+        { fullName: 'Updated', version: 3 },
+        mockActorId,
+        UserRole.SUPER_ADMIN,
+      );
+
+      expect(mockRepo.update).toHaveBeenCalledWith(
+        mockUserId,
+        expect.any(Object),
+        3,
+      );
+    });
+
+    it('should propagate CONFLICT_OPTIMISTIC_LOCK from repository', async () => {
+      mockRepo.findById.mockResolvedValue(mockUser);
+      mockRepo.update.mockRejectedValue(
+        new ConflictError(
+          'User was modified by another request. Please reload and retry.',
+          'CONFLICT_OPTIMISTIC_LOCK',
+        ),
+      );
+
+      await expect(
+        service.updateUser(
+          mockUserId,
+          { fullName: 'Updated', version: 1 },
+          mockActorId,
+          UserRole.SUPER_ADMIN,
+        ),
+      ).rejects.toThrow(ConflictError);
     });
   });
 

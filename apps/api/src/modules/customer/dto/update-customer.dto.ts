@@ -44,6 +44,7 @@ export class UpdateCustomerDto {
   @ApiPropertyOptional({ description: 'Date of birth (ISO 8601)' })
   @IsOptional()
   @IsString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'dob must be YYYY-MM-DD' })
   dob?: string;
 
   @ApiPropertyOptional({ description: 'Age' })
@@ -125,4 +126,10 @@ export class UpdateCustomerDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiPropertyOptional({ description: 'Expected version for optimistic concurrency control' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  version?: number;
 }

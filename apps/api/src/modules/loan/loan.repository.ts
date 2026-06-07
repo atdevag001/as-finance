@@ -366,22 +366,23 @@ export class LoanRepository {
     tx?: TxClient,
   ) {
     const client = tx ?? this.prisma;
-    for (const inst of installments) {
-      await client['loan_schedules'].create({
-        data: {
-          loan_id: loanId,
-          installment_number: inst.installmentNumber,
-          due_date: inst.dueDate,
-          principal_paise: inst.principalPaise,
-          interest_paise: inst.interestPaise,
-          total_paise: inst.totalPaise,
-          principal_paid_paise: 0,
-          interest_paid_paise: 0,
-          penalty_paid_paise: 0,
-          status: 'pending',
-        } as never,
-      });
-    }
+    if (installments.length === 0) return;
+    // Single createMany insert keeps the loans FOR UPDATE lock window short
+    // (1 round-trip vs N) — critical for daily-frequency, multi-year loans.
+    await client['loan_schedules'].createMany({
+      data: installments.map((inst) => ({
+        loan_id: loanId,
+        installment_number: inst.installmentNumber,
+        due_date: inst.dueDate,
+        principal_paise: inst.principalPaise,
+        interest_paise: inst.interestPaise,
+        total_paise: inst.totalPaise,
+        principal_paid_paise: 0n,
+        interest_paid_paise: 0n,
+        penalty_paid_paise: 0n,
+        status: 'pending',
+      })) as never,
+    });
   }
 
   /**

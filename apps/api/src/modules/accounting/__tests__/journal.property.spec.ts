@@ -140,8 +140,8 @@ function createServiceWithCapture() {
     findJournalEntriesByDateRange: vi.fn().mockResolvedValue([]),
     findJournalEntries: vi.fn().mockResolvedValue({ data: [], total: 0 }),
     getAccountBalances: vi.fn().mockResolvedValue([]),
-    getJournalLinesWithAccounts: vi.fn().mockResolvedValue([]),
-    getJournalLinesUpTo: vi.fn().mockResolvedValue([]),
+    getAccountTotalsForRange: vi.fn().mockResolvedValue([]),
+    getAccountTotalsUpTo: vi.fn().mockResolvedValue([]),
   } as unknown as AccountingRepository;
 
   const prismaMock = {
@@ -383,7 +383,7 @@ describe('Property 14: Trial Balance Identity', () => {
 /**
  * Generates a sequence of balanced journal lines for balance sheet testing.
  * Each entry is a balanced debit/credit pair. The sequence is then fed to
- * getBalanceSheet via mocked getJournalLinesUpTo.
+ * getBalanceSheet via mocked getAccountTotalsUpTo (the DB-aggregated shape).
  */
 const balanceSheetSequenceArb = (accounts: SimAccount[]) => {
   const accountArb = fc.constantFrom(...accounts);
@@ -414,8 +414,27 @@ describe('Property 15: Balance Sheet Equation', () => {
       fc.asyncProperty(balanceSheetSequenceArb(accounts), async (entrySequence) => {
         const allLines = entrySequence.flat();
 
+        // Mirror the DB-side groupBy: collapse per-line data to per-account totals
+        const totalsMap = new Map<string, { debit_paise: bigint; credit_paise: bigint }>();
+        for (const line of allLines) {
+          const existing = totalsMap.get(line.account.id) ?? { debit_paise: 0n, credit_paise: 0n };
+          existing.debit_paise += line.debit_paise;
+          existing.credit_paise += line.credit_paise;
+          totalsMap.set(line.account.id, existing);
+        }
+        const totals = [...totalsMap.entries()].map(([account_id, _sum]) => ({ account_id, _sum }));
+
         const { service, repo } = createServiceWithCapture();
-        vi.mocked(repo.getJournalLinesUpTo).mockResolvedValue(allLines as never);
+        vi.mocked(repo.findAllAccounts).mockResolvedValue(
+          accounts.map((a) => ({
+            ...a,
+            parent_id: null,
+            is_system: true,
+            is_active: true,
+            created_at: new Date(),
+          })) as never,
+        );
+        vi.mocked(repo.getAccountTotalsUpTo).mockResolvedValue(totals as never);
 
         const result = await service.getBalanceSheet();
 

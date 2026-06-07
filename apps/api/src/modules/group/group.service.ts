@@ -103,9 +103,12 @@ export class GroupService {
 
     // Get active loans linked to this group
     const groupLoans = await this.groupRepository.getGroupMemberLoans(id);
-    const loansByCustomer = new Map<string, typeof groupLoans[0]>();
+    // A member can have multiple active group loans (e.g. across cycles); use push, not set, so we don't silently drop loans.
+    const loansByCustomer = new Map<string, typeof groupLoans>();
     for (const loan of groupLoans) {
-      loansByCustomer.set(loan.customer_id, loan);
+      const list = loansByCustomer.get(loan.customer_id);
+      if (list) list.push(loan);
+      else loansByCustomer.set(loan.customer_id, [loan]);
     }
 
     // Get group collections
@@ -130,14 +133,21 @@ export class GroupService {
       leader_name: group.leader?.full_name ?? null,
       member_count: group.members.length,
       members: group.members.map((m) => {
-        const loan = loansByCustomer.get(m.customer_id);
+        const memberLoans = loansByCustomer.get(m.customer_id) ?? [];
+        const primary = memberLoans[0];
         return {
           id: m.id,
           customer_id: m.customer_id,
           customer_name: m.customer.full_name,
-          loan_id: loan?.id ?? null,
-          loan_number: loan?.loan_number ?? null,
-          outstanding_paise: loan?.cached_outstanding_paise ? Number(loan.cached_outstanding_paise) : null,
+          // Top-level fields retained for backward compatibility; consumers handling multiple cycles must use `loans` instead.
+          loan_id: primary?.id ?? null,
+          loan_number: primary?.loan_number ?? null,
+          outstanding_paise: primary?.cached_outstanding_paise ? Number(primary.cached_outstanding_paise) : null,
+          loans: memberLoans.map((l) => ({
+            id: l.id,
+            loan_number: l.loan_number,
+            outstanding_paise: l.cached_outstanding_paise ? Number(l.cached_outstanding_paise) : null,
+          })),
         };
       }),
       collections: collections.map((c) => ({
@@ -180,61 +190,72 @@ export class GroupService {
    * Requirement 11.2
    */
   async addMember(groupId: string, dto: AddGroupMemberDto, actorId: string, actorRole: string) {
-    const group = await this.groupRepository.findById(groupId);
-    if (!group) {
-      throw new NotFoundError(`Group not found: ${groupId}`);
-    }
-
-    if (group.status !== 'active') {
-      throw new BusinessRuleError(
-        `Cannot add members to a group with status '${group.status}'`,
-        'GROUP_NOT_ACTIVE',
-      );
-    }
-
-    // Verify customer exists
+    // Customer existence is non-racy; check it outside the row lock to keep the lock window short.
     const customerExists = await this.groupRepository.customerExists(dto.customerId);
     if (!customerExists) {
       throw new NotFoundError(`Customer not found: ${dto.customerId}`);
     }
 
-    // Check if already a member
-    const alreadyMember = await this.groupRepository.isActiveMember(groupId, dto.customerId);
-    if (alreadyMember) {
-      throw new BusinessRuleError(
-        'Customer is already an active member of this group',
-        'DUPLICATE_GROUP_MEMBER',
+    // Wrap in a transaction with SELECT ... FOR UPDATE on the group row so concurrent addMember calls cannot both see the same count and overflow MAX_GROUP_SIZE.
+    const { member, newCount } = await this.prisma.$transaction(async (tx) => {
+      const locked = await this.groupRepository.lockGroupForUpdate(groupId, tx);
+      if (!locked) {
+        throw new NotFoundError(`Group not found: ${groupId}`);
+      }
+
+      const group = await this.groupRepository.findById(groupId, tx);
+      if (!group) {
+        throw new NotFoundError(`Group not found: ${groupId}`);
+      }
+      if (group.status !== 'active') {
+        throw new BusinessRuleError(
+          `Cannot add members to a group with status '${group.status}'`,
+          'GROUP_NOT_ACTIVE',
+        );
+      }
+
+      const alreadyMember = await this.groupRepository.isActiveMember(groupId, dto.customerId, tx);
+      if (alreadyMember) {
+        throw new BusinessRuleError(
+          'Customer is already an active member of this group',
+          'DUPLICATE_GROUP_MEMBER',
+        );
+      }
+
+      const currentCount = await this.groupRepository.countActiveMembers(groupId, tx);
+      if (currentCount >= MAX_GROUP_SIZE) {
+        throw new BusinessRuleError(
+          `Group has reached maximum size of ${MAX_GROUP_SIZE} members`,
+          'GROUP_MAX_SIZE_EXCEEDED',
+        );
+      }
+
+      const created = await this.groupRepository.addMember(groupId, dto.customerId, tx);
+
+      await this.auditService.createAuditLog(
+        {
+          action_type: 'customer_updated',
+          actor_id: actorId,
+          actor_role: actorRole,
+          target_entity: 'group',
+          target_id: groupId,
+          after_state: {
+            action: 'member_added',
+            customer_id: dto.customerId,
+            member_count: currentCount + 1,
+          },
+        },
+        tx,
       );
-    }
 
-    // Enforce max size
-    const currentCount = await this.groupRepository.countActiveMembers(groupId);
-    if (currentCount >= MAX_GROUP_SIZE) {
-      throw new BusinessRuleError(
-        `Group has reached maximum size of ${MAX_GROUP_SIZE} members`,
-        'GROUP_MAX_SIZE_EXCEEDED',
-      );
-    }
-
-    const member = await this.groupRepository.addMember(groupId, dto.customerId);
-
-    await this.auditService.createAuditLog({
-      action_type: 'customer_updated',
-      actor_id: actorId,
-      actor_role: actorRole,
-      target_entity: 'group',
-      target_id: groupId,
-      after_state: {
-        action: 'member_added',
-        customer_id: dto.customerId,
-        member_count: currentCount + 1,
-      },
+      return { member: created, newCount: currentCount + 1 };
     });
 
     this.logger.log({
       msg: 'Member added to group',
       groupId,
       customerId: dto.customerId,
+      memberCount: newCount,
     });
 
     return member;
@@ -254,58 +275,65 @@ export class GroupService {
     actorId: string,
     actorRole: string,
   ) {
-    const group = await this.groupRepository.findById(groupId);
-    if (!group) {
-      throw new NotFoundError(`Group not found: ${groupId}`);
-    }
+    // Wrap in a transaction with SELECT ... FOR UPDATE on the group row so concurrent removeMember calls cannot both pass the MIN_GROUP_SIZE check.
+    const removedCustomerId = await this.prisma.$transaction(async (tx) => {
+      const locked = await this.groupRepository.lockGroupForUpdate(groupId, tx);
+      if (!locked) {
+        throw new NotFoundError(`Group not found: ${groupId}`);
+      }
 
-    const member = await this.groupRepository.findMemberById(memberId);
-    if (member?.group_id !== groupId) {
-      throw new NotFoundError(`Member not found in group: ${memberId}`);
-    }
+      const member = await this.groupRepository.findMemberById(memberId, tx);
+      if (member?.group_id !== groupId) {
+        throw new NotFoundError(`Member not found in group: ${memberId}`);
+      }
 
-    if (!member.is_active) {
-      throw new BusinessRuleError('Member is already inactive', 'MEMBER_ALREADY_INACTIVE');
-    }
+      if (!member.is_active) {
+        throw new BusinessRuleError('Member is already inactive', 'MEMBER_ALREADY_INACTIVE');
+      }
 
-    // Enforce min size
-    const currentCount = await this.groupRepository.countActiveMembers(groupId);
-    if (currentCount <= MIN_GROUP_SIZE) {
-      throw new BusinessRuleError(
-        `Cannot remove member: group would fall below minimum size of ${MIN_GROUP_SIZE} members`,
-        'GROUP_MIN_SIZE_VIOLATED',
+      const currentCount = await this.groupRepository.countActiveMembers(groupId, tx);
+      if (currentCount <= MIN_GROUP_SIZE) {
+        throw new BusinessRuleError(
+          `Cannot remove member: group would fall below minimum size of ${MIN_GROUP_SIZE} members`,
+          'GROUP_MIN_SIZE_VIOLATED',
+        );
+      }
+
+      const hasActiveLoans = await this.groupRepository.hasActiveGroupLoans(
+        member.customer_id,
+        groupId,
+        tx,
       );
-    }
+      if (hasActiveLoans) {
+        throw new BusinessRuleError(
+          'Cannot remove member with active loans linked to this group',
+          'MEMBER_HAS_ACTIVE_LOANS',
+        );
+      }
 
-    // Check for active loans linked to this group
-    const hasActiveLoans = await this.groupRepository.hasActiveGroupLoans(
-      member.customer_id,
-      groupId,
-    );
-    if (hasActiveLoans) {
-      throw new BusinessRuleError(
-        'Cannot remove member with active loans linked to this group',
-        'MEMBER_HAS_ACTIVE_LOANS',
+      await this.groupRepository.deactivateMember(memberId, tx);
+
+      await this.auditService.createAuditLog(
+        {
+          action_type: 'customer_updated',
+          actor_id: actorId,
+          actor_role: actorRole,
+          target_entity: 'group',
+          target_id: groupId,
+          before_state: { member_id: memberId, customer_id: member.customer_id, active: true },
+          after_state: { member_id: memberId, customer_id: member.customer_id, active: false },
+        },
+        tx,
       );
-    }
 
-    await this.groupRepository.deactivateMember(memberId);
-
-    await this.auditService.createAuditLog({
-      action_type: 'customer_updated',
-      actor_id: actorId,
-      actor_role: actorRole,
-      target_entity: 'group',
-      target_id: groupId,
-      before_state: { member_id: memberId, customer_id: member.customer_id, active: true },
-      after_state: { member_id: memberId, customer_id: member.customer_id, active: false },
+      return member.customer_id;
     });
 
     this.logger.log({
       msg: 'Member removed from group',
       groupId,
       memberId,
-      customerId: member.customer_id,
+      customerId: removedCustomerId,
     });
 
     return { success: true };

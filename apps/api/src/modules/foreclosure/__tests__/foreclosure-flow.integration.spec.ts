@@ -717,25 +717,50 @@ describe('Foreclosure Flow Integration', () => {
       );
     });
 
-    it('should allow rebate override at execution time', async () => {
+    it('should reject rebate override at execution time (requires new quote)', async () => {
+      // M-rebate-override: a different rebate at execute time must be rejected
+      // — overrides bypass the maker's review of rebate amount and reason.
+      await expect(
+        service.executeForeclosure(
+          {
+            foreclosureId: 'fc-1',
+            paymentMode: 'cash',
+            idempotencyKey: 'fc-rebate-override',
+            rebatePaise: 8000,
+            rebateReason: 'Manager override rebate',
+            rebateAuthorizedBy: 'mgr-auth-3',
+          },
+          'user-approver', 'manager',
+        ),
+      ).rejects.toThrow(/REBATE_OVERRIDE_REQUIRES_NEW_QUOTE|new quote/i);
+    });
+
+    it('should accept matching rebate at execution time', async () => {
+      // Quote already carries rebate; executor submits the same value — allowed.
+      // Live recompute: 2_300_000 + 1_150_000 + 5_000 − 8_000 = 3_447_000.
+      repo.findById.mockResolvedValue(
+        buildQuoteRecord({
+          rebate_paise: 8000n,
+          settlement_amount_paise: 3_447_000n,
+          rebate_reason: 'Quote-time rebate',
+        }),
+      );
+
       await service.executeForeclosure(
         {
           foreclosureId: 'fc-1',
           paymentMode: 'cash',
-          idempotencyKey: 'fc-rebate-override',
+          idempotencyKey: 'fc-rebate-match',
           rebatePaise: 8000,
-          rebateReason: 'Manager override rebate',
-          rebateAuthorizedBy: 'mgr-auth-3',
         },
         'user-approver', 'manager',
       );
 
-      // H13: rebate_authorized_by is server-derived from the actor, not client-supplied
+      // H13: rebate_authorized_by is server-derived from the actor.
       expect(repo.updateForeclosure).toHaveBeenCalledWith(
         'fc-1',
         expect.objectContaining({
           rebate_paise: 8000,
-          rebate_reason: 'Manager override rebate',
           rebate_authorized_by: 'user-approver',
         }),
         expect.anything(),
@@ -743,13 +768,22 @@ describe('Foreclosure Flow Integration', () => {
     });
 
     it('should create rebate audit log when rebate is applied during execution', async () => {
+      // M-rebate-override: the rebate must come from the quote, not the
+      // execute-time payload. Seed the quote with rebate_paise = 3000.
+      // Live settlement: 2_300_000 + 1_150_000 + 5_000 − 3_000 = 3_452_000.
+      repo.findById.mockResolvedValue(
+        buildQuoteRecord({
+          rebate_paise: 3000n,
+          settlement_amount_paise: 3_452_000n,
+          rebate_reason: 'Goodwill gesture',
+        }),
+      );
+
       await service.executeForeclosure(
         {
           foreclosureId: 'fc-1',
           paymentMode: 'cash',
           idempotencyKey: 'fc-rebate-audit',
-          rebatePaise: 3000,
-          rebateReason: 'Goodwill gesture',
           rebateAuthorizedBy: 'mgr-auth-4',
         },
         'user-approver', 'manager',

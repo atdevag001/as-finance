@@ -294,8 +294,8 @@ export class LoanProductService {
       this.loanProductRepository.getSetting('min_annual_rate_bps'),
     ]);
 
-    const maxRate = typeof maxRateSetting === 'number' ? maxRateSetting : null;
-    const minRate = typeof minRateSetting === 'number' ? minRateSetting : null;
+    const maxRate = this.coerceRateSetting('max_annual_rate_bps', maxRateSetting);
+    const minRate = this.coerceRateSetting('min_annual_rate_bps', minRateSetting);
 
     if (minRate !== null && annualRateBps < minRate) {
       throw new ValidationError(
@@ -310,6 +310,37 @@ export class LoanProductService {
         'RATE_EXCEEDS_MAXIMUM',
       );
     }
+  }
+
+  /**
+   * Coerce a settings.value JSON payload to a finite number; throws on malformed
+   * configured rows so a misconfigured cap can never silently no-op the safety check.
+   */
+  private coerceRateSetting(key: string, raw: unknown): number | null {
+    if (raw === null || raw === undefined) return null;
+
+    let candidate: unknown = raw;
+    if (typeof candidate === 'object') {
+      const obj = candidate as Record<string, unknown>;
+      candidate = obj['value'] ?? obj['amount'] ?? obj['bps'];
+    }
+
+    if (typeof candidate === 'string' && candidate.trim() !== '') {
+      const parsed = Number(candidate);
+      if (Number.isFinite(parsed)) candidate = parsed;
+    }
+
+    if (typeof candidate === 'number' && Number.isFinite(candidate)) {
+      return candidate;
+    }
+
+    this.logger.warn(
+      `Setting "${key}" is present but not a usable number (got ${JSON.stringify(raw)}); rejecting to avoid silent no-op of rate cap.`,
+    );
+    throw new BusinessRuleError(
+      `System setting "${key}" is misconfigured and cannot be used to validate loan rate`,
+      'INVALID_RATE_SETTING',
+    );
   }
 
   /**

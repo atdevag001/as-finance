@@ -98,6 +98,8 @@ function createMocks() {
     createGroupCollection: vi.fn(),
     getGroupMemberLoans: vi.fn(),
     getGroupSummaryData: vi.fn(),
+    // Always succeed in property tests; we exercise the business-rule branches, not the lock itself.
+    lockGroupForUpdate: vi.fn().mockResolvedValue({ id: 'g1' }),
   };
 
   const mockCollectionService = {

@@ -1,4 +1,14 @@
-import { IsEnum, IsOptional, IsString, IsUUID, IsDateString } from 'class-validator';
+import {
+  IsEnum,
+  IsOptional,
+  IsString,
+  IsUUID,
+  IsDateString,
+  IsNotEmpty,
+  Length,
+  MaxLength,
+  ValidateIf,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PaymentMode } from '@as-finance/shared';
 
@@ -17,12 +27,18 @@ export class DisburseDto {
   mode!: PaymentMode;
 
   @ApiProperty({ description: 'Bank reference number (required for bank transfers)', required: false })
-  @IsOptional()
+  // Enforce reference for bank transfers so the audit trail can reconcile against bank statements.
+  @ValidateIf((o) => o.mode === PaymentMode.BANK_TRANSFER)
+  @IsNotEmpty({ message: 'referenceNumber is required for bank_transfer' })
   @IsString()
+  @MaxLength(100)
   referenceNumber?: string;
 
   @ApiProperty({ description: 'Idempotency key for duplicate prevention' })
+  // Enforce length bounds so empty strings cannot collide across operations and 256+ chars fail before the DB VarChar(255) bound.
   @IsString()
+  @IsNotEmpty()
+  @Length(8, 255)
   idempotencyKey!: string;
 
   @ApiPropertyOptional({

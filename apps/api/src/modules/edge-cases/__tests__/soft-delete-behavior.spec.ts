@@ -19,7 +19,7 @@ import { NotFoundError } from '../../../common/errors';
 // ─── Mock Factories ──────────────────────────────────────────────────────────
 
 function createMockPrisma() {
-  return {
+  const mock: any = {
     file_metadata: {
       create: vi.fn(),
       findUnique: vi.fn(),
@@ -31,7 +31,18 @@ function createMockPrisma() {
       create: vi.fn(),
       updateMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
+    audit_logs: {
+      create: vi.fn().mockResolvedValue({ id: 'audit-1' }),
+    },
   };
+  // Supports both array (softDelete) and callback (upload) $transaction forms.
+  mock.$transaction = vi.fn(async (arg: unknown) => {
+    if (typeof arg === 'function') {
+      return (arg as (tx: typeof mock) => Promise<unknown>)(mock);
+    }
+    return Promise.all(arg as Promise<unknown>[]);
+  });
+  return mock;
 }
 
 function createMockStorage() {
@@ -202,6 +213,7 @@ describe('Soft Delete Behavior (Req 76)', () => {
         mockFile as Express.Multer.File,
         { prefix: 'kyc' as never },
         'actor-1',
+        'super_admin',
       );
 
       expect(result.is_active).toBe(true);
@@ -225,7 +237,7 @@ describe('Soft Delete Behavior (Req 76)', () => {
         path: '',
       };
 
-      await service.upload(mockFile as Express.Multer.File, { prefix: 'kyc' as never }, 'actor-1');
+      await service.upload(mockFile as Express.Multer.File, { prefix: 'kyc' as never }, 'actor-1', 'super_admin');
 
       // The create call should not include is_active — it defaults to true in the schema
       const createCall = prisma.file_metadata.create.mock.calls[0]![0];

@@ -8,10 +8,33 @@ import {
   ValidateNested,
   IsUUID,
   ArrayMinSize,
+  MinLength,
+  MaxLength,
+  Validate,
+  ValidatorConstraint,
+  ValidatorConstraintInterface,
+  ValidationArguments,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 import { PaymentMode } from '@as-finance/shared';
+
+// DTO-layer guard against future-dated collections; service re-checks in IST.
+@ValidatorConstraint({ name: 'IsNotFutureDateString', async: false })
+class IsNotFutureDateStringConstraint implements ValidatorConstraintInterface {
+  validate(value: unknown): boolean {
+    if (typeof value !== 'string') return false;
+    const parsed = Date.parse(value);
+    if (Number.isNaN(parsed)) return false;
+    const endOfTodayUtc = new Date();
+    endOfTodayUtc.setUTCHours(23, 59, 59, 999);
+    return parsed <= endOfTodayUtc.getTime();
+  }
+
+  defaultMessage(args: ValidationArguments): string {
+    return `${args.property} must not be a future date`;
+  }
+}
 
 /**
  * Individual member breakdown within a group collection.
@@ -40,6 +63,7 @@ export class PostGroupCollectionDto {
 
   @ApiProperty({ description: 'Collection date (ISO 8601)' })
   @IsDateString()
+  @Validate(IsNotFutureDateStringConstraint)
   collectionDate!: string;
 
   @ApiProperty({ description: 'Payment mode', enum: PaymentMode })
@@ -48,6 +72,8 @@ export class PostGroupCollectionDto {
 
   @ApiProperty({ description: 'Idempotency key for duplicate prevention' })
   @IsString()
+  @MinLength(8)
+  @MaxLength(255)
   idempotencyKey!: string;
 
   @ApiProperty({

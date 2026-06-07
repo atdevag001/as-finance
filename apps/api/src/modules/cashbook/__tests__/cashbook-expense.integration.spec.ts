@@ -31,7 +31,17 @@ function createMockCashbookRepo() {
 
 function createMockDeps() {
   return {
-    prisma: { $transaction: vi.fn((fn: (tx: unknown) => Promise<unknown>) => fn({})) },
+    prisma: {
+      $transaction: vi.fn((fn: (tx: unknown) => Promise<unknown>) => fn({})),
+      // Receiving-officer validation in createHandover requires an active permitted role.
+      users: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: 'user-2',
+          is_active: true,
+          role: 'accountant',
+        }),
+      },
+    },
     accounting: { createJournalEntry: vi.fn().mockResolvedValue({ id: 'je-1' }) },
     accountingRepo: {
       findAccountByCode: vi.fn((code: string) => {

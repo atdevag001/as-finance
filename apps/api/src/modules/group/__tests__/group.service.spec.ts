@@ -17,6 +17,7 @@ const mockGroupRepository = {
   createGroupCollection: vi.fn(),
   getGroupMemberLoans: vi.fn(),
   getGroupSummaryData: vi.fn(),
+  lockGroupForUpdate: vi.fn(),
 };
 
 const mockCollectionService = {
@@ -105,6 +106,7 @@ describe('GroupService', () => {
     };
 
     it('should add a member when under max size', async () => {
+      mockGroupRepository.lockGroupForUpdate.mockResolvedValue({ id: 'g1' });
       mockGroupRepository.findById.mockResolvedValue(activeGroup);
       mockGroupRepository.customerExists.mockResolvedValue(true);
       mockGroupRepository.isActiveMember.mockResolvedValue(false);
@@ -117,6 +119,7 @@ describe('GroupService', () => {
     });
 
     it('should reject when group is at max size (15)', async () => {
+      mockGroupRepository.lockGroupForUpdate.mockResolvedValue({ id: 'g1' });
       mockGroupRepository.findById.mockResolvedValue(activeGroup);
       mockGroupRepository.customerExists.mockResolvedValue(true);
       mockGroupRepository.isActiveMember.mockResolvedValue(false);
@@ -128,6 +131,7 @@ describe('GroupService', () => {
     });
 
     it('should reject duplicate member', async () => {
+      mockGroupRepository.lockGroupForUpdate.mockResolvedValue({ id: 'g1' });
       mockGroupRepository.findById.mockResolvedValue(activeGroup);
       mockGroupRepository.customerExists.mockResolvedValue(true);
       mockGroupRepository.isActiveMember.mockResolvedValue(true);
@@ -138,7 +142,9 @@ describe('GroupService', () => {
     });
 
     it('should reject when group is not active', async () => {
+      mockGroupRepository.lockGroupForUpdate.mockResolvedValue({ id: 'g1' });
       mockGroupRepository.findById.mockResolvedValue({ ...activeGroup, status: 'dissolved' });
+      mockGroupRepository.customerExists.mockResolvedValue(true);
 
       await expect(
         service.addMember('g1', { customerId: 'c2' }, 'user1', 'field_officer'),
@@ -146,7 +152,6 @@ describe('GroupService', () => {
     });
 
     it('should reject when customer does not exist', async () => {
-      mockGroupRepository.findById.mockResolvedValue(activeGroup);
       mockGroupRepository.customerExists.mockResolvedValue(false);
 
       await expect(
@@ -168,7 +173,7 @@ describe('GroupService', () => {
     };
 
     it('should remove a member when above min size and no active loans', async () => {
-      mockGroupRepository.findById.mockResolvedValue(activeGroup);
+      mockGroupRepository.lockGroupForUpdate.mockResolvedValue({ id: 'g1' });
       mockGroupRepository.findMemberById.mockResolvedValue(activeMember);
       mockGroupRepository.countActiveMembers.mockResolvedValue(6);
       mockGroupRepository.hasActiveGroupLoans.mockResolvedValue(false);
@@ -177,11 +182,12 @@ describe('GroupService', () => {
 
       const result = await service.removeMember('g1', 'm1', 'user1', 'manager');
       expect(result).toEqual({ success: true });
-      expect(mockGroupRepository.deactivateMember).toHaveBeenCalledWith('m1');
+      // deactivateMember now executes inside a transaction; assert the memberId only.
+      expect(mockGroupRepository.deactivateMember).toHaveBeenCalledWith('m1', expect.anything());
     });
 
     it('should reject when group would fall below min size (5)', async () => {
-      mockGroupRepository.findById.mockResolvedValue(activeGroup);
+      mockGroupRepository.lockGroupForUpdate.mockResolvedValue({ id: 'g1' });
       mockGroupRepository.findMemberById.mockResolvedValue(activeMember);
       mockGroupRepository.countActiveMembers.mockResolvedValue(5);
 
@@ -191,7 +197,7 @@ describe('GroupService', () => {
     });
 
     it('should reject when member has active loans', async () => {
-      mockGroupRepository.findById.mockResolvedValue(activeGroup);
+      mockGroupRepository.lockGroupForUpdate.mockResolvedValue({ id: 'g1' });
       mockGroupRepository.findMemberById.mockResolvedValue(activeMember);
       mockGroupRepository.countActiveMembers.mockResolvedValue(10);
       mockGroupRepository.hasActiveGroupLoans.mockResolvedValue(true);
@@ -202,7 +208,7 @@ describe('GroupService', () => {
     });
 
     it('should reject when member is already inactive', async () => {
-      mockGroupRepository.findById.mockResolvedValue(activeGroup);
+      mockGroupRepository.lockGroupForUpdate.mockResolvedValue({ id: 'g1' });
       mockGroupRepository.findMemberById.mockResolvedValue({ ...activeMember, is_active: false });
 
       await expect(
@@ -211,7 +217,7 @@ describe('GroupService', () => {
     });
 
     it('should perform soft removal by calling deactivateMember (sets left_at and is_active=false)', async () => {
-      mockGroupRepository.findById.mockResolvedValue(activeGroup);
+      mockGroupRepository.lockGroupForUpdate.mockResolvedValue({ id: 'g1' });
       mockGroupRepository.findMemberById.mockResolvedValue(activeMember);
       mockGroupRepository.countActiveMembers.mockResolvedValue(8);
       mockGroupRepository.hasActiveGroupLoans.mockResolvedValue(false);
@@ -224,18 +230,19 @@ describe('GroupService', () => {
 
       await service.removeMember('g1', 'm1', 'user1', 'manager');
 
-      expect(mockGroupRepository.deactivateMember).toHaveBeenCalledWith('m1');
+      expect(mockGroupRepository.deactivateMember).toHaveBeenCalledWith('m1', expect.anything());
       // Audit log captures before/after state reflecting soft removal
       expect(mockAuditService.createAuditLog).toHaveBeenCalledWith(
         expect.objectContaining({
           before_state: expect.objectContaining({ active: true }),
           after_state: expect.objectContaining({ active: false }),
         }),
+        expect.anything(),
       );
     });
 
     it('should reject when group is not found', async () => {
-      mockGroupRepository.findById.mockResolvedValue(null);
+      mockGroupRepository.lockGroupForUpdate.mockResolvedValue(null);
 
       await expect(
         service.removeMember('g1', 'm1', 'user1', 'manager'),
@@ -243,7 +250,7 @@ describe('GroupService', () => {
     });
 
     it('should reject when member is not found in group', async () => {
-      mockGroupRepository.findById.mockResolvedValue(activeGroup);
+      mockGroupRepository.lockGroupForUpdate.mockResolvedValue({ id: 'g1' });
       mockGroupRepository.findMemberById.mockResolvedValue(null);
 
       await expect(
@@ -574,6 +581,8 @@ describe('GroupService', () => {
 
   describe('dissolved group rejection', () => {
     it('should reject addMember for a dissolved group', async () => {
+      mockGroupRepository.customerExists.mockResolvedValue(true);
+      mockGroupRepository.lockGroupForUpdate.mockResolvedValue({ id: 'g1' });
       mockGroupRepository.findById.mockResolvedValue({ id: 'g1', status: 'dissolved', members: [] });
 
       await expect(

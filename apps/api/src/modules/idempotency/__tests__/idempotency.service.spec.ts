@@ -12,7 +12,7 @@ describe('IdempotencyService', () => {
   let service: IdempotencyService;
   let mockPrisma: {
     idempotency_keys: {
-      findUnique: ReturnType<typeof vi.fn>;
+      findFirst: ReturnType<typeof vi.fn>;
       create: ReturnType<typeof vi.fn>;
       deleteMany: ReturnType<typeof vi.fn>;
     };
@@ -21,7 +21,7 @@ describe('IdempotencyService', () => {
   beforeEach(() => {
     mockPrisma = {
       idempotency_keys: {
-        findUnique: vi.fn(),
+        findFirst: vi.fn(),
         create: vi.fn(),
         deleteMany: vi.fn(),
       },
@@ -32,19 +32,19 @@ describe('IdempotencyService', () => {
 
   describe('find', () => {
     it('should return null when key does not exist', async () => {
-      mockPrisma.idempotency_keys.findUnique.mockResolvedValue(null);
+      mockPrisma.idempotency_keys.findFirst.mockResolvedValue(null);
 
       const result = await service.find('nonexistent-key');
 
       expect(result).toBeNull();
-      expect(mockPrisma.idempotency_keys.findUnique).toHaveBeenCalledWith({
-        where: { key: 'nonexistent-key' },
+      expect(mockPrisma.idempotency_keys.findFirst).toHaveBeenCalledWith({
+        where: { key: 'nonexistent-key', expires_at: { gt: expect.any(Date) } },
       });
     });
 
-    it('should return cached result when key exists', async () => {
+    it('should return cached result when key exists and is not expired', async () => {
       const body = { id: 'abc', amount: 50000 };
-      mockPrisma.idempotency_keys.findUnique.mockResolvedValue({
+      mockPrisma.idempotency_keys.findFirst.mockResolvedValue({
         id: 'uuid-1',
         key: 'existing-key',
         operation_type: 'collection',
@@ -60,6 +60,16 @@ describe('IdempotencyService', () => {
         resultStatus: 200,
         resultBody: body,
       });
+    });
+
+    it('should return null when the row is expired (filtered by where clause)', async () => {
+      // The expires_at: { gt: now } filter means an expired row is not returned
+      // by Prisma at all, so the service sees null.
+      mockPrisma.idempotency_keys.findFirst.mockResolvedValue(null);
+
+      const result = await service.find('expired-key');
+
+      expect(result).toBeNull();
     });
   });
 
@@ -118,7 +128,7 @@ describe('IdempotencyService', () => {
       expect(mockPrisma.idempotency_keys.create).not.toHaveBeenCalled();
     });
 
-    it('should handle concurrent duplicate by retrying SELECT after delay', async () => {
+    it('should handle concurrent duplicate (no tx) by retrying SELECT after delay', async () => {
       const uniqueError = new Prisma.PrismaClientKnownRequestError(
         'Unique constraint failed on the fields: (`key`)',
         { code: 'P2002', clientVersion: '5.0.0' },
@@ -126,7 +136,7 @@ describe('IdempotencyService', () => {
       mockPrisma.idempotency_keys.create.mockRejectedValue(uniqueError);
 
       const cachedBody = { id: 'original' };
-      mockPrisma.idempotency_keys.findUnique.mockResolvedValue({
+      mockPrisma.idempotency_keys.findFirst.mockResolvedValue({
         id: 'uuid-4',
         key: 'dup-key',
         operation_type: 'collection',
@@ -149,13 +159,36 @@ describe('IdempotencyService', () => {
       });
     });
 
+    it('should re-throw P2002 when called inside a tx (avoids poisoning the outer tx)', async () => {
+      // Inside a Postgres transaction, any constraint violation aborts the tx;
+      // the service must propagate so the caller rolls back instead of returning
+      // a "cached" body while the outer $transaction silently fails on commit.
+      const uniqueError = new Prisma.PrismaClientKnownRequestError(
+        'Unique constraint failed on the fields: (`key`)',
+        { code: 'P2002', clientVersion: '5.0.0' },
+      );
+      const txClient = {
+        idempotency_keys: {
+          create: vi.fn().mockRejectedValue(uniqueError),
+        },
+      } as any;
+
+      await expect(
+        service.store('dup-tx-key', 'collection', 200, {}, txClient),
+      ).rejects.toThrow(Prisma.PrismaClientKnownRequestError);
+
+      // Must NOT have attempted a retry SELECT on the main client —
+      // doing so would mask the aborted-tx error.
+      expect(mockPrisma.idempotency_keys.findFirst).not.toHaveBeenCalled();
+    });
+
     it('should re-throw unique constraint error if retry SELECT returns null', async () => {
       const uniqueError = new Prisma.PrismaClientKnownRequestError(
         'Unique constraint failed on the fields: (`key`)',
         { code: 'P2002', clientVersion: '5.0.0' },
       );
       mockPrisma.idempotency_keys.create.mockRejectedValue(uniqueError);
-      mockPrisma.idempotency_keys.findUnique.mockResolvedValue(null);
+      mockPrisma.idempotency_keys.findFirst.mockResolvedValue(null);
 
       await expect(
         service.store('ghost-key', 'reversal', 200, {}),

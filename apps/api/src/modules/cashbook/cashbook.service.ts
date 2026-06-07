@@ -211,6 +211,30 @@ export class CashbookService {
    * Record a cash handover from collection officer to receiving officer.
    */
   async createHandover(dto: CreateHandoverDto, actorId: string, actorRole: string) {
+    // Verify the receiving officer exists, is active, and holds a role permitted
+    // to receive cash — UUID-shape alone lets handovers be routed to a deactivated
+    // or inappropriate user, which then corrupts downstream verification flows.
+    const receivingUser = await this.prisma['users'].findUnique({
+      where: { id: dto.receivingOfficerId },
+      select: { id: true, is_active: true, role: true },
+    });
+    if (!receivingUser) {
+      throw new NotFoundError('Receiving officer not found');
+    }
+    if (!receivingUser.is_active) {
+      throw new BusinessRuleError(
+        'Receiving officer is not active',
+        'RECEIVING_OFFICER_INACTIVE',
+      );
+    }
+    const allowedReceiverRoles = new Set(['super_admin', 'manager', 'accountant']);
+    if (!allowedReceiverRoles.has(receivingUser.role)) {
+      throw new BusinessRuleError(
+        `Receiving officer role '${receivingUser.role}' is not permitted to receive cash handovers`,
+        'RECEIVING_OFFICER_ROLE_FORBIDDEN',
+      );
+    }
+
     const handover = await this.cashbookRepository.createHandover({
       collection_officer_id: actorId,
       receiving_officer_id: dto.receivingOfficerId,
@@ -273,14 +297,31 @@ export class CashbookService {
       );
     }
 
+    // A 'verified' handover has, by definition, no discrepancy — reject stray
+    // discrepancy fields so downstream reports can trust the row's status.
+    if (
+      dto.verificationStatus === 'verified' &&
+      (dto.discrepancyAmountPaise != null || dto.discrepancyNotes != null)
+    ) {
+      throw new BusinessRuleError(
+        'Discrepancy fields are not allowed when verification status is verified',
+        'DISCREPANCY_FIELDS_NOT_ALLOWED',
+      );
+    }
+
+    const isDiscrepancy = dto.verificationStatus === 'discrepancy';
+
     const updated = await this.prisma.$transaction(async (tx: TxClient) => {
       const row = await this.cashbookRepository.updateHandoverVerification(
         handoverId,
         {
           verification_status: dto.verificationStatus,
+          // Force-null discrepancy fields on 'verified' even if validation above ever changes.
           discrepancy_amount_paise:
-            dto.discrepancyAmountPaise != null ? BigInt(dto.discrepancyAmountPaise) : null,
-          discrepancy_notes: dto.discrepancyNotes ?? null,
+            isDiscrepancy && dto.discrepancyAmountPaise != null
+              ? BigInt(dto.discrepancyAmountPaise)
+              : null,
+          discrepancy_notes: isDiscrepancy ? dto.discrepancyNotes ?? null : null,
           verified_at: new Date(),
         },
         tx,
@@ -296,8 +337,8 @@ export class CashbookService {
           before_state: { verification_status: existing.verification_status },
           after_state: {
             verification_status: dto.verificationStatus,
-            discrepancy_amount_paise: dto.discrepancyAmountPaise ?? null,
-            discrepancy_notes: dto.discrepancyNotes ?? null,
+            discrepancy_amount_paise: isDiscrepancy ? dto.discrepancyAmountPaise ?? null : null,
+            discrepancy_notes: isDiscrepancy ? dto.discrepancyNotes ?? null : null,
           },
         },
         tx,

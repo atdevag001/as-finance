@@ -1,6 +1,37 @@
-import { IsEnum, IsInt, IsPositive, IsString, IsUUID, IsDateString } from 'class-validator';
+import {
+  IsEnum,
+  IsInt,
+  IsPositive,
+  IsString,
+  IsUUID,
+  IsDateString,
+  Matches,
+  MinLength,
+  MaxLength,
+  Validate,
+  ValidatorConstraint,
+  ValidatorConstraintInterface,
+  ValidationArguments,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { PaymentMode } from '@as-finance/shared';
+
+// DTO-layer guard against future-dated payments; service re-checks in IST.
+@ValidatorConstraint({ name: 'IsNotFutureDateString', async: false })
+class IsNotFutureDateStringConstraint implements ValidatorConstraintInterface {
+  validate(value: unknown): boolean {
+    if (typeof value !== 'string') return false;
+    const parsed = Date.parse(value);
+    if (Number.isNaN(parsed)) return false;
+    const endOfTodayUtc = new Date();
+    endOfTodayUtc.setUTCHours(23, 59, 59, 999);
+    return parsed <= endOfTodayUtc.getTime();
+  }
+
+  defaultMessage(args: ValidationArguments): string {
+    return `${args.property} must not be a future date`;
+  }
+}
 
 /**
  * DTO for posting a collection (payment) against a loan.
@@ -19,6 +50,7 @@ export class PostCollectionDto {
 
   @ApiProperty({ description: 'Payment date (ISO 8601, e.g. 2024-06-15)' })
   @IsDateString()
+  @Validate(IsNotFutureDateStringConstraint)
   paymentDate!: string;
 
   @ApiProperty({ description: 'Payment mode', enum: PaymentMode })
@@ -27,5 +59,11 @@ export class PostCollectionDto {
 
   @ApiProperty({ description: 'Idempotency key for duplicate prevention' })
   @IsString()
+  @MinLength(8)
+  @MaxLength(255)
+  // Restrict charset so whitespace-only / control-char keys cannot pass length check.
+  @Matches(/^[A-Za-z0-9_:.-]+$/, {
+    message: 'idempotencyKey may only contain alphanumerics, _, :, ., -',
+  })
   idempotencyKey!: string;
 }

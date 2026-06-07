@@ -20,7 +20,7 @@ import { ValidationError, NotFoundError } from '../../../common/errors';
 const VALID_PREFIXES = ['kyc', 'loan-docs', 'receipts', 'expenses'];
 
 function createMockPrisma() {
-  return {
+  const mock: any = {
     file_metadata: {
       create: vi.fn(),
       findUnique: vi.fn(),
@@ -31,7 +31,18 @@ function createMockPrisma() {
       create: vi.fn(),
       updateMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
+    audit_logs: {
+      create: vi.fn().mockResolvedValue({ id: 'audit-1' }),
+    },
   };
+  // Supports both array (softDelete) and callback (upload) $transaction forms.
+  mock.$transaction = vi.fn(async (arg: unknown) => {
+    if (typeof arg === 'function') {
+      return (arg as (tx: typeof mock) => Promise<unknown>)(mock);
+    }
+    return Promise.all(arg as Promise<unknown>[]);
+  });
+  return mock;
 }
 
 function createMockStorage() {
@@ -93,6 +104,7 @@ function createPdfFile(): Express.Multer.File {
 }
 
 const actorId = 'actor-upload-test';
+const actorRole = 'super_admin';
 
 describe('Document Upload Integration (S3 Mock)', () => {
   let service: DocumentService;
@@ -118,7 +130,7 @@ describe('Document Upload Integration (S3 Mock)', () => {
       });
 
       const file = createJpegFile();
-      const result = await service.upload(file, { prefix: 'kyc' }, actorId);
+      const result = await service.upload(file, { prefix: 'kyc' }, actorId, actorRole);
 
       expect(result).toBeDefined();
       expect(result.mime_type).toBe('image/jpeg');
@@ -144,7 +156,7 @@ describe('Document Upload Integration (S3 Mock)', () => {
       });
 
       const file = createPngFile();
-      const result = await service.upload(file, { prefix: 'kyc' }, actorId);
+      const result = await service.upload(file, { prefix: 'kyc' }, actorId, actorRole);
 
       expect(result.mime_type).toBe('image/png');
       expect(mockStorage.upload).toHaveBeenCalledOnce();
@@ -158,7 +170,7 @@ describe('Document Upload Integration (S3 Mock)', () => {
       });
 
       const file = createPdfFile();
-      const result = await service.upload(file, { prefix: 'loan-docs' }, actorId);
+      const result = await service.upload(file, { prefix: 'loan-docs' }, actorId, actorRole);
 
       expect(result.mime_type).toBe('application/pdf');
       const createData = mockPrisma.file_metadata.create.mock.calls[0]![0].data;
@@ -170,14 +182,14 @@ describe('Document Upload Integration (S3 Mock)', () => {
       file.buffer = Buffer.from([0x00, 0x01, 0x02, 0x03, 0x04, 0x05]);
       file.size = file.buffer.length;
 
-      await expect(service.upload(file, { prefix: 'kyc' }, actorId)).rejects.toThrow(ValidationError);
+      await expect(service.upload(file, { prefix: 'kyc' }, actorId, actorRole)).rejects.toThrow(ValidationError);
       expect(mockStorage.upload).not.toHaveBeenCalled();
     });
 
     it('rejects oversized file (>5MB)', async () => {
       const file = createJpegFile(5 * 1024 * 1024 + 1);
 
-      await expect(service.upload(file, { prefix: 'kyc' }, actorId)).rejects.toThrow(ValidationError);
+      await expect(service.upload(file, { prefix: 'kyc' }, actorId, actorRole)).rejects.toThrow(ValidationError);
       expect(mockStorage.upload).not.toHaveBeenCalled();
     });
 
@@ -189,7 +201,7 @@ describe('Document Upload Integration (S3 Mock)', () => {
       file.buffer = malicious;
       file.size = malicious.length;
 
-      await expect(service.upload(file, { prefix: 'kyc' }, actorId)).rejects.toThrow(ValidationError);
+      await expect(service.upload(file, { prefix: 'kyc' }, actorId, actorRole)).rejects.toThrow(ValidationError);
       expect(mockStorage.upload).not.toHaveBeenCalled();
     });
   });
@@ -204,7 +216,7 @@ describe('Document Upload Integration (S3 Mock)', () => {
         });
 
         const file = createJpegFile();
-        const result = await service.upload(file, { prefix: prefix as any }, actorId);
+        const result = await service.upload(file, { prefix: prefix as any }, actorId, actorRole);
 
         expect(result).toBeDefined();
         const createData = mockPrisma.file_metadata.create.mock.calls[0]![0].data;
@@ -215,7 +227,7 @@ describe('Document Upload Integration (S3 Mock)', () => {
     it('rejects invalid prefix', async () => {
       const file = createJpegFile();
       await expect(
-        service.upload(file, { prefix: 'invalid-prefix' as any }, actorId),
+        service.upload(file, { prefix: 'invalid-prefix' as any }, actorId, actorRole),
       ).rejects.toThrow(ValidationError);
     });
   });

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
+import { ConflictError } from '../../common/errors';
 
 export interface CreateUserData {
   username: string;
@@ -12,7 +13,8 @@ export interface CreateUserData {
 
 export interface UpdateUserData {
   full_name?: string;
-  email?: string;
+  // null is a sentinel for "clear the email column"; undefined means no change.
+  email?: string | null;
   mobile?: string;
   role?: string;
   is_active?: boolean;
@@ -66,10 +68,18 @@ export class UserRepository {
     });
   }
 
-  async findAll(params: { skip?: number; take?: number; role?: string }) {
+  async findAll(params: { skip?: number; take?: number; role?: string; search?: string }) {
     const where: Record<string, unknown> = {};
     if (params.role) {
       where['role'] = params.role;
+    }
+    // Honor the documented `search` query param across name/username/mobile.
+    if (params.search) {
+      where['OR'] = [
+        { full_name: { contains: params.search, mode: 'insensitive' } },
+        { username: { contains: params.search, mode: 'insensitive' } },
+        { mobile: { contains: params.search } },
+      ];
     }
 
     const [data, total] = await Promise.all([
@@ -118,7 +128,13 @@ export class UserRepository {
     });
   }
 
-  async update(id: string, data: UpdateUserData) {
+  async countActiveByRole(role: string) {
+    return this.prisma['users'].count({
+      where: { role: role as never, is_active: true },
+    });
+  }
+
+  async update(id: string, data: UpdateUserData, expectedVersion?: number) {
     const updateData: Record<string, unknown> = {};
     if (data.full_name !== undefined) updateData['full_name'] = data.full_name;
     if (data.email !== undefined) updateData['email'] = data.email;
@@ -126,22 +142,47 @@ export class UserRepository {
     if (data.role !== undefined) updateData['role'] = data.role;
     if (data.is_active !== undefined) updateData['is_active'] = data.is_active;
 
+    const selectFields = {
+      id: true,
+      username: true,
+      full_name: true,
+      email: true,
+      mobile: true,
+      role: true,
+      is_active: true,
+      last_login_at: true,
+      version: true,
+      created_at: true,
+      updated_at: true,
+    };
+
+    // When caller supplies expectedVersion, guard the write so concurrent edits
+    // cannot silently overwrite each other (last-write-wins).
+    if (expectedVersion !== undefined) {
+      const result = await this.prisma['users'].updateMany({
+        where: { id, version: expectedVersion },
+        data: { ...updateData, version: { increment: 1 } } as never,
+      });
+
+      if (result.count === 0) {
+        throw new ConflictError(
+          'User was modified by another request. Please reload and retry.',
+          'CONFLICT_OPTIMISTIC_LOCK',
+        );
+      }
+
+      // updateMany succeeded, so the row exists — use findUniqueOrThrow to
+      // narrow the return type and match the non-null update() path.
+      return this.prisma['users'].findUniqueOrThrow({
+        where: { id },
+        select: selectFields,
+      });
+    }
+
     return this.prisma['users'].update({
       where: { id },
-      data: updateData,
-      select: {
-        id: true,
-        username: true,
-        full_name: true,
-        email: true,
-        mobile: true,
-        role: true,
-        is_active: true,
-        last_login_at: true,
-        version: true,
-        created_at: true,
-        updated_at: true,
-      },
+      data: { ...updateData, version: { increment: 1 } } as never,
+      select: selectFields,
     });
   }
 

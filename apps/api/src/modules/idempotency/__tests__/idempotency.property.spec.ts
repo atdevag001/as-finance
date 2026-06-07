@@ -67,6 +67,17 @@ function createServiceWithInMemoryStore() {
 
   const mockPrisma = {
     idempotency_keys: {
+      // Service now uses findFirst with an expires_at > now filter so stale
+      // TTL'd rows can't replay a cached body. Mock honors the same filter.
+      findFirst: vi.fn().mockImplementation(
+        async (args: { where: { key: string; expires_at?: { gt: Date } } }) => {
+          const entry = store.get(args.where.key);
+          if (!entry) return null;
+          const cutoff = args.where.expires_at?.gt;
+          if (cutoff && entry.expires_at <= cutoff) return null;
+          return entry;
+        },
+      ),
       findUnique: vi.fn().mockImplementation(
         async (args: { where: { key: string } }) => {
           return store.get(args.where.key) ?? null;

@@ -363,36 +363,39 @@ export class AccountingService {
    * Net profit = total income - total expenses
    */
   async getProfitAndLoss(startDate: string, endDate: string) {
-    const lines = await this.accountingRepository.getJournalLinesWithAccounts({
-      startDate: new Date(startDate),
-      endDate: new Date(endDate),
-    });
+    // DB-side aggregation: rows ~ count(accounts), not count(journal_lines)
+    const [totals, accounts] = await Promise.all([
+      this.accountingRepository.getAccountTotalsForRange({
+        startDate: new Date(startDate),
+        endDate: new Date(endDate),
+      }),
+      this.accountingRepository.findAllAccounts(),
+    ]);
 
+    const accountMap = new Map(accounts.map((a) => [a.id, a]));
     const incomeAccounts = new Map<string, { code: string; name: string; balancePaise: bigint }>();
     const expenseAccounts = new Map<string, { code: string; name: string; balancePaise: bigint }>();
 
-    for (const line of lines) {
-      const category = line.account.category;
-      const key = line.account.id;
+    for (const row of totals) {
+      const account = accountMap.get(row.account_id);
+      if (!account) continue;
+      const debit = row._sum.debit_paise ?? 0n;
+      const credit = row._sum.credit_paise ?? 0n;
 
-      if (category === 'income') {
-        const existing = incomeAccounts.get(key) ?? {
-          code: line.account.code,
-          name: line.account.name,
-          balancePaise: 0n,
-        };
+      if (account.category === 'income') {
         // Income is credit-normal
-        existing.balancePaise += (line.credit_paise ?? 0n) - (line.debit_paise ?? 0n);
-        incomeAccounts.set(key, existing);
-      } else if (category === 'expense') {
-        const existing = expenseAccounts.get(key) ?? {
-          code: line.account.code,
-          name: line.account.name,
-          balancePaise: 0n,
-        };
+        incomeAccounts.set(row.account_id, {
+          code: account.code,
+          name: account.name,
+          balancePaise: credit - debit,
+        });
+      } else if (account.category === 'expense') {
         // Expense is debit-normal
-        existing.balancePaise += (line.debit_paise ?? 0n) - (line.credit_paise ?? 0n);
-        expenseAccounts.set(key, existing);
+        expenseAccounts.set(row.account_id, {
+          code: account.code,
+          name: account.name,
+          balancePaise: debit - credit,
+        });
       }
     }
 
@@ -439,33 +442,33 @@ export class AccountingService {
    */
   async getBalanceSheet(asOfDate?: string) {
     const date = asOfDate ? new Date(asOfDate) : new Date();
-    const lines = await this.accountingRepository.getJournalLinesUpTo(date);
+    // DB-side aggregation: one row per account instead of one row per journal line
+    const [totals, accounts] = await Promise.all([
+      this.accountingRepository.getAccountTotalsUpTo(date),
+      this.accountingRepository.findAllAccounts(),
+    ]);
 
+    const accountMap = new Map(accounts.map((a) => [a.id, a]));
     const categoryTotals = new Map<
       string,
       Map<string, { code: string; name: string; balancePaise: bigint }>
     >();
 
-    for (const line of lines) {
-      const category = line.account.category;
+    for (const row of totals) {
+      const account = accountMap.get(row.account_id);
+      if (!account) continue;
+      const category = account.category;
       if (!categoryTotals.has(category)) {
         categoryTotals.set(category, new Map());
       }
-      const accountMap = categoryTotals.get(category)!;
-      const existing = accountMap.get(line.account.id) ?? {
-        code: line.account.code,
-        name: line.account.name,
-        balancePaise: 0n,
-      };
-
+      const debit = row._sum.debit_paise ?? 0n;
+      const credit = row._sum.credit_paise ?? 0n;
       const isDebitNormal = category === 'asset' || category === 'expense';
-      if (isDebitNormal) {
-        existing.balancePaise += (line.debit_paise ?? 0n) - (line.credit_paise ?? 0n);
-      } else {
-        existing.balancePaise += (line.credit_paise ?? 0n) - (line.debit_paise ?? 0n);
-      }
-
-      accountMap.set(line.account.id, existing);
+      categoryTotals.get(category)!.set(row.account_id, {
+        code: account.code,
+        name: account.name,
+        balancePaise: isDebitNormal ? debit - credit : credit - debit,
+      });
     }
 
     const toRows = (category: string) =>

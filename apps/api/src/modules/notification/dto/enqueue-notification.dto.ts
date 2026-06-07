@@ -1,10 +1,12 @@
-import { IsString, IsObject, IsOptional, IsInt, Min } from 'class-validator';
+import { IsString, IsObject, IsOptional, IsInt, IsEnum, Min } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { NotificationEvent } from '@as-finance/shared';
 
 export class EnqueueNotificationDto {
-  @ApiProperty({ description: 'Notification event type' })
-  @IsString()
-  event_type!: string;
+  // Constrain to the Prisma NotificationEvent enum; arbitrary strings would be rejected by Postgres or silently fall through to the fallback template.
+  @ApiProperty({ enum: NotificationEvent, description: 'Notification event type' })
+  @IsEnum(NotificationEvent)
+  event_type!: NotificationEvent;
 
   @ApiProperty({ description: 'Recipient mobile number' })
   @IsString()

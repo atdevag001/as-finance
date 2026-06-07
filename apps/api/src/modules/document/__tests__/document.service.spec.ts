@@ -19,7 +19,7 @@ const mockFileId = '550e8400-e29b-41d4-a716-446655440000';
 const mockActorId = '660e8400-e29b-41d4-a716-446655440001';
 
 function createMockPrisma() {
-  return {
+  const mock: any = {
     file_metadata: {
       create: vi.fn(),
       findUnique: vi.fn(),
@@ -29,7 +29,19 @@ function createMockPrisma() {
       create: vi.fn(),
       updateMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
+    audit_logs: {
+      create: vi.fn().mockResolvedValue({ id: 'audit-1' }),
+    },
   };
+  // $transaction supports both array (softDelete) and callback (upload) forms,
+  // mirroring PrismaClient. The mock just executes them against itself.
+  mock.$transaction = vi.fn(async (arg: unknown) => {
+    if (typeof arg === 'function') {
+      return (arg as (tx: typeof mock) => Promise<unknown>)(mock);
+    }
+    return Promise.all(arg as Promise<unknown>[]);
+  });
+  return mock;
 }
 
 // Unrestricted role bypasses scope check in loadMetadataWithScope; safe default for tests.
@@ -151,7 +163,7 @@ describe('DocumentService', () => {
       mockPrisma.file_metadata.create.mockResolvedValue(mockMetadata);
 
       const file = createMockFile();
-      const result = await service.upload(file, { prefix: 'kyc' }, mockActorId);
+      const result = await service.upload(file, { prefix: 'kyc' }, mockActorId, mockActorRole);
 
       expect(result).toBeDefined();
       expect(result.mime_type).toBe('image/jpeg');
@@ -175,7 +187,7 @@ describe('DocumentService', () => {
       });
       mockPrisma.file_metadata.create.mockResolvedValue({ id: mockFileId });
 
-      await service.upload(file, { prefix: 'kyc' }, mockActorId);
+      await service.upload(file, { prefix: 'kyc' }, mockActorId, mockActorRole);
 
       const createCall = mockPrisma.file_metadata.create.mock.calls[0]![0];
       expect(createCall.data.mime_type).toBe('image/png');
@@ -192,7 +204,7 @@ describe('DocumentService', () => {
       });
       mockPrisma.file_metadata.create.mockResolvedValue({ id: mockFileId });
 
-      await service.upload(file, { prefix: 'loan-docs' }, mockActorId);
+      await service.upload(file, { prefix: 'loan-docs' }, mockActorId, mockActorRole);
 
       const createCall = mockPrisma.file_metadata.create.mock.calls[0]![0];
       expect(createCall.data.mime_type).toBe('application/pdf');
@@ -203,7 +215,7 @@ describe('DocumentService', () => {
       const file = createMockFile({ size: 5 * 1024 * 1024 + 1 });
 
       await expect(
-        service.upload(file, { prefix: 'kyc' }, mockActorId),
+        service.upload(file, { prefix: 'kyc' }, mockActorId, mockActorRole),
       ).rejects.toThrow(ValidationError);
 
       expect(mockStorage.upload).not.toHaveBeenCalled();
@@ -219,7 +231,7 @@ describe('DocumentService', () => {
       });
 
       await expect(
-        service.upload(file, { prefix: 'kyc' }, mockActorId),
+        service.upload(file, { prefix: 'kyc' }, mockActorId, mockActorRole),
       ).rejects.toThrow(ValidationError);
 
       expect(mockStorage.upload).not.toHaveBeenCalled();
@@ -236,7 +248,7 @@ describe('DocumentService', () => {
       });
 
       await expect(
-        service.upload(file, { prefix: 'kyc' }, mockActorId),
+        service.upload(file, { prefix: 'kyc' }, mockActorId, mockActorRole),
       ).rejects.toThrow(ValidationError);
 
       expect(mockStorage.upload).not.toHaveBeenCalled();
@@ -247,7 +259,7 @@ describe('DocumentService', () => {
       const file = createMockFile();
 
       await expect(
-        service.upload(file, { prefix: 'invalid' as never }, mockActorId),
+        service.upload(file, { prefix: 'invalid' as never }, mockActorId, mockActorRole),
       ).rejects.toThrow(ValidationError);
     });
 
@@ -255,8 +267,8 @@ describe('DocumentService', () => {
       mockPrisma.file_metadata.create.mockResolvedValue({ id: mockFileId });
       const file = createMockFile();
 
-      await service.upload(file, { prefix: 'kyc' }, mockActorId);
-      await service.upload(file, { prefix: 'kyc' }, mockActorId);
+      await service.upload(file, { prefix: 'kyc' }, mockActorId, mockActorRole);
+      await service.upload(file, { prefix: 'kyc' }, mockActorId, mockActorRole);
 
       const key1 = mockPrisma.file_metadata.create.mock.calls[0]![0].data.key;
       const key2 = mockPrisma.file_metadata.create.mock.calls[1]![0].data.key;
@@ -267,7 +279,7 @@ describe('DocumentService', () => {
       mockPrisma.file_metadata.create.mockResolvedValue({ id: mockFileId });
       const file = createMockFile();
 
-      await service.upload(file, { prefix: 'receipts' }, mockActorId);
+      await service.upload(file, { prefix: 'receipts' }, mockActorId, mockActorRole);
 
       expect(mockStorage.upload).toHaveBeenCalledWith(
         expect.objectContaining({

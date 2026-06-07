@@ -2,19 +2,21 @@ import { IsNotEmpty, IsString, MaxLength, MinLength, Matches } from 'class-valid
 import { ApiProperty } from '@nestjs/swagger';
 
 export class ChangePasswordDto {
-  @ApiProperty({ description: 'Current password' })
+  @ApiProperty({
+    description: 'Current password (max 72 bytes — bcrypt truncation limit)',
+  })
   @IsString()
   @IsNotEmpty()
-  @MaxLength(128)
+  @MaxLength(72)
   currentPassword!: string;
 
   @ApiProperty({
     description:
-      'New password (min 8 chars, at least one uppercase, one lowercase, one digit)',
+      'New password (8-72 chars, at least one uppercase, one lowercase, one digit; bcrypt truncates beyond 72 bytes)',
   })
   @IsString()
   @MinLength(8, { message: 'Password must be at least 8 characters' })
-  @MaxLength(128, { message: 'Password must be at most 128 characters' })
+  @MaxLength(72, { message: 'Password must be at most 72 characters' })
   @Matches(/[A-Z]/, {
     message: 'Password must contain at least one uppercase letter',
   })

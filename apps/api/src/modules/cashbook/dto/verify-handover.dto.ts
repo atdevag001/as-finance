@@ -1,4 +1,4 @@
-import { IsEnum, IsOptional, IsInt, IsString, MaxLength } from 'class-validator';
+import { IsEnum, IsOptional, IsInt, IsString, MaxLength, Min } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 /**
@@ -16,6 +16,8 @@ export class VerifyHandoverDto {
   @ApiPropertyOptional({ description: 'Discrepancy amount in paise (required if discrepancy)' })
   @IsOptional()
   @IsInt()
+  // Negative or zero discrepancies are semantically meaningless and corrupt aggregations.
+  @Min(1)
   discrepancyAmountPaise?: number;
 
   @ApiPropertyOptional({ description: 'Notes about the discrepancy' })
