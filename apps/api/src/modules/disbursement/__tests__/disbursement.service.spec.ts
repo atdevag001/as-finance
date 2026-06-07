@@ -56,6 +56,7 @@ function createMockRepo() {
       cached_outstanding_paise: null,
     }),
     findAccountByCode: vi.fn(),
+    findAccountsByCodes: vi.fn(),
     create: vi.fn(),
     updateLoanStatus: vi.fn(),
     updateLoanStatusWithVersion: vi.fn(),
@@ -119,14 +120,20 @@ describe('DisbursementService', () => {
 
     const mockLoan = createMockLoan();
     repo.getLoanForDisbursement.mockResolvedValue(mockLoan);
-    repo.findAccountByCode.mockImplementation((code: string) => {
-      const accounts: Record<string, { id: string; code: string; name: string; category: string }> = {
-        '1001': { id: 'acc-cash', code: '1001', name: 'Cash', category: 'asset' },
-        '1002': { id: 'acc-bank', code: '1002', name: 'Bank', category: 'asset' },
-        '1100': { id: 'acc-lr', code: '1100', name: 'Loans Receivable', category: 'asset' },
-        '4002': { id: 'acc-pfi', code: '4002', name: 'Processing Fee Income', category: 'income' },
-      };
-      return Promise.resolve(accounts[code] ?? null);
+    const ACCOUNTS: Record<string, { id: string; code: string; name: string; category: string }> = {
+      '1001': { id: 'acc-cash', code: '1001', name: 'Cash', category: 'asset' },
+      '1002': { id: 'acc-bank', code: '1002', name: 'Bank', category: 'asset' },
+      '1100': { id: 'acc-lr', code: '1100', name: 'Loans Receivable', category: 'asset' },
+      '4002': { id: 'acc-pfi', code: '4002', name: 'Processing Fee Income', category: 'income' },
+    };
+    repo.findAccountByCode.mockImplementation((code: string) => Promise.resolve(ACCOUNTS[code] ?? null));
+    repo.findAccountsByCodes.mockImplementation((codes: string[]) => {
+      const map = new Map<string, { id: string; code: string; name: string; category: string }>();
+      for (const code of codes) {
+        const account = ACCOUNTS[code];
+        if (account) map.set(code, account);
+      }
+      return Promise.resolve(map);
     });
     repo.create.mockResolvedValue({ id: 'disb-1' });
 
@@ -329,6 +336,7 @@ describe('DisbursementService', () => {
 
     it('should throw BusinessRuleError when chart of accounts not configured', async () => {
       repo.findAccountByCode.mockResolvedValue(null);
+      repo.findAccountsByCodes.mockResolvedValue(new Map());
       await expect(service.disburse(dto, 'actor-1', 'manager')).rejects.toThrow(BusinessRuleError);
     });
 

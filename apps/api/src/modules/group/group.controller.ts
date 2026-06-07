@@ -5,6 +5,7 @@ import {
   Delete,
   Body,
   Param,
+  ParseUUIDPipe,
   Query,
   Req,
   HttpCode,
@@ -54,7 +55,7 @@ export class GroupController {
   @ApiOperation({ summary: 'Get group by ID' })
   @ApiResponse({ status: 200, description: 'Group found' })
   @ApiResponse({ status: 404, description: 'Group not found' })
-  async findById(@Param('id') id: string) {
+  async findById(@Param('id', ParseUUIDPipe) id: string) {
     return this.groupService.findById(id);
   }
 
@@ -66,7 +67,7 @@ export class GroupController {
   @ApiResponse({ status: 400, description: 'Business rule violation' })
   @ApiResponse({ status: 404, description: 'Group or customer not found' })
   async addMember(
-    @Param('id') groupId: string,
+    @Param('id', ParseUUIDPipe) groupId: string,
     @Body() dto: AddGroupMemberDto,
     @Req() req: { user: { sub: string; role: string } },
   ) {
@@ -81,8 +82,8 @@ export class GroupController {
   @ApiResponse({ status: 400, description: 'Business rule violation (active loans or min size)' })
   @ApiResponse({ status: 404, description: 'Group or member not found' })
   async removeMember(
-    @Param('id') groupId: string,
-    @Param('memberId') memberId: string,
+    @Param('id', ParseUUIDPipe) groupId: string,
+    @Param('memberId', ParseUUIDPipe) memberId: string,
     @Req() req: { user: { sub: string; role: string } },
   ) {
     return this.groupService.removeMember(groupId, memberId, req.user.sub, req.user.role);
@@ -96,7 +97,7 @@ export class GroupController {
   @ApiResponse({ status: 400, description: 'Sum mismatch or business rule violation' })
   @ApiResponse({ status: 404, description: 'Group not found' })
   async postGroupCollection(
-    @Param('id') groupId: string,
+    @Param('id', ParseUUIDPipe) groupId: string,
     @Body() dto: PostGroupCollectionDto,
     @Req() req: { user: { sub: string; role: string } },
   ) {
@@ -108,7 +109,7 @@ export class GroupController {
   @ApiOperation({ summary: 'Get group summary with delinquency status' })
   @ApiResponse({ status: 200, description: 'Group summary' })
   @ApiResponse({ status: 404, description: 'Group not found' })
-  async getGroupSummary(@Param('id') groupId: string) {
+  async getGroupSummary(@Param('id', ParseUUIDPipe) groupId: string) {
     return this.groupService.getGroupSummary(groupId);
   }
 }

@@ -30,9 +30,13 @@ export class CsrfGuard implements CanActivate {
     const method = req.method.toUpperCase();
     const isSafe = method === 'GET' || method === 'HEAD' || method === 'OPTIONS';
 
+    // K8s probes hit /health/* every few seconds with no cookies — skip cookie issuance to avoid wasted Set-Cookie churn.
+    const path = req.path || req.url || '';
+    const isHealthProbe = path.startsWith('/health/') || path === '/health';
+
     // Public endpoints + safe methods: just ensure the token cookie exists
     if (isSafe) {
-      this.ensureCsrfCookie(req, res);
+      if (!isHealthProbe) this.ensureCsrfCookie(req, res);
       return true;
     }
 

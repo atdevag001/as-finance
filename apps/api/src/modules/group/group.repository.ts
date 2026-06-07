@@ -192,7 +192,44 @@ export class GroupRepository {
   }
 
   /**
-   * Get all active loans linked to this group for its active members.
+   * Lean variant of getGroupMemberLoans for callers that only need loan headers
+   * (findById + postGroupCollection validation). Skips per-loan schedule and
+   * customer joins to avoid fetching ~N*installments rows on the group detail view.
+   */
+  async getGroupLoanSummaries(groupId: string, tx?: TxClient) {
+    const client = tx ?? this.prisma;
+
+    const members = await client.group_members.findMany({
+      where: { group_id: groupId, is_active: true },
+      select: { customer_id: true },
+    });
+    const customerIds = members.map((m) => m.customer_id);
+
+    if (customerIds.length === 0) return [];
+
+    return client.loans.findMany({
+      where: {
+        customer_id: { in: customerIds },
+        group_id: groupId,
+        status: { in: ['active', 'overdue'] },
+      },
+      select: {
+        id: true,
+        loan_number: true,
+        customer_id: true,
+        group_id: true,
+        status: true,
+        cached_outstanding_paise: true,
+        dpd: true,
+        overdue_bucket: true,
+      },
+    });
+  }
+
+  /**
+   * Get all active loans linked to this group for its active members, including
+   * per-loan installment schedules and customer header. Heavier than
+   * getGroupLoanSummaries — only use when schedule data is actually consumed.
    * Scoped by group_id so unrelated personal/other-group loans cannot be paid through this group.
    */
   async getGroupMemberLoans(groupId: string, tx?: TxClient) {

@@ -98,10 +98,24 @@ describe('HealthController', () => {
 
   // --- Requirement 59.5: Skip throttle ---
   describe('skip throttle metadata', () => {
-    it('should have SkipThrottle metadata set on the controller class', () => {
-      // @SkipThrottle() sets 'THROTTLER:SKIPdefault' metadata key on the class
-      const skipMeta = Reflect.getMetadata('THROTTLER:SKIPdefault', HealthController);
-      expect(skipMeta).toBe(true);
+    it('should have SkipThrottle metadata on the /live handler only', () => {
+      // /live does no DB work and is hit by k8s probes; /ready must keep default
+      // per-IP throttling so an unauthenticated client cannot probe the DB at line rate.
+      const liveSkip = Reflect.getMetadata(
+        'THROTTLER:SKIPdefault',
+        HealthController.prototype.live,
+      );
+      const readySkip = Reflect.getMetadata(
+        'THROTTLER:SKIPdefault',
+        HealthController.prototype.ready,
+      );
+      const classSkip = Reflect.getMetadata(
+        'THROTTLER:SKIPdefault',
+        HealthController,
+      );
+      expect(liveSkip).toBe(true);
+      expect(readySkip).toBeUndefined();
+      expect(classSkip).toBeUndefined();
     });
   });
 });

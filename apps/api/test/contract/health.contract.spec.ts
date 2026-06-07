@@ -6,7 +6,8 @@ import { getApiBaseUrl } from '../helpers/seed.js';
  * Health API Contract Tests (Task 30.3)
  *
  * Verifies response shapes for health check endpoints.
- * Health endpoints are public (no auth required) and skip throttling.
+ * Health endpoints are public (no auth required); /live skips throttling while
+ * /ready inherits the default per-IP throttle to prevent unauthenticated DB probing.
  *
  * Validates: Requirements 59.1, 59.2, 59.4, 59.5
  */
@@ -65,7 +66,10 @@ describe('Health Contract Tests', () => {
       expect(res.status).toBe(200);
     });
 
-    it('should not be rate limited (Req 59.5)', async () => {
+    it('should be subject to the default per-IP throttler (Req 59.5)', async () => {
+      // /ready hits the DB, so it inherits the default per-IP throttle to prevent
+      // an unauthenticated client from probing DB liveness at line rate.
+      // A small burst must still succeed under the default limit.
       const results = await Promise.all(
         Array.from({ length: 5 }, () =>
           supertest(apiBaseUrl).get('/health/ready'),

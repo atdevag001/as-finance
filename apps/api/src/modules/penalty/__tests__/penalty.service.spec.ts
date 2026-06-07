@@ -259,18 +259,12 @@ function createMockAuditService() {
   return { createAuditLog: vi.fn() };
 }
 
-function createMockLoanService() {
-  return { validateTransition: vi.fn() };
-}
-
-
 describe('PenaltyService', () => {
   let service: PenaltyService;
   let mockPrisma: { $transaction: ReturnType<typeof vi.fn> };
   let mockPenaltyRepo: ReturnType<typeof createMockPenaltyRepo>;
   let mockAccountingService: ReturnType<typeof createMockAccountingService>;
   let mockAuditService: ReturnType<typeof createMockAuditService>;
-  let mockLoanService: ReturnType<typeof createMockLoanService>;
 
   const baseLoan = {
     id: 'loan-1',
@@ -363,14 +357,11 @@ describe('PenaltyService', () => {
     mockAuditService = createMockAuditService();
     mockAuditService.createAuditLog.mockResolvedValue({ id: 'audit-1' });
 
-    mockLoanService = createMockLoanService();
-
     service = new PenaltyService(
       mockPrisma as never,
       mockPenaltyRepo as never,
       mockAccountingService as never,
       mockAuditService as never,
-      mockLoanService as never,
     );
   });
 

@@ -220,11 +220,27 @@ export class DisbursementService {
       tx,
     );
 
-    // ── Step 2: Look up account IDs by code ──
-    const cashAccount = dto.mode === 'cash'
-      ? await this.disbursementRepository.findAccountByCode('1001', tx)
-      : await this.disbursementRepository.findAccountByCode('1002', tx);
-    const loansReceivableAccount = await this.disbursementRepository.findAccountByCode('1100', tx);
+    // ── Step 2: Compute processing fee + batch-load all account codes in one query ──
+    // Single findMany keeps the FOR-UPDATE loan lock window short under concurrent disbursements.
+    const pv = loan.product_version;
+    let processingFeePaise = 0n;
+    if (pv.processing_fee_type && pv.processing_fee_value) {
+      processingFeePaise = this.calculateProcessingFee(
+        BigInt(loan.principal_paise),
+        pv.processing_fee_type,
+        pv.processing_fee_value,
+      );
+    }
+
+    const cashAccountCode = dto.mode === 'cash' ? '1001' : '1002';
+    const accountCodes = [cashAccountCode, '1100'];
+    if (processingFeePaise > 0n) {
+      accountCodes.push('4002');
+    }
+    const accounts = await this.disbursementRepository.findAccountsByCodes(accountCodes, tx);
+    const cashAccount = accounts.get(cashAccountCode);
+    const loansReceivableAccount = accounts.get('1100');
+    const processingFeeAccount = processingFeePaise > 0n ? accounts.get('4002') ?? null : null;
 
     if (!cashAccount || !loansReceivableAccount) {
       throw new BusinessRuleError(
@@ -233,34 +249,18 @@ export class DisbursementService {
       );
     }
 
-    // ── Step 3: Calculate processing fee (deducted from disbursement) ──
-    let processingFeePaise = 0n;
-    const pv = loan.product_version;
-    let processingFeeAccount: { id: string } | null = null;
-
-    if (pv.processing_fee_type && pv.processing_fee_value) {
-      processingFeePaise = this.calculateProcessingFee(
-        BigInt(loan.principal_paise),
-        pv.processing_fee_type,
-        pv.processing_fee_value,
+    if (processingFeePaise > 0n && !processingFeeAccount) {
+      throw new BusinessRuleError(
+        'Processing Fee Income account (4002) not found',
+        'ACCOUNTS_NOT_CONFIGURED',
       );
-
-      if (processingFeePaise > 0n) {
-        processingFeeAccount = await this.disbursementRepository.findAccountByCode('4002', tx);
-        if (!processingFeeAccount) {
-          throw new BusinessRuleError(
-            'Processing Fee Income account (4002) not found',
-            'ACCOUNTS_NOT_CONFIGURED',
-          );
-        }
-      }
     }
 
     // Calculate net disbursement amount (principal - processing fee)
     const grossAmountPaise = BigInt(loan.principal_paise);
     const netDisbursementPaise = grossAmountPaise - processingFeePaise;
 
-    // ── Step 4: Create journal entry (single entry with net disbursement) ──
+    // ── Step 3: Create journal entry (single entry with net disbursement) ──
     // DR Loans Receivable (full principal - what customer owes)
     // CR Cash/Bank (net amount - what customer receives)
     // CR Processing Fee Income (fee - deducted upfront)
@@ -300,7 +300,7 @@ export class DisbursementService {
       tx,
     );
 
-    // ── Step 5: Create disbursement record (stores net amount disbursed) ──
+    // ── Step 4: Create disbursement record (stores net amount disbursed) ──
     const disbursement = await this.disbursementRepository.create(
       {
         loan_id: dto.loanId,
@@ -315,7 +315,7 @@ export class DisbursementService {
       tx,
     );
 
-    // ── Step 6: Handle first EMI date override if provided ──
+    // ── Step 5: Handle first EMI date override if provided ──
     const schedules = loan.schedules;
     let totalPayable = loan.total_payable_paise ?? loan.principal_paise;
 
@@ -337,7 +337,6 @@ export class DisbursementService {
 
       // Use UTC-midnight parse for schedule math — addMonthsClamped's local-time getters
       // would otherwise read parseDateIST's prev-UTC-day instant as the wrong calendar day.
-      const pv = loan.product_version;
       const firstEmiCalendar = new Date(dto.firstEmiDate);
       const scheduleStartDate = this.calculateStartDateFromFirstEmi(firstEmiCalendar, pv.repayment_frequency);
 
@@ -425,7 +424,7 @@ export class DisbursementService {
       tx,
     );
 
-    // ── Step 7: Create audit log entry ──
+    // ── Step 6: Create audit log entry ──
     await this.auditService.createAuditLog(
       {
         action_type: 'loan_disbursed',
@@ -446,7 +445,7 @@ export class DisbursementService {
       tx,
     );
 
-    // ── Step 8: Enqueue SMS notification to outbox ──
+    // ── Step 7: Enqueue SMS notification to outbox ──
     // SMS shows net amount (what customer actually receives) with fee breakdown if applicable
     const smsMessage = processingFeePaise > 0n
       ? `Dear ${loan.customer.full_name}, your loan ${loan.loan_number} has been disbursed. Amount: Rs ${Number(netDisbursementPaise) / 100} (after deducting Rs ${Number(processingFeePaise) / 100} processing fee from Rs ${Number(grossAmountPaise) / 100}).`
@@ -471,7 +470,7 @@ export class DisbursementService {
       tx,
     );
 
-    // ── Step 9: Store idempotency result ──
+    // ── Step 8: Store idempotency result ──
     const resultBody = {
       disbursementId: disbursement.id,
       loanId: dto.loanId,

@@ -191,26 +191,24 @@ export class CollectionRepository {
    * Create allocation records for a collection within a transaction.
    */
   async createAllocations(allocations: CreateAllocationData[], tx: TxClient) {
-    if (allocations.length === 0) return [];
-    return Promise.all(
-      allocations.map((alloc) =>
-        tx.collection_allocations.create({
-          data: {
-            collection_id: alloc.collection_id,
-            installment_id: alloc.installment_id,
-            // penalty_id is only set on rows that allocate to a penalty.
-            // Cast as never to dodge the conditional types issue when the
-            // Prisma client may have a partially-stale type while the
-            // generated client is regenerated post-migration.
-            penalty_id: (alloc.penalty_id ?? null) as never,
-            penalty_paise: alloc.penalty_paise,
-            interest_paise: alloc.interest_paise,
-            principal_paise: alloc.principal_paise,
-            total_paise: alloc.total_paise,
-          },
-        }),
-      ),
-    );
+    if (allocations.length === 0) return { count: 0 };
+    // Single statement keeps the loan SELECT FOR UPDATE window short under
+    // many-installment payoffs; Prisma serializes per-row create() inside tx.
+    return tx.collection_allocations.createMany({
+      data: allocations.map((alloc) => ({
+        collection_id: alloc.collection_id,
+        installment_id: alloc.installment_id,
+        // penalty_id is only set on rows that allocate to a penalty.
+        // Cast as never to dodge the conditional types issue when the
+        // Prisma client may have a partially-stale type while the
+        // generated client is regenerated post-migration.
+        penalty_id: (alloc.penalty_id ?? null) as never,
+        penalty_paise: alloc.penalty_paise,
+        interest_paise: alloc.interest_paise,
+        principal_paise: alloc.principal_paise,
+        total_paise: alloc.total_paise,
+      })),
+    });
   }
 
   /**
@@ -352,7 +350,9 @@ export class CollectionRepository {
     // Build loan filter for loanNumber and/or aadhaarLastFour
     const loanFilter: Record<string, unknown> = {};
     if (params?.loanNumber) {
-      loanFilter['loan_number'] = { contains: params.loanNumber, mode: 'insensitive' };
+      // Prefix match keeps the unique btree index on loan_number usable;
+      // leading-wildcard ILIKE forces a seqscan as the table grows.
+      loanFilter['loan_number'] = { startsWith: params.loanNumber, mode: 'insensitive' };
     }
     if (params?.aadhaarLastFour) {
       loanFilter['customer'] = { aadhaar_last_four: params.aadhaarLastFour };

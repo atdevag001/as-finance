@@ -15,7 +15,13 @@ export class CreateUserDto {
   @ApiProperty({ description: 'Unique login username' })
   @IsString()
   @IsNotEmpty()
+  @MinLength(3, { message: 'Username must be at least 3 characters' })
   @MaxLength(100)
+  // Mirror frontend zod schema so Swagger/direct API callers cannot create unidentifiable usernames (e.g. whitespace or symbols).
+  @Matches(/^[A-Za-z0-9_.\-]+$/, {
+    message:
+      'Username may contain only letters, digits, dot, underscore, hyphen',
+  })
   username!: string;
 
   @ApiProperty({

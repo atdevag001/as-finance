@@ -1,4 +1,4 @@
-import { IsString, IsUUID, IsOptional, IsInt, Min, IsEnum, MinLength, ValidateIf } from 'class-validator';
+import { IsString, IsUUID, IsOptional, IsInt, Min, IsEnum, MinLength, MaxLength, ValidateIf } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PaymentMode } from '@as-finance/shared';
 
@@ -15,10 +15,12 @@ export class ExecuteForeclosureDto {
 
   // M-rebate-audit: when a rebate is applied the reason is mandatory so the
   // financial waiver leaves a non-empty audit trail (no silent "no reason").
-  @ApiPropertyOptional({ description: 'Reason for rebate (required when rebatePaise > 0)' })
+  // Bounds match the UI (min 10) and cap the TEXT column at 500 chars.
+  @ApiPropertyOptional({ description: 'Reason for rebate (required when rebatePaise > 0, 10-500 chars)' })
   @ValidateIf((o) => (o.rebatePaise ?? 0) > 0)
   @IsString()
-  @MinLength(5)
+  @MinLength(10)
+  @MaxLength(500)
   rebateReason?: string;
 
   /**

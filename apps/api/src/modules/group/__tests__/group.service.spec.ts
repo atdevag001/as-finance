@@ -16,6 +16,7 @@ const mockGroupRepository = {
   customerExists: vi.fn(),
   createGroupCollection: vi.fn(),
   getGroupMemberLoans: vi.fn(),
+  getGroupLoanSummaries: vi.fn(),
   getGroupSummaryData: vi.fn(),
   lockGroupForUpdate: vi.fn(),
 };
@@ -290,7 +291,7 @@ describe('GroupService', () => {
     it('should reject when loan is not in the group', async () => {
       mockIdempotencyService.find.mockResolvedValue(null);
       mockGroupRepository.findById.mockResolvedValue(activeGroup);
-      mockGroupRepository.getGroupMemberLoans.mockResolvedValue([
+      mockGroupRepository.getGroupLoanSummaries.mockResolvedValue([
         { id: 'l1', loan_number: 'LN-1' },
       ]);
 
@@ -342,7 +343,7 @@ describe('GroupService', () => {
     it('should post individual collections for each member', async () => {
       mockIdempotencyService.find.mockResolvedValue(null);
       mockGroupRepository.findById.mockResolvedValue(activeGroup);
-      mockGroupRepository.getGroupMemberLoans.mockResolvedValue([
+      mockGroupRepository.getGroupLoanSummaries.mockResolvedValue([
         { id: 'l1', loan_number: 'LN-1' },
         { id: 'l2', loan_number: 'LN-2' },
       ]);
@@ -532,7 +533,7 @@ describe('GroupService', () => {
         members: [],
       };
       mockGroupRepository.findById.mockResolvedValue(group);
-      mockGroupRepository.getGroupMemberLoans.mockResolvedValue([]);
+      mockGroupRepository.getGroupLoanSummaries.mockResolvedValue([]);
 
       const result = await service.findById('g1');
       // Service transforms repository output into a flat frontend shape

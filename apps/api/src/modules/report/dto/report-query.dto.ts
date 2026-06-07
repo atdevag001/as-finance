@@ -36,22 +36,14 @@ export type EmiScheduleStatus = (typeof EMI_SCHEDULE_STATUSES)[number];
  * header / path injection).
  */
 export class ReportQueryDto {
+  // Only startDate/endDate are read by ReportService.parseDateRange; fromDate/toDate
+  // aliases were removed because the service silently ignored them.
   @ApiPropertyOptional({ description: 'ISO 8601 start date (inclusive)' })
-  @IsOptional()
-  @IsDateString()
-  fromDate?: string;
-
-  @ApiPropertyOptional({ description: 'ISO 8601 end date (inclusive)' })
-  @IsOptional()
-  @IsDateString()
-  toDate?: string;
-
-  @ApiPropertyOptional({ description: 'ISO 8601 start date (legacy alias)' })
   @IsOptional()
   @IsDateString()
   startDate?: string;
 
-  @ApiPropertyOptional({ description: 'ISO 8601 end date (legacy alias)' })
+  @ApiPropertyOptional({ description: 'ISO 8601 end date (inclusive)' })
   @IsOptional()
   @IsDateString()
   endDate?: string;

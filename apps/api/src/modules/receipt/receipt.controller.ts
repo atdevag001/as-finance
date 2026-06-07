@@ -16,6 +16,8 @@ export class ReceiptController {
   async listReceipts(@Query() query: ListReceiptsDto) {
     return this.receiptService.listReceipts({
       loanId: query.loanId,
+      customerId: query.customerId,
+      receiptNumber: query.receiptNumber,
       skip: query.skip ?? 0,
       take: query.take ?? 20,
     });

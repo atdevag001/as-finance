@@ -366,7 +366,8 @@ export class DocumentService {
    */
   async getCustomerDocuments(customerId: string) {
     const docs = await this.prisma.customer_documents.findMany({
-      where: { customer_id: customerId, is_active: true },
+      // Filter on file.is_active too — per-file endpoints reject inactive metadata, so listing them here would 404 on view.
+      where: { customer_id: customerId, is_active: true, file: { is_active: true } },
       include: {
         file: {
           select: {

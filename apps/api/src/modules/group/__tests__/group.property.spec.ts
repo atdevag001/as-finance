@@ -97,6 +97,7 @@ function createMocks() {
     customerExists: vi.fn(),
     createGroupCollection: vi.fn(),
     getGroupMemberLoans: vi.fn(),
+    getGroupLoanSummaries: vi.fn(),
     getGroupSummaryData: vi.fn(),
     // Always succeed in property tests; we exercise the business-rule branches, not the lock itself.
     lockGroupForUpdate: vi.fn().mockResolvedValue({ id: 'g1' }),
@@ -351,7 +352,7 @@ describe('Property 31: Group Collection Sum Integrity', () => {
 
           // All loans in breakdown must be recognized as group loans
           const groupLoans = breakdown.map((m) => ({ id: m.loanId, loan_number: `LN-${m.loanId}` }));
-          mockGroupRepository.getGroupMemberLoans.mockResolvedValue(groupLoans);
+          mockGroupRepository.getGroupLoanSummaries.mockResolvedValue(groupLoans);
           mockGroupRepository.createGroupCollection.mockResolvedValue({ id: 'gc-1' });
           mockCollectionService.executeCollection.mockResolvedValue({ collectionId: 'c-1' });
           mockIdempotencyService.store.mockResolvedValue({});
@@ -458,7 +459,7 @@ describe('Property 41: Batch Collection Per-Member Dispatch', () => {
 
           mockIdempotencyService.find.mockResolvedValue(null);
           mockGroupRepository.findById.mockResolvedValue({ id: groupId, status: 'active' });
-          mockGroupRepository.getGroupMemberLoans.mockResolvedValue(
+          mockGroupRepository.getGroupLoanSummaries.mockResolvedValue(
             breakdown.map((m: BreakdownItem) => ({ id: m.loanId, loan_number: `LN-${m.loanId}` })),
           );
           mockGroupRepository.createGroupCollection.mockResolvedValue({ id: 'gc-1' });
@@ -517,7 +518,7 @@ describe('Property 41: Batch Collection Per-Member Dispatch', () => {
 
           mockIdempotencyService.find.mockResolvedValue(null);
           mockGroupRepository.findById.mockResolvedValue({ id: groupId, status: 'active' });
-          mockGroupRepository.getGroupMemberLoans.mockResolvedValue(
+          mockGroupRepository.getGroupLoanSummaries.mockResolvedValue(
             breakdown.map((m: BreakdownItem) => ({ id: m.loanId, loan_number: `LN-${m.loanId}` })),
           );
           mockGroupRepository.createGroupCollection.mockResolvedValue({ id: 'gc-1' });
@@ -571,7 +572,7 @@ describe('Property 41: Batch Collection Per-Member Dispatch', () => {
 
           mockIdempotencyService.find.mockResolvedValue(null);
           mockGroupRepository.findById.mockResolvedValue({ id: groupId, status: 'active' });
-          mockGroupRepository.getGroupMemberLoans.mockResolvedValue(
+          mockGroupRepository.getGroupLoanSummaries.mockResolvedValue(
             breakdown.map((m: BreakdownItem) => ({ id: m.loanId, loan_number: `LN-${m.loanId}` })),
           );
           mockGroupRepository.createGroupCollection.mockResolvedValue({ id: 'gc-1' });
@@ -638,7 +639,7 @@ describe('Property 42: Batch Collection Atomicity', () => {
 
           mockIdempotencyService.find.mockResolvedValue(null);
           mockGroupRepository.findById.mockResolvedValue({ id: groupId, status: 'active' });
-          mockGroupRepository.getGroupMemberLoans.mockResolvedValue(
+          mockGroupRepository.getGroupLoanSummaries.mockResolvedValue(
             breakdown.map((m: BreakdownItem) => ({ id: m.loanId, loan_number: `LN-${m.loanId}` })),
           );
           mockGroupRepository.createGroupCollection.mockResolvedValue({ id: 'gc-1' });
@@ -696,7 +697,7 @@ describe('Property 42: Batch Collection Atomicity', () => {
 
           mockIdempotencyService.find.mockResolvedValue(null);
           mockGroupRepository.findById.mockResolvedValue({ id: groupId, status: 'active' });
-          mockGroupRepository.getGroupMemberLoans.mockResolvedValue(
+          mockGroupRepository.getGroupLoanSummaries.mockResolvedValue(
             breakdown.map((m: BreakdownItem) => ({ id: m.loanId, loan_number: `LN-${m.loanId}` })),
           );
           mockGroupRepository.createGroupCollection.mockResolvedValue({ id: 'gc-1' });

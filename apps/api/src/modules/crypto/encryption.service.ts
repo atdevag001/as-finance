@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
+import { createCipheriv, createDecipheriv, randomBytes, timingSafeEqual } from 'crypto';
 
 const IV_LEN = 12; // 96-bit IV for GCM (NIST recommended)
 const KEY_LEN = 32; // AES-256
@@ -57,6 +57,13 @@ export class EncryptionService {
     }
     if (keyB64 === process.env['JWT_SECRET']) {
       throw new Error('ENCRYPTION_KEY must differ from JWT_SECRET');
+    }
+    // Also compare decoded key bytes vs JWT_SECRET bytes: catches the natural
+    // mistake of base64-encoding JWT_SECRET (or a 32-byte slice of it) into ENCRYPTION_KEY,
+    // which would make compromise of one secret compromise the other.
+    const jwtBuf = Buffer.from(process.env['JWT_SECRET'] ?? '', 'utf8');
+    if (jwtBuf.length === buf.length && timingSafeEqual(buf, jwtBuf)) {
+      throw new Error('ENCRYPTION_KEY bytes must differ from JWT_SECRET bytes');
     }
     this.key = buf;
   }

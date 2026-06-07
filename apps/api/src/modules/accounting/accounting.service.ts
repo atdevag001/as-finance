@@ -281,8 +281,11 @@ export class AccountingService {
    */
   async getTrialBalance(asOfDate?: string) {
     const date = asOfDate ? new Date(asOfDate) : new Date();
-    const rawBalances = await this.accountingRepository.getAccountBalances(date);
-    const accounts = await this.accountingRepository.findAllAccounts();
+    // Independent queries — parallelize to save a round-trip
+    const [rawBalances, accounts] = await Promise.all([
+      this.accountingRepository.getAccountBalances(date),
+      this.accountingRepository.findAllAccounts(),
+    ]);
 
     const accountMap = new Map(accounts.map((a) => [a.id, a]));
 

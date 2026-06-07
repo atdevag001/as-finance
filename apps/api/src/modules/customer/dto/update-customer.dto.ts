@@ -7,8 +7,10 @@ import {
   Max,
   MaxLength,
   Matches,
+  Validate,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { AlternateMobileDiffersConstraint } from './create-customer.dto';
 
 export class UpdateCustomerDto {
   @ApiPropertyOptional({ description: 'Full name' })
@@ -33,6 +35,7 @@ export class UpdateCustomerDto {
   @IsOptional()
   @IsString()
   @Matches(/^[6-9]\d{9}$/, { message: 'Invalid Indian mobile number' })
+  @Validate(AlternateMobileDiffersConstraint)
   alternateMobile?: string;
 
   @ApiPropertyOptional({ description: 'PAN number' })

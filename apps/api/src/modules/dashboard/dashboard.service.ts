@@ -17,11 +17,34 @@ export interface DashboardKPIs {
 /** Loan statuses that still require manager attention before money moves. */
 const PENDING_APPROVAL_STATUSES = ['submitted', 'under_review', 'approved'] as const;
 
+/** Short TTL coalesces morning-login bursts (hundreds of staff hitting '/' within seconds)
+ *  without serving stale figures — operational dashboards tolerate 10s lag. */
+const KPI_CACHE_TTL_MS = 10_000;
+
+interface CacheEntry {
+  expiresAt: number;
+  value: DashboardKPIs;
+}
+
 @Injectable()
 export class DashboardService {
+  private readonly kpiCache = new Map<string, CacheEntry>();
+
   constructor(private readonly prisma: PrismaService) {}
 
   async getKPIs(actorId?: string, actorRole?: string): Promise<DashboardKPIs> {
+    const cacheKey = `${actorId ?? 'anon'}|${actorRole ?? 'none'}`;
+    const now = Date.now();
+    const cached = this.kpiCache.get(cacheKey);
+    if (cached && cached.expiresAt > now) {
+      return cached.value;
+    }
+    // Opportunistically evict expired entries to keep the map bounded under churn.
+    if (this.kpiCache.size > 256) {
+      for (const [key, entry] of this.kpiCache) {
+        if (entry.expiresAt <= now) this.kpiCache.delete(key);
+      }
+    }
     // Get today's date range anchored to IST midnight (business calendar).
     // Using server-local setHours(0,0,0,0) shifts the boundary by the host TZ,
     // bleeding records from neighboring IST days into today's KPIs.
@@ -96,7 +119,7 @@ export class DashboardService {
 
     // cashInHandPaise removed: previously aliased today's collections, misrepresenting cash position;
     // real cash-in-hand lives in the cashbook daily summary (opening + inflows - outflows).
-    return {
+    const result: DashboardKPIs = {
       totalCustomers,
       activeLoans,
       overdueLoans,
@@ -105,6 +128,8 @@ export class DashboardService {
       todayDisbursementsPaise: Number(todayDisbursementsAgg._sum?.principal_paise ?? 0),
       pendingApprovals,
     };
+    this.kpiCache.set(cacheKey, { expiresAt: now + KPI_CACHE_TTL_MS, value: result });
+    return result;
   }
 
   /**

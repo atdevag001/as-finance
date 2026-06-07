@@ -8,9 +8,27 @@ import {
   Max,
   MaxLength,
   Matches,
+  Validate,
   ValidateIf,
+  ValidatorConstraint,
+  ValidatorConstraintInterface,
+  ValidationArguments,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
+// Alternate mobile must differ from primary; duplicates make the field useless.
+@ValidatorConstraint({ name: 'AlternateMobileDiffers', async: false })
+export class AlternateMobileDiffersConstraint implements ValidatorConstraintInterface {
+  validate(value: unknown, args: ValidationArguments): boolean {
+    if (value == null || value === '') return true;
+    const obj = args.object as { mobile?: unknown };
+    return typeof value !== 'string' || obj.mobile !== value;
+  }
+
+  defaultMessage(): string {
+    return 'alternateMobile must be different from mobile';
+  }
+}
 
 export class CreateCustomerDto {
   @ApiProperty({ description: 'Full name of the customer' })
@@ -35,6 +53,7 @@ export class CreateCustomerDto {
   @ValidateIf((o) => o.alternateMobile !== '' && o.alternateMobile != null)
   @IsString()
   @Matches(/^[6-9]\d{9}$/, { message: 'Invalid Indian mobile number' })
+  @Validate(AlternateMobileDiffersConstraint)
   alternateMobile?: string;
 
   @ApiProperty({ description: 'Aadhaar number (exactly 12 digits)' })

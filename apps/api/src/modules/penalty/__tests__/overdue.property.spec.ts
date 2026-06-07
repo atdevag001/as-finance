@@ -537,7 +537,6 @@ describe('Property 26: Penalty Uniqueness', () => {
             const mockAuditService = {
               createAuditLog: vi.fn().mockResolvedValue({ id: 'audit-1' }),
             };
-            const mockLoanService = { validateTransition: vi.fn() };
 
             const loan = buildBaseLoan(installmentId);
             loan.id = loanId;
@@ -557,7 +556,6 @@ describe('Property 26: Penalty Uniqueness', () => {
               mockPenaltyRepo as never,
               mockAccountingService as never,
               mockAuditService as never,
-              mockLoanService as never,
             );
 
             const dto = {
@@ -607,7 +605,6 @@ describe('Property 26: Penalty Uniqueness', () => {
             const mockAuditService = {
               createAuditLog: vi.fn().mockResolvedValue({ id: 'audit-1' }),
             };
-            const mockLoanService = { validateTransition: vi.fn() };
 
             const loan = buildBaseLoan(installmentId);
             loan.id = loanId;
@@ -646,7 +643,6 @@ describe('Property 26: Penalty Uniqueness', () => {
               mockPenaltyRepo as never,
               mockAccountingService as never,
               mockAuditService as never,
-              mockLoanService as never,
             );
 
             const dto = {

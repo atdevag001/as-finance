@@ -19,7 +19,6 @@ const READINESS_DB_TIMEOUT_MS = 2000;
 @ApiTags('health')
 @Controller('health')
 @SetMetadata(IS_PUBLIC_KEY, true)
-@SkipThrottle()
 export class HealthController {
   private readonly logger = new Logger(HealthController.name);
 
@@ -27,6 +26,7 @@ export class HealthController {
 
   @Get('live')
   @HttpCode(HttpStatus.OK)
+  @SkipThrottle()
   @ApiOperation({ summary: 'Liveness probe' })
   @ApiResponse({ status: 200, description: 'Service is alive' })
   live() {

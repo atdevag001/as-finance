@@ -5,6 +5,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  MaxLength,
 } from 'class-validator';
 
 /**
@@ -74,13 +75,16 @@ export class UpdateSettingDto {
    * validation is performed at the service layer per setting key; this DTO
    * only enforces that *something* was provided and that the payload does
    * not contain prototype-pollution keys (see SettingsController).
+   *
+   * Note: only @IsDefined is used — null and '' are valid JSON values
+   * (e.g. clearing an override). Per-key emptiness rules belong in the service.
    */
   @IsDefined()
-  @IsNotEmpty()
   value: unknown;
 
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   description?: string;
 }
 

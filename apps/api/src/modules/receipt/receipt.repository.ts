@@ -177,4 +177,36 @@ export class ReceiptRepository {
     ]);
     return { data, total };
   }
+
+  /** Find a receipt by its unique receipt number. */
+  async findByReceiptNumber(receiptNumber: string) {
+    return this.prisma.receipts.findUnique({
+      where: { receipt_number: receiptNumber },
+      select: RECEIPT_SELECT,
+    });
+  }
+
+  /** Find receipts matching optional loan/customer filters with pagination. */
+  async findMany(params: {
+    loanId?: string;
+    customerId?: string;
+    skip?: number;
+    take?: number;
+  }) {
+    const where: { loan_id?: string; customer_id?: string } = {};
+    if (params.loanId) where.loan_id = params.loanId;
+    if (params.customerId) where.customer_id = params.customerId;
+
+    const [data, total] = await Promise.all([
+      this.prisma.receipts.findMany({
+        where,
+        skip: params.skip ?? 0,
+        take: params.take ?? 50,
+        orderBy: { created_at: 'desc' },
+        select: RECEIPT_SELECT,
+      }),
+      this.prisma.receipts.count({ where }),
+    ]);
+    return { data, total };
+  }
 }

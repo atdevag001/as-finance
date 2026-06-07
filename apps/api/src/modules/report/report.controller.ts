@@ -23,7 +23,6 @@ interface AuthenticatedRequest extends Request {
  */
 @ApiTags('reports')
 @Controller('reports')
-@Throttle({ default: { ttl: 60_000, limit: 5 } }) // 5 report generations/min per user
 export class ReportController {
   constructor(private readonly reportService: ReportService) {}
 
@@ -50,6 +49,8 @@ export class ReportController {
    */
   @Get(':reportType')
   @RequirePermission('report.read')
+  // Throttle only on the expensive generation path so cheap GET /reports listings aren't counted.
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
   @ApiOperation({ summary: 'Generate a report by type' })
   @ApiParam({
     name: 'reportType',
@@ -87,6 +88,8 @@ export class ReportController {
    */
   @Get(':reportType/export')
   @RequirePermission('report.export')
+  // Throttle the export path for the same reason as generateReport — both are expensive.
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
   @ApiOperation({ summary: 'Export a report as PDF or Excel file' })
   @ApiParam({
     name: 'reportType',

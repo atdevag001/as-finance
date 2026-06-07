@@ -43,9 +43,14 @@ export class LoanProductController {
     @Query('take') take?: string,
     @Query('isActive') isActive?: string,
   ) {
+    // Clamp pagination to prevent unbounded queries and reject NaN from parseInt
+    const parsedSkip = parseInt(skip ?? '', 10);
+    const parsedTake = parseInt(take ?? '', 10);
+    const safeSkip = Number.isFinite(parsedSkip) ? Math.max(parsedSkip, 0) : 0;
+    const safeTake = Number.isFinite(parsedTake) ? Math.min(Math.max(parsedTake, 1), 100) : 50;
     return this.loanProductService.findAll({
-      skip: skip ? parseInt(skip, 10) : undefined,
-      take: take ? parseInt(take, 10) : undefined,
+      skip: safeSkip,
+      take: safeTake,
       isActive: isActive !== undefined ? isActive === 'true' : undefined,
     });
   }

@@ -4,7 +4,6 @@ import { PrismaService } from '../../database/prisma.service';
 import { PenaltyRepository } from './penalty.repository';
 import { AccountingService } from '../accounting/accounting.service';
 import { AuditService } from '../audit/audit.service';
-import { LoanService } from '../loan/loan.service';
 import { CalculatePenaltyDto } from './dto/calculate-penalty.dto';
 import { WaivePenaltyDto } from './dto/waive-penalty.dto';
 import { BusinessRuleError, NotFoundError, ConflictError } from '../../common/errors';
@@ -135,7 +134,6 @@ export class PenaltyService {
     private readonly penaltyRepository: PenaltyRepository,
     private readonly accountingService: AccountingService,
     private readonly auditService: AuditService,
-    private readonly loanService: LoanService,
   ) {}
 
   /**

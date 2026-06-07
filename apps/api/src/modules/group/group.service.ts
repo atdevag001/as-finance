@@ -101,8 +101,8 @@ export class GroupService {
       throw new NotFoundError(`Group not found: ${id}`);
     }
 
-    // Get active loans linked to this group
-    const groupLoans = await this.groupRepository.getGroupMemberLoans(id);
+    // Get active loans linked to this group (lean — no schedules needed for the detail view)
+    const groupLoans = await this.groupRepository.getGroupLoanSummaries(id);
     // A member can have multiple active group loans (e.g. across cycles); use push, not set, so we don't silently drop loans.
     const loansByCustomer = new Map<string, typeof groupLoans>();
     for (const loan of groupLoans) {
@@ -385,8 +385,8 @@ export class GroupService {
       );
     }
 
-    // 4. Verify all loans in breakdown belong to this group
-    const groupLoans = await this.groupRepository.getGroupMemberLoans(groupId);
+    // 4. Verify all loans in breakdown belong to this group (lean — only loan IDs are checked)
+    const groupLoans = await this.groupRepository.getGroupLoanSummaries(groupId);
     const groupLoanIds = new Set(groupLoans.map((l) => l.id));
     for (const item of dto.memberBreakdown) {
       if (!groupLoanIds.has(item.loanId)) {

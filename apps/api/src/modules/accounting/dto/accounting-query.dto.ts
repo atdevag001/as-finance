@@ -1,7 +1,32 @@
-import { IsOptional, IsDateString, IsInt, Min, Max, IsEnum, IsUUID } from 'class-validator';
+import {
+  IsOptional,
+  IsDateString,
+  IsInt,
+  Min,
+  Max,
+  IsEnum,
+  IsUUID,
+  Validate,
+  ValidatorConstraint,
+  type ValidatorConstraintInterface,
+  type ValidationArguments,
+} from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { JournalSourceType } from '@as-finance/shared';
+
+// Reject inverted ranges so daybook/P&L don't silently return empty results.
+@ValidatorConstraint({ name: 'startDateBeforeEndDate', async: false })
+class StartDateBeforeEndDateConstraint implements ValidatorConstraintInterface {
+  validate(endDate: unknown, args: ValidationArguments) {
+    const { startDate } = args.object as { startDate?: string };
+    if (!startDate || typeof endDate !== 'string' || !endDate) return true;
+    return startDate <= endDate;
+  }
+  defaultMessage() {
+    return 'endDate must be on or after startDate';
+  }
+}
 
 export class DateRangeQueryDto {
   @ApiPropertyOptional({ description: 'Start date (ISO 8601)' })
@@ -10,6 +35,7 @@ export class DateRangeQueryDto {
 
   @ApiPropertyOptional({ description: 'End date (ISO 8601)' })
   @IsDateString()
+  @Validate(StartDateBeforeEndDateConstraint)
   endDate!: string;
 }
 

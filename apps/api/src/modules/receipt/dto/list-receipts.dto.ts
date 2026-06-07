@@ -1,4 +1,4 @@
-import { IsOptional, IsInt, Min, Max, IsUUID } from 'class-validator';
+import { IsOptional, IsInt, Min, Max, IsUUID, IsString, MaxLength } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
@@ -13,6 +13,17 @@ export class ListReceiptsDto {
   @IsOptional()
   @IsUUID()
   loanId?: string;
+
+  @ApiPropertyOptional({ description: 'Filter by customer ID' })
+  @IsOptional()
+  @IsUUID()
+  customerId?: string;
+
+  @ApiPropertyOptional({ description: 'Exact match on receipt number (e.g. RCP-2026-00042)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  receiptNumber?: string;
 
   @ApiPropertyOptional({ description: 'Number of records to skip' })
   @IsOptional()

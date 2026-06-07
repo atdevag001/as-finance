@@ -1,4 +1,4 @@
-import { IsString, IsUUID, IsOptional, IsInt, Min } from 'class-validator';
+import { IsString, IsUUID, IsOptional, IsInt, Min, MinLength, MaxLength } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateForeclosureQuoteDto {
@@ -12,9 +12,13 @@ export class CreateForeclosureQuoteDto {
   @Min(0)
   rebatePaise?: number;
 
-  @ApiPropertyOptional({ description: 'Reason for rebate' })
+  // Bound the rebate reason: prevents unbounded TEXT writes and ensures the
+  // audit log gets a meaningful justification (matches the 10-char min in UI).
+  @ApiPropertyOptional({ description: 'Reason for rebate (10-500 chars)' })
   @IsOptional()
   @IsString()
+  @MinLength(10)
+  @MaxLength(500)
   rebateReason?: string;
 
   /**

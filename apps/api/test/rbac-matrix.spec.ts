@@ -129,7 +129,7 @@ const ENDPOINTS: EndpointDef[] = [
 
   // ── Cashbook ─────────────────────────────────────────────────────────────
   { method: 'post', path: '/cashbook/expenses', permission: 'accounting.create_expense', body: { category: 'travel', amountPaise: 5000, description: 'test', date: '2025-01-15' }, label: 'POST /cashbook/expenses (accounting.create_expense)' },
-  { method: 'get', path: '/cashbook/expenses', permission: 'accounting.create_expense', label: 'GET /cashbook/expenses (accounting.create_expense)' },
+  { method: 'get', path: '/cashbook/expenses', permission: 'accounting.read', label: 'GET /cashbook/expenses (accounting.read)' },
   { method: 'post', path: '/cashbook/handovers', permission: 'handover.create', body: { amountPaise: 10000, receiverId: DUMMY_UUID }, label: 'POST /cashbook/handovers (handover.create)' },
   { method: 'get', path: '/cashbook/handovers', permission: 'accounting.manage_cashbook', label: 'GET /cashbook/handovers (accounting.manage_cashbook)' },
   { method: 'patch', path: `/cashbook/handovers/${DUMMY_UUID}/verify`, permission: 'handover.verify', body: { status: 'verified' }, label: 'PATCH /cashbook/handovers/:id/verify (handover.verify)' },

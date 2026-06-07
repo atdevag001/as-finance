@@ -212,6 +212,19 @@ export class DisbursementRepository {
   }
 
   /**
+   * Batch-lookup chart of accounts entries by code within a transaction.
+   * Returns a Map keyed by code so a single round-trip resolves all needed accounts —
+   * keeps the FOR-UPDATE loan lock window short under concurrent disbursements.
+   */
+  async findAccountsByCodes(codes: string[], tx: TxClient) {
+    const rows = await tx.chart_of_accounts.findMany({
+      where: { code: { in: codes } },
+      select: { id: true, code: true, name: true, category: true },
+    });
+    return new Map(rows.map((row) => [row.code, row]));
+  }
+
+  /**
    * Create a loan status history entry within a transaction.
    */
   async createStatusHistory(

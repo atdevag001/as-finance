@@ -56,6 +56,14 @@ function createMockRepo() {
     updateLoanDisbursementData: vi.fn().mockResolvedValue(undefined),
     activateSchedule: vi.fn().mockResolvedValue(undefined),
     findAccountByCode: vi.fn((code: string) => Promise.resolve(ACCOUNTS[code] ?? null)),
+    findAccountsByCodes: vi.fn((codes: string[]) => {
+      const map = new Map<string, typeof ACCOUNTS[string]>();
+      for (const code of codes) {
+        const account = ACCOUNTS[code];
+        if (account) map.set(code, account);
+      }
+      return Promise.resolve(map);
+    }),
     enqueueOutboxMessage: vi.fn().mockResolvedValue(undefined),
     createLoanStatusHistory: vi.fn().mockResolvedValue(undefined),
   };

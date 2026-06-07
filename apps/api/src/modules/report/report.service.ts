@@ -237,7 +237,8 @@ export class ReportService {
     if (lower.includes('paise') || lower.includes('amount') || lower.includes('balance')) {
       return 'currency';
     }
-    if (lower.includes('date') || lower.includes('at') && !lower.includes('status')) {
+    // Stricter than substring 'at': avoids false positives like 'category', 'rate', 'status'.
+    if (lower.endsWith('_at') || lower.includes('date')) {
       return 'date';
     }
     if (lower.includes('count') || lower.includes('days') || lower.includes('number')) {

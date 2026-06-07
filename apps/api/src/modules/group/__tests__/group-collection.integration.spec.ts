@@ -29,6 +29,9 @@ function createMockGroupRepo() {
     getGroupMemberLoans: vi.fn().mockResolvedValue([
       { id: 'loan-1' }, { id: 'loan-2' },
     ]),
+    getGroupLoanSummaries: vi.fn().mockResolvedValue([
+      { id: 'loan-1' }, { id: 'loan-2' },
+    ]),
     createGroupCollection: vi.fn().mockResolvedValue({ id: 'gc-1' }),
     getGroupSummaryData: vi.fn(),
     findMemberById: vi.fn(),
@@ -395,7 +398,7 @@ describe('Group Collection Integration', () => {
     });
 
     it('should handle single-member group collection', async () => {
-      repo.getGroupMemberLoans.mockResolvedValue([{ id: 'loan-1' }]);
+      repo.getGroupLoanSummaries.mockResolvedValue([{ id: 'loan-1' }]);
 
       const result = await service.postGroupCollection(
         'grp-1',
@@ -586,7 +589,7 @@ describe('Group Collection Integration', () => {
   describe('Req 29.3 — Mixed member statuses (active + overdue)', () => {
     beforeEach(() => {
       // Group has loans with mixed statuses: loan-1 is active, loan-2 is overdue
-      repo.getGroupMemberLoans.mockResolvedValue([
+      repo.getGroupLoanSummaries.mockResolvedValue([
         { id: 'loan-1', status: 'active' },
         { id: 'loan-2', status: 'overdue' },
       ]);
@@ -690,7 +693,7 @@ describe('Group Collection Integration', () => {
     });
 
     it('should handle group with all overdue members', async () => {
-      repo.getGroupMemberLoans.mockResolvedValue([
+      repo.getGroupLoanSummaries.mockResolvedValue([
         { id: 'loan-1', status: 'overdue' },
         { id: 'loan-2', status: 'overdue' },
       ]);

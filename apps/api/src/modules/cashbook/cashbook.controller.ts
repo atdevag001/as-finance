@@ -71,7 +71,7 @@ export class CashbookController {
   }
 
   @Get('expenses')
-  @RequirePermission('accounting.create_expense')
+  @RequirePermission('accounting.read')
   @ApiOperation({ summary: 'List expenses with filters' })
   @ApiResponse({ status: 200, description: 'Paginated expense list' })
   async findExpenses(@Query() query: ExpenseQueryDto) {

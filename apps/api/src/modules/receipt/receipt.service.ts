@@ -152,15 +152,22 @@ export class ReceiptService {
   /**
    * List receipts with optional filters and pagination.
    */
-  async listReceipts(params: { loanId?: string; skip?: number; take?: number }) {
-    const { loanId, skip = 0, take = 20 } = params;
+  async listReceipts(params: {
+    loanId?: string;
+    customerId?: string;
+    receiptNumber?: string;
+    skip?: number;
+    take?: number;
+  }) {
+    const { loanId, customerId, receiptNumber, skip = 0, take = 20 } = params;
 
-    if (loanId) {
-      // findByLoanId already returns { data, total }
-      return this.receiptRepository.findByLoanId(loanId, { skip, take });
+    // Receipt number is unique — short-circuit to a single-row lookup so users can
+    // jump straight to a receipt by its printed number without scanning.
+    if (receiptNumber) {
+      const receipt = await this.receiptRepository.findByReceiptNumber(receiptNumber);
+      return { data: receipt ? [receipt] : [], total: receipt ? 1 : 0 };
     }
 
-    // Without loanId filter, return all receipts with pagination
-    return this.receiptRepository.findAll({ skip, take });
+    return this.receiptRepository.findMany({ loanId, customerId, skip, take });
   }
 }

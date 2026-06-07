@@ -73,26 +73,38 @@ export class LoanProductService {
       );
     }
 
-    const product = await this.loanProductRepository.createWithVersion(
-      { name: dto.name, created_by: actorId },
-      {
-        interest_type: dto.interestType,
-        annual_rate_bps: dto.annualRateBps,
-        min_principal_paise: dto.minPrincipalPaise,
-        max_principal_paise: dto.maxPrincipalPaise,
-        min_tenure_months: dto.minTenureMonths,
-        max_tenure_months: dto.maxTenureMonths,
-        repayment_frequency: dto.repaymentFrequency,
-        processing_fee_type: dto.processingFeeType ?? null,
-        processing_fee_value: dto.processingFeeValue ?? null,
-        penalty_grace_days: dto.penaltyGraceDays ?? 0,
-        penalty_type: dto.penaltyType ?? null,
-        penalty_value: dto.penaltyValue ?? null,
-        penalty_frequency: dto.penaltyFrequency ?? null,
-        max_concurrent_loans: dto.maxConcurrentLoans ?? 1,
-        allocation_order: allocationOrder,
-      },
-    );
+    let product;
+    try {
+      product = await this.loanProductRepository.createWithVersion(
+        { name: dto.name, created_by: actorId },
+        {
+          interest_type: dto.interestType,
+          annual_rate_bps: dto.annualRateBps,
+          min_principal_paise: dto.minPrincipalPaise,
+          max_principal_paise: dto.maxPrincipalPaise,
+          min_tenure_months: dto.minTenureMonths,
+          max_tenure_months: dto.maxTenureMonths,
+          repayment_frequency: dto.repaymentFrequency,
+          processing_fee_type: dto.processingFeeType ?? null,
+          processing_fee_value: dto.processingFeeValue ?? null,
+          penalty_grace_days: dto.penaltyGraceDays ?? 0,
+          penalty_type: dto.penaltyType ?? null,
+          penalty_value: dto.penaltyValue ?? null,
+          penalty_frequency: dto.penaltyFrequency ?? null,
+          max_concurrent_loans: dto.maxConcurrentLoans ?? 1,
+          allocation_order: allocationOrder,
+        },
+      );
+    } catch (e: unknown) {
+      // Translate the DB unique-constraint loser of a concurrent create race into the same 409 the pre-check returns.
+      if (typeof e === 'object' && e !== null && (e as { code?: string }).code === 'P2002') {
+        throw new ConflictError(
+          `Loan product with name "${dto.name}" already exists`,
+          'PRODUCT_NAME_EXISTS',
+        );
+      }
+      throw e;
+    }
 
     await this.loanProductRepository.createAuditLog({
       action_type: 'loan_product_created',

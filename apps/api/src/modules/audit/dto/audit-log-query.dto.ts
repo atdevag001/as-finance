@@ -1,9 +1,35 @@
-import { IsOptional, IsString, IsInt, Min, Max, IsDateString, IsEnum, IsUUID } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsInt,
+  Min,
+  Max,
+  IsDateString,
+  IsEnum,
+  IsUUID,
+  Validate,
+  ValidatorConstraint,
+  type ValidatorConstraintInterface,
+  type ValidationArguments,
+} from 'class-validator';
 // Max range covers all real-world UTC offsets (UTC-12 to UTC+14, plus a margin).
 const MAX_TZ_OFFSET_MINUTES = 14 * 60;
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { AuditAction } from '@as-finance/shared';
+
+// Reject inverted ranges so audit log queries don't silently return empty results.
+@ValidatorConstraint({ name: 'startDateBeforeEndDate', async: false })
+class StartDateBeforeEndDateConstraint implements ValidatorConstraintInterface {
+  validate(endDate: unknown, args: ValidationArguments) {
+    const { startDate } = args.object as { startDate?: string };
+    if (!startDate || typeof endDate !== 'string' || !endDate) return true;
+    return startDate <= endDate;
+  }
+  defaultMessage() {
+    return 'endDate must be on or after startDate';
+  }
+}
 
 export class AuditLogQueryDto {
   @ApiPropertyOptional({ description: 'Number of records to skip' })
@@ -49,6 +75,7 @@ export class AuditLogQueryDto {
   @ApiPropertyOptional({ description: 'End of date range (ISO 8601)' })
   @IsOptional()
   @IsDateString()
+  @Validate(StartDateBeforeEndDateConstraint)
   endDate?: string;
 
   // Matches Date.prototype.getTimezoneOffset() semantics (minutes west of UTC, IST = -330).
