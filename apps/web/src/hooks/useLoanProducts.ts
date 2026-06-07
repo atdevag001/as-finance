@@ -60,9 +60,17 @@ export function useLoanProductsList() {
   return useQuery<LoanProduct[]>({
     queryKey: ['loan-products', 'list'],
     queryFn: async () => {
-      const result = await apiClient.get<PaginatedResult<LoanProduct> | LoanProduct[]>('/loan-products');
-      // Handle both array response and paginated response
-      return Array.isArray(result) ? result : result.data ?? [];
+      // Picker UIs need the full set; backend caps at 50 by default.
+      const result = await apiClient.get<PaginatedResult<LoanProduct> | LoanProduct[]>(
+        '/loan-products?take=500',
+      );
+      if (Array.isArray(result)) return result;
+      if (result.total > result.data.length) {
+        console.warn(
+          `useLoanProductsList: server has ${result.total} products but only ${result.data.length} returned; picker UI is truncated.`,
+        );
+      }
+      return result.data ?? [];
     },
   });
 }
@@ -82,8 +90,10 @@ export function useUpdateLoanProduct() {
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) =>
       apiClient.patch(`/loan-products/${id}`, data),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: ['loan-products'] });
+      // Edit page caches by singular key; invalidate so back-nav refetches.
+      qc.invalidateQueries({ queryKey: ['loan-product', variables.id] });
     },
   });
 }
@@ -92,8 +102,9 @@ export function useDeactivateLoanProduct() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => apiClient.post(`/loan-products/${id}/deactivate`),
-    onSuccess: () => {
+    onSuccess: (_data, id) => {
       qc.invalidateQueries({ queryKey: ['loan-products'] });
+      qc.invalidateQueries({ queryKey: ['loan-product', id] });
     },
   });
 }

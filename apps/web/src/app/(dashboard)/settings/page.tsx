@@ -25,6 +25,7 @@ import {
   ErrorMessage,
   DateDisplay,
 } from '@/components/shared';
+import { ConfirmDialog } from '@/components/shared/confirm-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -208,6 +209,9 @@ function HolidaySection() {
 
   const [newDate, setNewDate] = useState('');
   const [serverError, setServerError] = useState<string | null>(null);
+  // Removing a holiday rewrites the system-wide calendar; gate the destructive
+  // PUT behind a confirm so a misclick can't silently nuke a schedule input.
+  const [pendingRemoval, setPendingRemoval] = useState<string | null>(null);
 
   // Holidays are stored as IST YYYY-MM-DD; bucketing via new Date().getFullYear()
   // would mis-assign Jan/Dec boundary dates for users west of UTC.
@@ -225,11 +229,32 @@ function HolidaySection() {
     e.preventDefault();
     if (!newDate) return;
     setServerError(null);
+
+    // Pre-validate client-side: backend dedupes silently, and dates outside the
+    // current year are hidden by the year filter — both feel like "nothing happened".
+    if ((holidays ?? []).includes(newDate)) {
+      setServerError(`${newDate} is already in the holiday calendar.`);
+      return;
+    }
+    if (newDate < todayIST()) {
+      setServerError('Cannot add a holiday in the past.');
+      return;
+    }
+    const enteredYear = parseInt(newDate.slice(0, 4), 10);
+    if (enteredYear !== currentYear) {
+      showToast({
+        message: `Added — note this holiday is in ${enteredYear} and won't appear in the ${currentYear} view.`,
+        variant: 'success',
+      });
+    }
+
     try {
       const updatedHolidays = [...(holidays ?? []), newDate];
       await setHolidays.mutateAsync(updatedHolidays);
       setNewDate('');
-      showToast({ message: 'Holiday added', variant: 'success' });
+      if (enteredYear === currentYear) {
+        showToast({ message: 'Holiday added', variant: 'success' });
+      }
     } catch (err) {
       if (err instanceof ApiClientError) {
         setServerError(err.body.message || 'Failed to add holiday.');
@@ -244,6 +269,7 @@ function HolidaySection() {
     try {
       const updatedHolidays = (holidays ?? []).filter((d) => d !== dateStr);
       await setHolidays.mutateAsync(updatedHolidays);
+      setPendingRemoval(null);
       showToast({ message: 'Holiday removed', variant: 'success' });
     } catch (err) {
       if (err instanceof ApiClientError) {
@@ -296,8 +322,9 @@ function HolidaySection() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleRemoveHoliday(dateStr)}
+                          onClick={() => setPendingRemoval(dateStr)}
                           disabled={setHolidays.isPending}
+                          aria-label={`Remove holiday ${dateStr}`}
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
@@ -309,6 +336,25 @@ function HolidaySection() {
             </table>
           </div>
         )}
+
+        <ConfirmDialog
+          open={pendingRemoval !== null}
+          onOpenChange={(open) => {
+            if (!open) setPendingRemoval(null);
+          }}
+          title="Remove holiday?"
+          description={
+            pendingRemoval
+              ? `Remove holiday ${pendingRemoval}? This affects all future loan schedules.`
+              : ''
+          }
+          confirmLabel="Remove"
+          variant="destructive"
+          loading={setHolidays.isPending}
+          onConfirm={() => {
+            if (pendingRemoval) void handleRemoveHoliday(pendingRemoval);
+          }}
+        />
 
         {canUpdate && (
           <form onSubmit={handleAddHoliday} className="flex flex-col gap-3 pt-2 sm:flex-row sm:flex-wrap sm:items-end">

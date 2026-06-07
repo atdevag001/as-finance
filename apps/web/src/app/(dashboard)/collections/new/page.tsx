@@ -71,10 +71,24 @@ export default function NewCollectionPage() {
     return () => clearTimeout(timer);
   }, [loanSearch]);
 
-  const { data: loanResults, isLoading: loansLoading } = useLoans({
+  // Filter server-side per collectable status so a paginated first 20 by created_at doesn't
+  // hide an officer's loan behind unrelated rows. Backend DTO accepts a single status only,
+  // so we issue two parallel queries and merge.
+  const { data: activeLoans, isLoading: activeLoading } = useLoans({
     search: debouncedSearch || undefined,
+    status: 'active',
     page: 1,
   });
+  const { data: overdueLoans, isLoading: overdueLoading } = useLoans({
+    search: debouncedSearch || undefined,
+    status: 'overdue',
+    page: 1,
+  });
+  const loansLoading = activeLoading || overdueLoading;
+  const collectableLoans: Loan[] = [
+    ...(activeLoans?.data ?? []),
+    ...(overdueLoans?.data ?? []),
+  ];
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -284,8 +298,8 @@ export default function NewCollectionPage() {
                         <li className="flex items-center justify-center px-3 py-3">
                           <LoadingSpinner />
                         </li>
-                      ) : loanResults?.data && loanResults.data.filter(l => l.status === 'active' || l.status === 'overdue').length > 0 ? (
-                        loanResults.data.filter(l => l.status === 'active' || l.status === 'overdue').map((loan) => (
+                      ) : collectableLoans.length > 0 ? (
+                        collectableLoans.map((loan) => (
                           <li
                             key={loan.id}
                             role="option"

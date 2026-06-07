@@ -101,12 +101,11 @@ export function useLoanAction() {
     mutationFn: ({ id, action, body }: { id: string; action: string; body?: Record<string, unknown> }) =>
       apiClient.post(`/loans/${id}/${action}`, body),
     onSuccess: () => {
+      // ['loans'] prefix cascades to ['loans', id] and ['loans', id, 'status-history'].
       qc.invalidateQueries({ queryKey: ['loans'] });
-      qc.invalidateQueries({ queryKey: ['loan'] });
       qc.invalidateQueries({ queryKey: ['receipts'] });
       qc.invalidateQueries({ queryKey: ['penalties'] });
       qc.invalidateQueries({ queryKey: ['foreclosures'] });
-      qc.invalidateQueries({ queryKey: ['status-history'] });
       // Approve/disburse post journal entries; refresh daybook/TB/P&L/balance-sheet.
       qc.invalidateQueries({ queryKey: ['accounting'] });
       // Approve/disburse/close shift Active Loans, Pending Approvals, and Today's Disbursements KPIs.

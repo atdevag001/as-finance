@@ -13,6 +13,7 @@ import {
   StatusBadge,
   AccessDenied,
   PermissionGate,
+  formatPaiseToINR,
 } from '@/components/shared';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -144,7 +145,7 @@ function ReceiptViewContent({ id }: { id: string }) {
                 onClick={() => {
                   navigator.share({
                     title: `Receipt ${receipt.receipt_number}`,
-                    text: `Payment receipt for ₹${(Number(receipt.amount_paise) / 100).toLocaleString('en-IN')}`,
+                    text: `Payment receipt for ${formatPaiseToINR(receipt.amount_paise)}`,
                     url: window.location.href,
                   }).catch(() => {});
                 }}

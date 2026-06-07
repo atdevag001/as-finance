@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { Plus, Search, X } from 'lucide-react';
 import { useCollections, type Collection } from '@/hooks/useCollections';
@@ -46,7 +46,14 @@ export default function CollectionsPage() {
   });
   const [reversalCollection, setReversalCollection] = useState<Collection | null>(null);
 
+  // Surface filter validation issues inline rather than silently dropping input.
+  const aadhaarError = aadhaar.length > 0 && aadhaar.length < 4 ? 'Enter 4 digits to filter' : '';
+  const dateRangeError =
+    startDate && endDate && startDate > endDate ? 'Start date must be on or before end date' : '';
+  const applyDisabled = !!aadhaarError || !!dateRangeError;
+
   function applyFilters() {
+    if (applyDisabled) return;
     setPage(1);
     setAppliedFilters({
       startDate,
@@ -84,6 +91,7 @@ export default function CollectionsPage() {
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
+              aria-invalid={!!dateRangeError}
             />
           </div>
           <div className="space-y-1">
@@ -93,7 +101,11 @@ export default function CollectionsPage() {
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
+              aria-invalid={!!dateRangeError}
             />
+            {dateRangeError && (
+              <p className="text-xs text-destructive">{dateRangeError}</p>
+            )}
           </div>
           <div className="space-y-1">
             <Label htmlFor="loan-filter" className="text-xs">Loan Number</Label>
@@ -112,11 +124,15 @@ export default function CollectionsPage() {
               value={aadhaar}
               onChange={(e) => setAadhaar(e.target.value.replace(/\D/g, '').slice(0, 4))}
               maxLength={4}
+              aria-invalid={!!aadhaarError}
             />
+            {aadhaarError && (
+              <p className="text-xs text-destructive">{aadhaarError}</p>
+            )}
           </div>
         </div>
         <div className="flex gap-2">
-          <Button onClick={applyFilters} size="sm">
+          <Button onClick={applyFilters} size="sm" disabled={applyDisabled}>
             <Search className="mr-1 h-4 w-4" />Apply
           </Button>
           <Button onClick={clearFilters} variant="outline" size="sm">

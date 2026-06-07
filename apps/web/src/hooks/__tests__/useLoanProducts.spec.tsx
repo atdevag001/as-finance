@@ -331,7 +331,7 @@ describe('useLoanProducts Hook', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(mockGet).toHaveBeenCalledWith('/loan-products');
+      expect(mockGet).toHaveBeenCalledWith('/loan-products?take=500');
       expect(result.current.data).toEqual(mockProductsArray);
     });
 
@@ -453,6 +453,7 @@ describe('useLoanProducts Hook', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['loan-products'] });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['loan-product', 'prod-1'] });
     });
 
     it('handles 404 error when product not found', async () => {
@@ -505,6 +506,7 @@ describe('useLoanProducts Hook', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['loan-products'] });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['loan-product', 'prod-1'] });
     });
 
     it('handles 404 error when product not found', async () => {

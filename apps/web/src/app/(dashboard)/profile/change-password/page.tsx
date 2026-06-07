@@ -154,6 +154,7 @@ export default function ChangePasswordPage() {
                   onChange={(e) => setFormData(prev => ({ ...prev, currentPassword: e.target.value }))}
                   placeholder="Enter current password"
                   disabled={isSubmitting}
+                  autoComplete="current-password"
                 />
                 <Button
                   type="button"
@@ -161,6 +162,7 @@ export default function ChangePasswordPage() {
                   size="sm"
                   className="absolute right-1 top-1/2 -translate-y-1/2 h-10 w-10 p-0"
                   onClick={() => setShowCurrent(!showCurrent)}
+                  aria-label={showCurrent ? 'Hide password' : 'Show password'}
                 >
                   {showCurrent ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </Button>
@@ -177,6 +179,7 @@ export default function ChangePasswordPage() {
                   onChange={(e) => setFormData(prev => ({ ...prev, newPassword: e.target.value }))}
                   placeholder="Enter new password"
                   disabled={isSubmitting}
+                  autoComplete="new-password"
                 />
                 <Button
                   type="button"
@@ -184,6 +187,7 @@ export default function ChangePasswordPage() {
                   size="sm"
                   className="absolute right-1 top-1/2 -translate-y-1/2 h-10 w-10 p-0"
                   onClick={() => setShowNew(!showNew)}
+                  aria-label={showNew ? 'Hide password' : 'Show password'}
                 >
                   {showNew ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </Button>
@@ -200,6 +204,7 @@ export default function ChangePasswordPage() {
                   onChange={(e) => setFormData(prev => ({ ...prev, confirmPassword: e.target.value }))}
                   placeholder="Confirm new password"
                   disabled={isSubmitting}
+                  autoComplete="new-password"
                 />
                 <Button
                   type="button"
@@ -207,6 +212,7 @@ export default function ChangePasswordPage() {
                   size="sm"
                   className="absolute right-1 top-1/2 -translate-y-1/2 h-10 w-10 p-0"
                   onClick={() => setShowConfirm(!showConfirm)}
+                  aria-label={showConfirm ? 'Hide password' : 'Show password'}
                 >
                   {showConfirm ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </Button>

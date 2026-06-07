@@ -51,7 +51,7 @@ function CashbookContent() {
           {data.hasDiscrepancy && (
             <div role="alert" className="flex items-center gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive font-medium">
               <AlertTriangle className="h-4 w-4 shrink-0" />
-              <span>Discrepancy detected — closing balance does not match expected value.</span>
+              <span>Closing cash balance is negative — review cash transactions for the day.</span>
             </div>
           )}
 

@@ -8,11 +8,11 @@ import { StatusBadge, LoadingSpinner, ErrorMessage, PaginationControls, Permissi
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
+// 'inactive' is a valid DTO value but no service ever writes it — hide until a deactivation flow exists.
 const STATUS_OPTIONS = [
   { label: 'All', value: '' },
   { label: 'Active', value: 'active' },
   { label: 'Blacklisted', value: 'blacklisted' },
-  { label: 'Inactive', value: 'inactive' },
 ] as const;
 
 export default function CustomersPage() {

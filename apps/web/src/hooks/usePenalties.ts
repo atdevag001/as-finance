@@ -50,3 +50,27 @@ export function useWaivePenalty() {
     },
   });
 }
+
+export interface CalculatePenaltyInput {
+  loanId: string;
+  installmentId: string;
+  /** Period identifier matching backend regex /^[A-Za-z0-9_-]+$/, e.g. "2026-01" or "2026-W05". */
+  penaltyPeriod: string;
+  /** Optional ISO 8601 reference date; backend defaults to "now" when omitted. */
+  referenceDate?: string;
+}
+
+/** Manually post a penalty for an overdue installment (SUPER_ADMIN / MANAGER). */
+export function useCalculatePenalty() {
+  const qc = useQueryClient();
+  return useMutation<Penalty, Error, CalculatePenaltyInput>({
+    mutationFn: (input) => apiClient.post<Penalty>('/penalties/calculate', input),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ['penalties', vars.loanId] });
+      qc.invalidateQueries({ queryKey: ['loans', vars.loanId] });
+      // Penalty posts a journal entry and changes outstanding balance.
+      qc.invalidateQueries({ queryKey: ['accounting'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+  });
+}

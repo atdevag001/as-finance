@@ -426,9 +426,9 @@ export default function GroupDetailPage({ params }: { params: { id: string } }) 
                 <Input
                   className="w-28"
                   type="number"
-                  inputMode="numeric"
+                  inputMode="decimal"
                   min="0"
-                  step="1"
+                  step="0.01"
                   placeholder="₹ 0"
                   value={payments[l.id] ?? ''}
                   onChange={(e) => setPayments((prev) => ({ ...prev, [l.id]: e.target.value }))}

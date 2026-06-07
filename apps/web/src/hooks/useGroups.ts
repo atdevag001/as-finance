@@ -41,7 +41,8 @@ export interface GroupCollection {
   total_amount_paise: number;
   payment_date: string;
   status: string;
-  created_at: string;
+  // Optional: backend's group findById projection does not include created_at; mark as optional to avoid lying about its presence.
+  created_at?: string;
 }
 
 interface PaginatedResult<T> {

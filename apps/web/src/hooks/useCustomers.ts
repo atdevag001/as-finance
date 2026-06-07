@@ -25,6 +25,7 @@ export interface CustomerDetail extends Customer {
   gender: string;
   occupation?: string;
   monthly_income_paise?: number;
+  work_or_business_details?: string;
   address_line1: string;
   address_line2?: string;
   state: string;

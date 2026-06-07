@@ -1,5 +1,5 @@
 export { StatusBadge } from './status-badge';
-export { MoneyDisplay } from './money-display';
+export { MoneyDisplay, formatPaiseToINR } from './money-display';
 export { ConfirmDialog } from './confirm-dialog';
 export { LoadingSpinner } from './loading-spinner';
 export { ErrorMessage } from './error-message';

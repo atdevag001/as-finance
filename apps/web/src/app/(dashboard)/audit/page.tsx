@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { LoadingSpinner, ErrorMessage, PaginationControls, AccessDenied, DateDisplay } from '@/components/shared';
 import { Input } from '@/components/ui/input';
 import {
@@ -44,6 +45,11 @@ export default function AuditPage() {
 }
 
 function AuditContent() {
+  // Deep-link entry points (e.g. "what did user X do?") arrive via querystring.
+  const searchParams = useSearchParams();
+  const actorId = searchParams.get('actorId') ?? undefined;
+  const targetId = searchParams.get('targetId') ?? undefined;
+
   const [page, setPage] = useState(1);
   const [entity, setEntity] = useState('');
   const [action, setAction] = useState('');
@@ -60,6 +66,8 @@ function AuditContent() {
     action: action || undefined,
     startDate: debouncedStartDate || undefined,
     endDate: debouncedEndDate || undefined,
+    actorId,
+    targetId,
   });
 
   function handleSelectChange(setter: (v: string) => void) {
@@ -110,6 +118,18 @@ function AuditContent() {
         <Input type="date" value={startDate} onChange={handleDateChange(setStartDate)} className="w-40" aria-label="Start date" />
         <Input type="date" value={endDate} onChange={handleDateChange(setEndDate)} className="w-40" aria-label="End date" />
       </div>
+
+      {(actorId || targetId) && (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          {actorId && (
+            <span className="rounded border bg-muted/50 px-2 py-1 font-mono">actor: {actorId}</span>
+          )}
+          {targetId && (
+            <span className="rounded border bg-muted/50 px-2 py-1 font-mono">target: {targetId}</span>
+          )}
+          <a href="/audit" className="underline">clear</a>
+        </div>
+      )}
 
       {isLoading && <div className="flex justify-center py-8"><LoadingSpinner size="lg" /></div>}
       {error && <ErrorMessage message={(error as Error).message} />}

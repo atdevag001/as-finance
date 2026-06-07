@@ -64,7 +64,11 @@ export default function NewCustomerPage() {
 
   useEffect(() => {
     if (dobValue) {
-      const birthDate = new Date(dobValue);
+      // Parse YYYY-MM-DD as local date — `new Date('YYYY-MM-DD')` is UTC midnight,
+      // which drifts the age by one day in browsers west of UTC near a birthday.
+      const [y, m, d] = dobValue.split('-').map(Number);
+      if (!y || !m || !d) return;
+      const birthDate = new Date(y, m - 1, d);
       const today = new Date();
       let age = today.getFullYear() - birthDate.getFullYear();
       const monthDiff = today.getMonth() - birthDate.getMonth();

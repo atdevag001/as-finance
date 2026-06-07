@@ -53,12 +53,8 @@ function LoginForm() {
     } catch (err) {
       if (err instanceof ApiClientError) {
         const code = (err.body as { code?: string })?.code;
-        if (code === 'ACCOUNT_LOCKED' || err.statusCode === 423) {
-          setServerError(
-            err.body.message ||
-              'Account is locked due to too many failed attempts. Try again in 30 minutes.',
-          );
-        } else if (code === 'INVALID_CREDENTIALS' || err.statusCode === 401) {
+        // Backend masks ACCOUNT_LOCKED as INVALID_CREDENTIALS to prevent account enumeration.
+        if (code === 'INVALID_CREDENTIALS' || err.statusCode === 401) {
           setServerError('Invalid username or password.');
         } else if (code === 'ACCOUNT_INACTIVE') {
           setServerError('This account is inactive. Contact your administrator.');

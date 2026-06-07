@@ -62,14 +62,16 @@ function transformBackendResponse(response: BackendReportResponse): ReportData {
     if (type === 'profit-loss') {
       const income = dataObj['income'] as Record<string, string> | undefined;
       const expenses = dataObj['expenses'] as Record<string, string> | undefined;
+      // Push raw string amounts; the precision-safe conversion below downgrades to number
+      // only when the value fits in Number.MAX_SAFE_INTEGER.
       if (income) {
         Object.entries(income).forEach(([name, amount]) => {
-          rows.push({ category: 'Income', name, amount_paise: Number(amount) });
+          rows.push({ category: 'Income', name, amount_paise: amount });
         });
       }
       if (expenses) {
         Object.entries(expenses).forEach(([name, amount]) => {
-          rows.push({ category: 'Expense', name, amount_paise: Number(amount) });
+          rows.push({ category: 'Expense', name, amount_paise: amount });
         });
       }
     } else {
@@ -84,12 +86,14 @@ function transformBackendResponse(response: BackendReportResponse): ReportData {
     }
   }
 
-  // Convert string amounts to numbers for money display
+  // Convert string amounts to numbers for money display; preserve the string when it would
+  // exceed Number.MAX_SAFE_INTEGER so MoneyDisplay (which accepts string|number|bigint) does
+  // not silently lose precision on very large aggregated paise totals.
   rows = rows.map((row) => {
     const converted: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(row)) {
       if (typeof value === 'string' && /paise$/i.test(key) && /^\d+$/.test(value)) {
-        converted[key] = Number(value);
+        converted[key] = value.length <= 15 ? Number(value) : value;
       } else {
         converted[key] = value;
       }

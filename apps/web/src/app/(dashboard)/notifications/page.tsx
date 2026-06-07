@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { RefreshCw } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   LoadingSpinner,
   ErrorMessage,
@@ -21,7 +22,11 @@ import {
 } from '@/components/ui/select';
 import { useAuth } from '@/providers/auth-provider';
 import { hasPermission } from '@/lib/permissions';
-import { useNotifications, useRetryNotification } from '@/hooks/useNotifications';
+import {
+  useNotifications,
+  useRetryNotification,
+  NOTIFICATIONS_PAGE_SIZE,
+} from '@/hooks/useNotifications';
 import { useToast } from '@/providers/toast-provider';
 
 // Mirrors OutboxStatus enum so ops can surface mid-batch 'processing' rows.
@@ -50,11 +55,16 @@ function NotificationsContent() {
   const [status, setStatus] = useState('all');
   const { showToast } = useToast();
   const retry = useRetryNotification();
+  const qc = useQueryClient();
 
-  const { data, isLoading, error } = useNotifications({
+  const { data, isLoading, error, isFetching } = useNotifications({
     page,
     status: status === 'all' ? undefined : status,
   });
+
+  function handleRefresh() {
+    qc.invalidateQueries({ queryKey: ['notifications'] });
+  }
 
   async function handleRetry(id: string) {
     try {
@@ -87,6 +97,15 @@ function NotificationsContent() {
             ))}
           </SelectContent>
         </Select>
+        <Button
+          variant="outline"
+          onClick={handleRefresh}
+          disabled={isFetching}
+          aria-label="Refresh notifications"
+        >
+          <RefreshCw className={`mr-1 h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
       </div>
 
       {isLoading && (
@@ -204,7 +223,7 @@ function NotificationsContent() {
           </div>
           <PaginationControls
             page={page}
-            totalPages={Math.ceil((data.total || 0) / 20)}
+            totalPages={Math.ceil((data.total || 0) / NOTIFICATIONS_PAGE_SIZE)}
             onPageChange={setPage}
           />
         </>

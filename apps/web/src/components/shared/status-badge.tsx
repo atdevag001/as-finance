@@ -88,7 +88,7 @@ const GROUP_STATUS_MAP: Record<string, StatusVariant> = {
 /** Maps notification statuses to visual variants */
 const NOTIFICATION_STATUS_MAP: Record<string, StatusVariant> = {
   pending: 'info',
-  processing: 'warning',
+  processing: 'info',
   sent: 'success',
   failed: 'warning',
   dead_letter: 'danger',

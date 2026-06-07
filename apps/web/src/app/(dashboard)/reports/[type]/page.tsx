@@ -35,14 +35,14 @@ const REPORT_LABELS: Record<string, string> = {
   penalty: 'Penalty',
   expense: 'Expense',
   income: 'Income',
-  'interest-accrual': 'Interest Accrual',
   // Accounting
   'trial-balance': 'Trial Balance',
   'profit-loss': 'Profit & Loss',
   'balance-sheet': 'Balance Sheet',
-  // Audit
+  // Audit & Activity (must stay in sync with apps/api/src/modules/report/report.service.ts REPORT_TYPES)
   'audit-trail': 'Audit Trail',
-  'user-activity': 'User Activity',
+  'dpd-aging': 'DPD Aging',
+  'officer-performance': 'Officer Performance',
 };
 
 const MONEY_COLUMN_PATTERNS = /paise|amount|balance|total|outstanding|principal|interest|penalty|inflow|outflow/i;
@@ -67,6 +67,8 @@ function ReportDetailContent() {
   const [status, setStatus] = useState('all');
   const [exporting, setExporting] = useState(false);
 
+  // Inverted ranges still hit the API (backend just returns empty), but we flag the UI so users don't read "no data" as a real result.
+  const isDateRangeInvalid = Boolean(startDate) && Boolean(endDate) && endDate < startDate;
   const queryParams = type === 'emi-schedule'
     ? { startDate, endDate, scheduleStatus: status }
     : { startDate, endDate };
@@ -163,11 +165,11 @@ function ReportDetailContent() {
       <div className="flex flex-wrap gap-2 items-end">
         <div className="space-y-1">
           <label className="text-xs text-muted-foreground">Start Date</label>
-          <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-40" />
+          <Input type="date" value={startDate} max={endDate || undefined} onChange={(e) => setStartDate(e.target.value)} className="w-40" />
         </div>
         <div className="space-y-1">
           <label className="text-xs text-muted-foreground">End Date</label>
-          <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-40" />
+          <Input type="date" value={endDate} min={startDate || undefined} onChange={(e) => setEndDate(e.target.value)} className="w-40" />
         </div>
         {type === 'emi-schedule' && (
           <div className="space-y-1">
@@ -186,15 +188,16 @@ function ReportDetailContent() {
           </div>
         )}
         <PermissionGate permission="report.export">
-          <Button variant="outline" size="sm" onClick={() => handleExport('pdf')} disabled={exporting}>
+          <Button variant="outline" size="sm" onClick={() => handleExport('pdf')} disabled={exporting || isDateRangeInvalid}>
             <Download className="h-4 w-4 mr-1" />{exporting ? 'Exporting…' : 'PDF'}
           </Button>
-          <Button variant="outline" size="sm" onClick={() => handleExport('excel')} disabled={exporting}>
+          <Button variant="outline" size="sm" onClick={() => handleExport('excel')} disabled={exporting || isDateRangeInvalid}>
             <Download className="h-4 w-4 mr-1" />{exporting ? 'Exporting…' : 'Excel'}
           </Button>
         </PermissionGate>
       </div>
 
+      {isDateRangeInvalid && <ErrorMessage message="End date must be on or after start date." />}
       {isLoading && <div className="flex justify-center py-8"><LoadingSpinner size="lg" /></div>}
       {error && <ErrorMessage message={(error as Error).message} />}
 

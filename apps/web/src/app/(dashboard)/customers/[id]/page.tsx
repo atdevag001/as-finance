@@ -191,6 +191,7 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
       alternateMobile: customer.alternate_mobile || '',
       occupation: customer.occupation || '',
       monthlyIncomeRupees: customer.monthly_income_paise ? String(customer.monthly_income_paise / 100) : '',
+      workOrBusinessDetails: customer.work_or_business_details || '',
       addressLine1: customer.address_line1 || '',
       addressLine2: customer.address_line2 || '',
       city: customer.city || '',
@@ -216,6 +217,7 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
         alternateMobile: customer.alternate_mobile || '',
         occupation: customer.occupation || '',
         monthlyIncomeRupees: customer.monthly_income_paise ? String(customer.monthly_income_paise / 100) : '',
+        workOrBusinessDetails: customer.work_or_business_details || '',
         addressLine1: customer.address_line1 || '',
         addressLine2: customer.address_line2 || '',
         city: customer.city || '',
@@ -248,6 +250,8 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
       }
 
       if (Object.keys(changedFields).length === 0) {
+        // Surface a neutral toast so the user knows the Save click was acknowledged.
+        showToast({ message: 'No changes to save.' });
         setShowEditDialog(false);
         return;
       }
@@ -301,13 +305,10 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
   async function handleViewDocument(docId: string, fileId: string) {
     setViewingDocId(docId);
     try {
-      const blob = await apiClient.getBlob(`/documents/${fileId}/download`);
-      const url = URL.createObjectURL(blob);
-      const win = window.open(url, '_blank');
-      // Revoke once the popup has had time to load the URL. Most browsers buffer
-      // the blob on open() but spec is fuzzy; 5s is enough for the initial fetch
-      // and short enough to avoid memory leaks on rapid views.
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      // Prefer the pre-signed S3 URL (15-min expiry) over a blob download — no
+      // revoke-timing race on slow mobile networks and saves API bandwidth.
+      const res = await apiClient.get<{ data: { url: string } }>(`/documents/${fileId}/url`);
+      const win = window.open(res.data.url, '_blank');
       if (!win) {
         // Popup blocked — surface the URL fallback
         showToast({
@@ -547,7 +548,14 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
             {/* Upload Section */}
             <PermissionGate permission="customer.upload_doc">
               <div className="flex flex-wrap items-center gap-3 pt-2 border-t">
-                <Select value={selectedDocType} onValueChange={setSelectedDocType}>
+                <Select
+                  value={selectedDocType}
+                  onValueChange={(v) => {
+                    // Drop stale upload error so it doesn't linger after the user pivots to retry.
+                    setSelectedDocType(v);
+                    setUploadError(null);
+                  }}
+                >
                   <SelectTrigger className="w-40">
                     <SelectValue placeholder="Document Type" />
                   </SelectTrigger>
@@ -762,6 +770,15 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
                 step="0.01"
                 value={editFormData['monthlyIncomeRupees'] ?? ''}
                 onChange={(e) => setEditFormData(prev => ({ ...prev, monthlyIncomeRupees: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="edit-workOrBusinessDetails">Work/Business Details</Label>
+              <Input
+                id="edit-workOrBusinessDetails"
+                value={editFormData['workOrBusinessDetails'] ?? ''}
+                onChange={(e) => setEditFormData(prev => ({ ...prev, workOrBusinessDetails: e.target.value }))}
+                placeholder="e.g., Shop owner at Main Market"
               />
             </div>
             <div className="space-y-2 sm:col-span-2">

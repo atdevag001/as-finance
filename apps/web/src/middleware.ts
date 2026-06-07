@@ -50,10 +50,10 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Check token expiry (with 30s buffer)
+  // Treat tokens as expired 30s early so downstream API calls don't race the exp boundary
   const now = Math.floor(Date.now() / 1000);
-  if (payload.exp < now - 30) {
-    // Token expired — let the client-side refresh handle it,
+  if (payload.exp < now + 30) {
+    // Token expired (or about to) — let the client-side refresh handle it,
     // but redirect to login if clearly stale
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('redirect', pathname);

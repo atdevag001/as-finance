@@ -60,6 +60,9 @@ function extractActionError(err: unknown, fallback: string): string {
   return (err as Error)?.message || fallback;
 }
 
+// Keep in sync with apps/api/src/modules/penalty/dto/waive-penalty.dto.ts @MinLength(5).
+const WAIVE_REASON_MIN_LENGTH = 5;
+
 // Status history type
 interface StatusTransition {
   id: string;
@@ -137,16 +140,18 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
   const isActionInProgress = loanAction.isPending || waivePenalty.isPending ||
     generateQuote.isPending || executeForeclosure.isPending;
 
-  // Check quote expiry — only tick while the dialog is open with an active quote
+  // Schedule a single flip-to-expired timer instead of a 1Hz poll for a 24h quote.
+  // Cap delay at the 32-bit setTimeout limit to avoid immediate misfires.
   useEffect(() => {
     if (!foreclosureOpen || !foreclosureQuote) return;
-    const checkExpiry = () => {
-      const expired = new Date(foreclosureQuote.quoteExpiresAt) <= new Date();
-      setQuoteExpired(expired);
-    };
-    checkExpiry();
-    const interval = setInterval(checkExpiry, 1000);
-    return () => clearInterval(interval);
+    const msUntilExpiry = new Date(foreclosureQuote.quoteExpiresAt).getTime() - Date.now();
+    if (msUntilExpiry <= 0) {
+      setQuoteExpired(true);
+      return;
+    }
+    setQuoteExpired(false);
+    const timer = setTimeout(() => setQuoteExpired(true), Math.min(msUntilExpiry, 2_147_483_647));
+    return () => clearTimeout(timer);
   }, [foreclosureOpen, foreclosureQuote]);
 
   async function handleSubmitForReview() {
@@ -207,7 +212,9 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
         body: {
           idempotencyKey,
           mode: disburseMode,
-          referenceNumber: disburseMode === 'bank_transfer' ? disburseReference : undefined,
+          // Trim so whitespace-only entries don't satisfy the bank-transfer reference rule.
+          referenceNumber:
+            disburseMode === 'bank_transfer' ? disburseReference.trim() || undefined : undefined,
           firstEmiDate: disburseFirstEmiDate || undefined,
         },
       });
@@ -261,7 +268,17 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
   }
 
   async function handleExecuteForeclosure() {
-    if (!foreclosureQuote || quoteExpired || !foreclosurePaymentMode) return;
+    // Defensive: ConfirmDialog `disabled` already blocks the click; surface a
+    // message instead of silently no-oping if a stale render slips through.
+    if (!foreclosureQuote) return;
+    if (quoteExpired) {
+      setActionError('The foreclosure quote has expired. Please generate a new quote.');
+      return;
+    }
+    if (!foreclosurePaymentMode) {
+      setActionError('Please select a payment mode.');
+      return;
+    }
     setActionError(null);
     try {
       const idempotencyKey = crypto.randomUUID();
@@ -295,8 +312,9 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
     if (!selectedPenalty) return;
     // Defensive: ConfirmDialog's `disabled` already gates the click, but a
     // misclick on a stale render would otherwise be a silent no-op.
-    if (waiveReason.length < 10 || !waiveApproverId) {
-      setActionError('Please enter a reason of at least 10 characters and select an approver.');
+    // Keep the 5-char floor aligned with WaivePenaltyDto's @MinLength(5).
+    if (waiveReason.trim().length < WAIVE_REASON_MIN_LENGTH || !waiveApproverId) {
+      setActionError(`Please enter a reason of at least ${WAIVE_REASON_MIN_LENGTH} characters and select an approver.`);
       return;
     }
     setActionError(null);
@@ -324,7 +342,11 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
   }
 
   async function handleRegenerateSchedule() {
-    if (!regenerateFirstEmiDate) return;
+    // Mirrors the dialog's `disabled` guard so a stale-state submit can't no-op silently.
+    if (!regenerateFirstEmiDate) {
+      setActionError('Please select a new first EMI date.');
+      return;
+    }
     setActionError(null);
     try {
       await loanAction.mutateAsync({
@@ -348,14 +370,18 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
   const canReview = loan.status === 'submitted';
   const canApproveReject = loan.status === 'under_review';
   const canDisburse = loan.status === 'approved';
-  const canForeclose = loan.status === 'active' || loan.status === 'overdue';
+  // Hide Foreclosure when outstanding is zero — those loans should go through Close,
+  // and a near-zero quote (interest/penalties only) is a confusing user trap.
+  const canForeclose = (loan.status === 'active' || loan.status === 'overdue') &&
+    Number(loan.cached_outstanding_paise ?? 0) > 0;
 
   const penalties = penaltiesData ?? [];
   const pendingPenalties = penalties.filter(p => !p.is_paid && !p.is_waived);
 
-  // Loan can be closed only if: active/overdue, zero outstanding, and no pending penalties
+  // Loan can be closed only if: active/overdue, zero outstanding (±1 paise to match
+  // the backend tolerance in loan.service.closeLoan), and no pending penalties.
   const canClose = (loan.status === 'active' || loan.status === 'overdue') &&
-    loan.cached_outstanding_paise != null && Number(loan.cached_outstanding_paise) === 0 &&
+    loan.cached_outstanding_paise != null && Math.abs(Number(loan.cached_outstanding_paise)) <= 1 &&
     pendingPenalties.length === 0;
 
   return (
@@ -904,6 +930,9 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
             description={`Disbursing loan ${loan.loan_number}`}
             confirmLabel="Disburse"
             loading={isActionInProgress}
+            // Gate on a non-empty reference for bank transfers — backend's @ValidateIf
+            // requires it, and a silent 400 would otherwise feel like a broken button.
+            disabled={disburseMode === 'bank_transfer' && !disburseReference.trim()}
             onConfirm={handleDisburse}
           >
             <div className="space-y-4 py-2">
@@ -939,14 +968,19 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
               </div>
               {disburseMode === 'bank_transfer' && (
                 <div className="space-y-2">
-                  <Label htmlFor="disburse-reference">Reference Number</Label>
+                  <Label htmlFor="disburse-reference">Reference Number *</Label>
                   <Input
                     id="disburse-reference"
                     placeholder="Enter bank transfer reference…"
                     value={disburseReference}
                     onChange={(e) => setDisburseReference(e.target.value)}
                     disabled={isActionInProgress}
+                    required
+                    aria-invalid={!disburseReference.trim()}
                   />
+                  {!disburseReference.trim() && (
+                    <p className="text-xs text-destructive">Required for bank transfers</p>
+                  )}
                 </div>
               )}
               <div className="space-y-2">
@@ -1045,7 +1079,13 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
         loading={executeForeclosure.isPending}
         // Force a rebate reason whenever a rebate is set — audit trail and
         // backend rebateAuthorizedBy derivation rely on a clear policy intent.
-        disabled={!!parseRebatePaise(rebateRupees) && !rebateReason.trim()}
+        // Also gate on quote freshness and a chosen payment mode so the confirm
+        // doesn't silently no-op when handleExecuteForeclosure's guard returns early.
+        disabled={
+          quoteExpired ||
+          !foreclosurePaymentMode ||
+          (!!parseRebatePaise(rebateRupees) && !rebateReason.trim())
+        }
         onConfirm={handleExecuteForeclosure}
       >
         <div className="space-y-4 py-2">
@@ -1115,12 +1155,12 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
         loading={waivePenalty.isPending}
         // Block the click when the form is invalid so the user is never left
         // wondering why the confirm button silently does nothing.
-        disabled={waiveReason.length < 10 || !waiveApproverId}
+        disabled={waiveReason.trim().length < WAIVE_REASON_MIN_LENGTH || !waiveApproverId}
         onConfirm={handleWaivePenalty}
       >
         <div className="space-y-4 py-2">
           <div className="space-y-2">
-            <Label htmlFor="waive-reason">Reason (min 10 characters)</Label>
+            <Label htmlFor="waive-reason">Reason (min {WAIVE_REASON_MIN_LENGTH} characters)</Label>
             <Input
               id="waive-reason"
               placeholder="Enter reason for waiving penalty…"
@@ -1128,8 +1168,10 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
               onChange={(e) => setWaiveReason(e.target.value)}
               disabled={waivePenalty.isPending}
             />
-            {waiveReason.length > 0 && waiveReason.length < 10 && (
-              <p className="text-xs text-destructive">{10 - waiveReason.length} more characters required</p>
+            {waiveReason.trim().length > 0 && waiveReason.trim().length < WAIVE_REASON_MIN_LENGTH && (
+              <p className="text-xs text-destructive">
+                {WAIVE_REASON_MIN_LENGTH - waiveReason.trim().length} more character{WAIVE_REASON_MIN_LENGTH - waiveReason.trim().length === 1 ? '' : 's'} required
+              </p>
             )}
           </div>
           <div className="space-y-2">
@@ -1177,6 +1219,9 @@ export default function LoanDetailPage({ params }: { params: { id: string } }) {
         description="Set a new first EMI date. This will regenerate the entire repayment schedule with new due dates."
         confirmLabel="Regenerate Schedule"
         loading={isActionInProgress}
+        // Block the click when no date is picked so the inline hint is visible
+        // and the confirm doesn't look like a broken submit.
+        disabled={!regenerateFirstEmiDate}
         onConfirm={handleRegenerateSchedule}
       >
         <div className="space-y-2 py-2">

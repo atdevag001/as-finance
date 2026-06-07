@@ -133,7 +133,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setAccessToken(null);
             setTokenCookie(null);
             setState({ user: null, isLoading: false, isAuthenticated: false });
-            router.push(`/login?redirect=${encodeURIComponent(pathname || '/')}`);
+            // replace (not push) so Back after re-auth doesn't bounce through /login
+            router.replace(`/login?redirect=${encodeURIComponent(pathname || '/')}`);
           }
         }
       }
@@ -143,7 +144,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAccessToken(null);
         setTokenCookie(null);
         setState({ user: null, isLoading: false, isAuthenticated: false });
-        router.push(`/login?redirect=${encodeURIComponent(pathname || '/')}`);
+        router.replace(`/login?redirect=${encodeURIComponent(pathname || '/')}`);
       }
     };
 

@@ -70,6 +70,17 @@ export default function NewLoanProductPage() {
       return;
     }
 
+    // Normalize and validate locally so we surface inline errors instead of a generic backend INVALID_ALLOCATION_ORDER.
+    const allowedAllocationTokens = ['penalty', 'interest', 'principal'] as const;
+    const allocationOrder = formData.allocationOrder
+      .split(',')
+      .map(s => s.trim().toLowerCase())
+      .filter(Boolean);
+    if (allocationOrder.length !== 3 || !allocationOrder.every(t => (allowedAllocationTokens as readonly string[]).includes(t)) || new Set(allocationOrder).size !== 3) {
+      setError('Allocation order must list each of penalty, interest, principal exactly once (comma-separated).');
+      return;
+    }
+
     // Build payload matching backend DTO (camelCase)
     const payload: Record<string, unknown> = {
       name: formData.name.trim(),
@@ -80,7 +91,7 @@ export default function NewLoanProductPage() {
       maxPrincipalPaise: Math.round(maxP * 100),
       minTenureMonths: minT,
       maxTenureMonths: maxT,
-      allocationOrder: formData.allocationOrder.split(',').map(s => s.trim()),
+      allocationOrder,
     };
 
     // Add processing fee if specified (as percentage type with bps value)

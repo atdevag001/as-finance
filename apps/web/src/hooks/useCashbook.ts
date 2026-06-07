@@ -6,6 +6,13 @@ import { apiClient } from '@/lib/api-client';
 // Paise fields arrive as strings: server-side BigInt serializes via JSON.stringify (no native bigint
 // support) and computeDailySummary explicitly calls .toString(). Typing as number silently lost
 // precision past 2^53 paise (~₹90 lakh crore).
+export interface IncomeBySource {
+  accountId: string;
+  accountCode: string;
+  accountName: string;
+  amountPaise: string;
+}
+
 export interface CashbookSummary {
   date: string;
   openingBalancePaise: string;
@@ -13,6 +20,8 @@ export interface CashbookSummary {
   cashOutflowsPaise: string;
   closingBalancePaise: string;
   hasDiscrepancy: boolean;
+  // Income classification by source account (Requirement 13.6) — surfaced so the cashbook page can render it.
+  incomeBySource: IncomeBySource[];
   transactionCount: number;
 }
 

@@ -23,7 +23,7 @@ function toPaiseBigInt(paise: number | string | bigint): bigint {
  * Indian grouping: last 3 digits, then groups of 2.
  * Example: 12345678 paise → "₹1,23,456.78"
  */
-function formatPaiseToINR(paise: number | string | bigint): string {
+export function formatPaiseToINR(paise: number | string | bigint): string {
   const value = toPaiseBigInt(paise);
   const isNegative = value < BigInt(0);
   const absPaise = isNegative ? -value : value;

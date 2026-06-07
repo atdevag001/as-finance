@@ -15,6 +15,7 @@ import { MoneyDisplay } from './money-display';
 import { DateDisplay } from './date-display';
 import { useCreateReversal } from '@/hooks/useReversals';
 import { useToast } from '@/providers/toast-provider';
+import { ApiClientError } from '@/lib/api-client';
 
 export interface ReversalCollection {
   id: string;
@@ -32,6 +33,26 @@ interface ReversalDialogProps {
 
 const MIN_REASON_LENGTH = 10;
 
+// crypto.randomUUID throws in insecure (HTTP) contexts / older browsers — mirror api-client.ts fallback so the user always gets feedback.
+function newIdempotencyKey(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `idem-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+// Maps typed reversal API codes to actionable officer guidance — fall back to server message for unknown codes.
+function reversalErrorMessage(err: ApiClientError): string {
+  switch (err.body.code) {
+    case 'COLLECTION_ALREADY_REVERSED':
+      return 'This collection has already been reversed. Refresh the list to see its current status.';
+    case 'CANNOT_REVERSE_REVERSAL':
+      return 'A reversal entry cannot itself be reversed.';
+    default:
+      return err.body.message || 'Failed to reverse collection';
+  }
+}
+
 export function ReversalDialog({ open, onOpenChange, collection }: ReversalDialogProps) {
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +67,7 @@ export function ReversalDialog({ open, onOpenChange, collection }: ReversalDialo
 
   useEffect(() => {
     if (open && collection && idempotencyKeyRef.current === null) {
-      idempotencyKeyRef.current = crypto.randomUUID();
+      idempotencyKeyRef.current = newIdempotencyKey();
     }
   }, [open, collection]);
 
@@ -63,10 +84,11 @@ export function ReversalDialog({ open, onOpenChange, collection }: ReversalDialo
   async function handleConfirm() {
     if (!collection || !isReasonValid) return;
     setError(null);
-    if (idempotencyKeyRef.current === null) {
-      idempotencyKeyRef.current = crypto.randomUUID();
-    }
     try {
+      // Inside try so any thrown error from key generation surfaces as a UI error rather than an unhandled rejection.
+      if (idempotencyKeyRef.current === null) {
+        idempotencyKeyRef.current = newIdempotencyKey();
+      }
       await createReversal.mutateAsync({
         collectionId: collection.id,
         reason: reason.trim(),
@@ -78,7 +100,11 @@ export function ReversalDialog({ open, onOpenChange, collection }: ReversalDialo
       idempotencyKeyRef.current = null;
       onOpenChange(false);
     } catch (err) {
-      setError((err as Error).message || 'Failed to reverse collection');
+      if (err instanceof ApiClientError) {
+        setError(reversalErrorMessage(err));
+      } else {
+        setError((err as Error).message || 'Failed to reverse collection');
+      }
     }
   }
 
@@ -122,9 +148,12 @@ export function ReversalDialog({ open, onOpenChange, collection }: ReversalDialo
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             disabled={isProcessing}
+            aria-required="true"
+            aria-invalid={reason.length > 0 && !isReasonValid}
+            aria-describedby={`reversal-reason-help${error ? ' reversal-reason-error' : ''}`}
           />
           {reason.length > 0 && !isReasonValid && (
-            <p className="text-xs text-destructive">
+            <p id="reversal-reason-help" className="text-xs text-destructive">
               Reason must be at least {MIN_REASON_LENGTH} characters ({reason.trim().length}/{MIN_REASON_LENGTH})
             </p>
           )}
@@ -132,7 +161,7 @@ export function ReversalDialog({ open, onOpenChange, collection }: ReversalDialo
 
         {/* Error message */}
         {error && (
-          <p className="text-sm text-destructive">{error}</p>
+          <p id="reversal-reason-error" className="text-sm text-destructive">{error}</p>
         )}
 
         <DialogFooter>

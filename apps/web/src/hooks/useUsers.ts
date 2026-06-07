@@ -11,7 +11,6 @@ export interface User {
   mobile: string;
   role: string;
   is_active: boolean;
-  area?: string;
   created_at: string;
 }
 
