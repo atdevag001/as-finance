@@ -8,11 +8,74 @@
  */
 
 import { TEST_USERS, type UserRole } from './auth.fixture';
+import * as fs from 'fs';
+import * as path from 'path';
 
 const API_BASE = 'http://localhost:3001';
+const AUTH_DIR = path.join(__dirname, '..', '.auth');
 
 // Cache tokens to avoid repeated login calls
 const tokenCache: Map<string, string> = new Map();
+
+/**
+ * Read an access_token cookie from the storage state file written by
+ * auth.setup.ts. Returns null if no fresh token is available. Saves
+ * us from hammering /auth/login from N parallel workers (the route
+ * rate-limits at 5 req / 60s).
+ */
+function readTokenFromStorageState(role: UserRole): string | null {
+  const file = path.join(AUTH_DIR, `${role}.json`);
+  if (!fs.existsSync(file)) return null;
+  try {
+    const json = JSON.parse(fs.readFileSync(file, 'utf8')) as {
+      cookies: Array<{ name: string; value: string }>;
+    };
+    const cookie = json.cookies?.find((c) => c.name === 'access_token');
+    if (!cookie?.value) return null;
+    // Decode the JWT exp claim directly — the cookie's `expires` field
+    // reflects Set-Cookie Max-Age (hardcoded 15min in auth.controller),
+    // not the JWT's actual TTL (JWT_EXPIRY env). With JWT_EXPIRY=60m the
+    // JWT outlasts the cookie maxAge.
+    const parts = cookie.value.split('.');
+    if (parts.length < 2) return null;
+    try {
+      const payload = JSON.parse(
+        Buffer.from(parts[1]!, 'base64url').toString('utf8'),
+      ) as { exp?: number };
+      if (!payload.exp || payload.exp < Date.now() / 1000 + 30) return null;
+    } catch {
+      return null;
+    }
+    return cookie.value;
+  } catch {
+    return null;
+  }
+}
+
+// Cache csrf_token cookies per token so we don't fetch one before every
+// mutating request. The backend (audit pass) requires x-csrf-token on
+// every non-GET/HEAD/OPTIONS request via CsrfGuard. We grab one via a
+// safe-method probe and reuse it.
+const csrfCache: Map<string, string> = new Map();
+
+async function getCsrfToken(token: string): Promise<string> {
+  const cached = csrfCache.get(token);
+  if (cached) return cached;
+
+  // /auth/refresh is @Public and always issues csrf_token on response.
+  // We hit it intentionally; the body is irrelevant — the Set-Cookie is.
+  const res = await fetch(`${API_BASE}/auth/refresh`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  const setCookie = res.headers.get('set-cookie') ?? '';
+  const match = setCookie.match(/csrf_token=([^;]+)/);
+  if (!match) {
+    throw new Error('Could not obtain csrf_token from /auth/refresh');
+  }
+  csrfCache.set(token, match[1]!);
+  return match[1]!;
+}
 
 /**
  * Get a JWT token for a user by logging in via the API.
@@ -48,6 +111,11 @@ export async function getAuthToken(username: string, password: string): Promise<
  * Get a JWT token for a specific role.
  */
 export async function getTokenForRole(role: UserRole): Promise<string> {
+  // Prefer the cookie cached by auth-setup so N parallel workers don't
+  // all hit /auth/login (rate-limited at 5/60s). Fall back to a real
+  // login only when the storage state file is missing or expired.
+  const cached = readTokenFromStorageState(role);
+  if (cached) return cached;
   const user = TEST_USERS[role];
   return getAuthToken(user.username, user.password);
 }
@@ -61,12 +129,22 @@ export async function apiRequest<T = unknown>(
   token: string,
   body?: Record<string, unknown>,
 ): Promise<T> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`,
+  };
+
+  // CSRF: any non-safe method needs the double-submit token. Fetch once
+  // per token and reuse — the cookie is good for 24h.
+  if (method !== 'GET') {
+    const csrf = await getCsrfToken(token);
+    headers['Cookie'] = `csrf_token=${csrf}`;
+    headers['x-csrf-token'] = csrf;
+  }
+
   const res = await fetch(`${API_BASE}${path}`, {
     method,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
+    headers,
     body: body ? JSON.stringify(body) : undefined,
   });
 
@@ -132,31 +210,37 @@ export async function createTestCustomer(
 export async function createTestLoan(
   token: string,
   customerId: string,
-  productId?: string,
+  productVersionId?: string,
   overrides: Partial<{
     principalPaise: number;
     tenureMonths: number;
     purpose: string;
   }> = {},
 ): Promise<string> {
-  // Get first active loan product if not provided
-  if (!productId) {
-    const products = await apiRequest<{ data: Array<{ id: string; is_active: boolean }> }>(
+  // Get the current_version_id of the first active loan product if not
+  // provided. The loan DTO requires a version UUID, not a product UUID
+  // (loan-products are versioned so historical loans pin to the version
+  // they were created under).
+  if (!productVersionId) {
+    const products = await apiRequest<{
+      data: Array<{ id: string; current_version_id: string; current_version?: { id: string }; is_active: boolean }>
+    }>(
       'GET',
-      '/loan-products?limit=1',
+      '/loan-products?limit=10',
       token,
     );
-    if (!products.data || products.data.length === 0) {
-      throw new Error('No loan products found');
-    }
-    productId = products.data[0].id;
+    const active = (products.data ?? []).find(
+      (p) => p.is_active && (p.current_version_id ?? p.current_version?.id),
+    );
+    if (!active) throw new Error('No active loan products with a current version found');
+    productVersionId = active.current_version_id ?? active.current_version!.id;
   }
 
   const loan = {
-    customer_id: customerId,
-    product_id: productId,
-    principal_paise: overrides.principalPaise ?? 5000000, // ₹50,000
-    tenure_months: overrides.tenureMonths ?? 12,
+    customerId,
+    productVersionId,
+    principalPaise: overrides.principalPaise ?? 5000000, // ₹50,000
+    tenureMonths: overrides.tenureMonths ?? 12,
     purpose: overrides.purpose ?? 'Test loan purpose',
   };
 
@@ -190,15 +274,23 @@ export async function advanceLoanToStatus(
     return; // Already at or past target status
   }
 
-  // Advance through each status
+  // The audit added a maker-checker rule: whoever created the loan
+  // cannot approve it. Use a different actor (super_admin) for the
+  // approve step. Same actor is fine for submit / review / disburse.
+  let approverToken: string | null = null;
+
   for (let i = currentIndex + 1; i <= targetIndex; i++) {
     const status = statusOrder[i];
     const action = statusActions[status];
-    if (action) {
-      await apiRequest('POST', `/loans/${loanId}${action}`, token, {
-        disbursement_mode: status === 'disbursed' ? 'cash' : undefined,
-      });
-    }
+    if (!action) continue;
+    const actorToken =
+      status === 'approved' ? (approverToken ??= await getTokenForRole('super_admin')) : token;
+    await apiRequest(
+      'POST',
+      `/loans/${loanId}${action}`,
+      actorToken,
+      status === 'disbursed' ? { mode: 'cash' } : undefined,
+    );
   }
 }
 
@@ -211,11 +303,11 @@ export async function createTestCollection(
   amountPaise: number = 500000, // ₹5,000
 ): Promise<string> {
   const collection = {
-    loan_id: loanId,
-    amount_paise: amountPaise,
-    payment_mode: 'cash',
-    payment_date: new Date().toISOString().split('T')[0],
-    idempotency_key: crypto.randomUUID(),
+    loanId,
+    amountPaise,
+    paymentMode: 'cash',
+    paymentDate: new Date().toISOString().split('T')[0],
+    idempotencyKey: crypto.randomUUID(),
   };
 
   const result = await apiRequest<{ id: string }>('POST', '/collections', token, collection);
@@ -318,6 +410,7 @@ function generateValidPAN(): string {
  */
 export function clearTokenCache(): void {
   tokenCache.clear();
+  csrfCache.clear();
 }
 
 /**

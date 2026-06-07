@@ -423,3 +423,188 @@ test.describe('Rejected Loan State', () => {
     await expect(managerPage.getByRole('button', { name: /reject/i })).not.toBeVisible();
   });
 });
+
+/**
+ * Reject Reason Validation
+ *
+ * Documents the EXPECTED client-side validation contract for the reject dialog:
+ *  - Empty reason → confirm blocked, no /reject API call fires.
+ *  - Reason shorter than the 10-character minimum → inline error shown, confirm blocked.
+ *  - Reason ≥ 10 characters → confirm enabled, /reject POST is issued.
+ *
+ * Gap (medium priority): the success path is already covered in "Rejection Flow",
+ * but nothing asserted that the dialog short-circuits a bad reason BEFORE the API call.
+ * Without this guard the user sees a generic 400 toast instead of an inline hint, and
+ * the operator can't tell which character count is required.
+ *
+ * NOTE: these tests intercept POST /loans/:id/reject and count requests, so they prove
+ * the *absence* of a network call when the input is invalid — not just that a UI message
+ * happens to be visible.
+ */
+test.describe('Loan Reject — Reason Validation', () => {
+  // Keep in sync with the dialog's WAIVE_REASON_MIN_LENGTH-style constant once added
+  // to loans/[id]/page.tsx for the reject flow.
+  const REJECT_REASON_MIN_LENGTH = 10;
+
+  let foToken: string;
+  let managerToken: string;
+  let productVersionId: string;
+
+  test.beforeAll(async () => {
+    foToken = await getTokenForRole('field_officer');
+    managerToken = await getTokenForRole('manager');
+    productVersionId = await getProductVersionId(foToken);
+  });
+
+  async function createUniqueCustomer(): Promise<string> {
+    return await createTestCustomer(foToken);
+  }
+
+  /**
+   * Seed a fresh under_review loan and open its reject dialog. Returns the loanId
+   * and a counter that is incremented every time a POST /loans/{id}/reject is sent.
+   * Tests assert `rejectPostCount === 0` to prove validation short-circuited the API.
+   */
+  async function openRejectDialogForFreshLoan(managerPage: import('./fixtures').Page) {
+    const customerId = await createUniqueCustomer();
+    const { id: loanId } = await createLoan(foToken, customerId, productVersionId);
+    await submitAndReviewLoan(foToken, managerToken, loanId);
+
+    // Count POSTs to /loans/{loanId}/reject so we can assert the API is NOT hit
+    // when validation fails. Forward all requests untouched so the success path
+    // still works end-to-end.
+    const state = { rejectPostCount: 0 };
+    await managerPage.route(`**/loans/${loanId}/reject`, async (route) => {
+      if (route.request().method() === 'POST') state.rejectPostCount += 1;
+      await route.continue();
+    });
+
+    await managerPage.goto(`/loans/${loanId}`);
+    await managerPage.waitForLoadState('domcontentloaded');
+    await expect(
+      managerPage.locator('span', { hasText: /under.?review/i }).first(),
+    ).toBeVisible({ timeout: 30_000 });
+
+    // Open the reject dialog. Scope to the page (not the dialog) so we click the
+    // toolbar button, not the dialog's own confirm button.
+    await managerPage.getByRole('button', { name: /^reject$/i }).click();
+
+    const dialog = managerPage.getByRole('dialog');
+    await expect(dialog).toBeVisible({ timeout: 5_000 });
+
+    return { loanId, dialog, state };
+  }
+
+  test('empty reason keeps confirm blocked and does NOT call the reject API', async ({ managerPage }) => {
+    const { dialog, state } = await openRejectDialogForFreshLoan(managerPage);
+
+    // Leave the reason input empty and click the dialog's Reject button.
+    const reasonInput = dialog.locator('input#reject-reason');
+    await expect(reasonInput).toBeVisible();
+    await expect(reasonInput).toHaveValue('');
+
+    // Click the confirm button inside the dialog (the page-level Reject button
+    // is now outside the dialog DOM scope, so this is unambiguous).
+    await dialog.getByRole('button', { name: /^reject$/i }).click();
+
+    // Behaviour: dialog stays open (no transition fired) AND no POST was issued.
+    // Brief settle window so any in-flight click handler has a chance to (mis)fire.
+    await managerPage.waitForTimeout(500);
+    await expect(dialog).toBeVisible();
+    expect(state.rejectPostCount).toBe(0);
+
+    // The loan must still be in under_review — visible behaviour, not just a
+    // hidden flag — confirming the action was truly aborted.
+    await expect(
+      managerPage.locator('span', { hasText: /under.?review/i }).first(),
+    ).toBeVisible();
+  });
+
+  test('reason shorter than 10 characters shows inline error and blocks the API call', async ({ managerPage }) => {
+    const { dialog, state } = await openRejectDialogForFreshLoan(managerPage);
+
+    // 5 characters — clearly under the 10-char floor.
+    const shortReason = 'short';
+    expect(shortReason.length).toBeLessThan(REJECT_REASON_MIN_LENGTH);
+
+    const reasonInput = dialog.locator('input#reject-reason');
+    await reasonInput.fill(shortReason);
+
+    // Inline guidance: either a character-count hint OR a "min N characters"
+    // helper that mirrors the penalty-waive dialog pattern. Accept any
+    // destructive-styled helper text near the input as the inline error so this
+    // test isn't brittle to copy changes.
+    const inlineError = dialog.locator('p.text-destructive, [role="alert"]')
+      .filter({ hasText: /character|minimum|at least|too short/i })
+      .first();
+    await expect(inlineError).toBeVisible({ timeout: 15_000 });
+
+    // Try to submit — the confirm should be blocked by the dialog `disabled` prop.
+    await dialog.getByRole('button', { name: /^reject$/i }).click();
+    await managerPage.waitForTimeout(500);
+
+    // No API call fired and the dialog is still open with the short value retained
+    // so the user can extend it rather than retype.
+    expect(state.rejectPostCount).toBe(0);
+    await expect(dialog).toBeVisible();
+    await expect(reasonInput).toHaveValue(shortReason);
+  });
+
+  test('reason at or above 10 characters enables confirm and fires the reject API', async ({ managerPage }) => {
+    const { loanId, dialog, state } = await openRejectDialogForFreshLoan(managerPage);
+
+    // Exactly 10 chars — boundary case that proves the >= comparison, not >.
+    const validReason = 'KYC failed';
+    expect(validReason.length).toBe(REJECT_REASON_MIN_LENGTH);
+
+    await dialog.locator('input#reject-reason').fill(validReason);
+
+    // No inline error helper should be visible for a valid reason.
+    const inlineError = dialog.locator('p.text-destructive')
+      .filter({ hasText: /character|minimum|at least|too short/i });
+    await expect(inlineError).toHaveCount(0);
+
+    await dialog.getByRole('button', { name: /^reject$/i }).click();
+
+    // Dialog closes, status flips to rejected, success toast fires, and exactly
+    // one POST was sent — the real proof that validation didn't suppress a
+    // legitimate submit.
+    await expect(dialog).not.toBeVisible({ timeout: 10_000 });
+    await expect(
+      managerPage.locator('span', { hasText: /rejected/i }).first(),
+    ).toBeVisible({ timeout: 10_000 });
+    await expect(managerPage.getByText('Loan rejected')).toBeVisible({ timeout: 5_000 });
+    expect(state.rejectPostCount).toBe(1);
+
+    // Sanity: the reason we typed is persisted on the loan and visible after reload
+    // (status history surfaces it) — guarantees the validated value reached the API
+    // rather than being silently trimmed away.
+    await managerPage.reload();
+    await managerPage.waitForLoadState('domcontentloaded');
+    const statusHistory = managerPage.getByRole('heading', { name: 'Status History' });
+    await statusHistory.scrollIntoViewIfNeeded();
+    await expect(managerPage.getByText(new RegExp(validReason, 'i'))).toBeVisible({ timeout: 10_000 });
+
+    // Loan id is used for the route filter — referenced here so the closure
+    // capture isn't accidentally unused if the assertion above is ever removed.
+    expect(loanId).toBeTruthy();
+  });
+
+  test('whitespace-only reason is treated as empty and does NOT call the API', async ({ managerPage }) => {
+    const { dialog, state } = await openRejectDialogForFreshLoan(managerPage);
+
+    // 15 spaces — passes a naive `length >= 10` check but should fail any
+    // trim-aware validator. Catches the "looks long enough" bypass.
+    await dialog.locator('input#reject-reason').fill('               ');
+
+    await dialog.getByRole('button', { name: /^reject$/i }).click();
+    await managerPage.waitForTimeout(500);
+
+    // Behaviour: same as empty — dialog stays, no network call.
+    expect(state.rejectPostCount).toBe(0);
+    await expect(dialog).toBeVisible();
+    await expect(
+      managerPage.locator('span', { hasText: /under.?review/i }).first(),
+    ).toBeVisible();
+  });
+});

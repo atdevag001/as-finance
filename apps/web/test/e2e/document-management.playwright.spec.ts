@@ -292,4 +292,194 @@ test.describe('Document Management', () => {
       }
     });
   });
+
+  /**
+   * Document Delete Flow — covers the destructive path that was previously
+   * untested: Trash icon -> ConfirmDialog -> DELETE /documents/:fileId ->
+   * list refresh, plus the 403 SCOPE_VIOLATION toast for non-privileged roles.
+   *
+   * The trash button is wrapped in a PermissionGate for `customer.upload_doc`,
+   * so roles without that permission (auditor) will not see it at all. To
+   * exercise the "You do not have permission to delete" toast we mock the
+   * DELETE response with 403 so a manager (who CAN see the button) drives the
+   * UI through the unhappy path deterministically.
+   */
+  test.describe('Document Delete', () => {
+    /**
+     * Upload a fresh document directly via the API and return the file_id and
+     * document_type so each delete test starts from a known seeded row.
+     * Skips the test if the upload endpoint is unreachable / S3 unavailable.
+     */
+    async function seedDocument(
+      token: string,
+      targetCustomerId: string,
+      documentType: 'aadhaar_front' | 'aadhaar_back' | 'pan' | 'photo' | 'other' = 'other',
+    ): Promise<{ fileId: string; documentType: string; fileName: string } | null> {
+      const { jpegPath } = await ensureTestFiles();
+      const fileBuffer = fs.readFileSync(jpegPath);
+      const fileName = `delete-target-${Date.now()}-${Math.floor(Math.random() * 1e6)}.jpg`;
+      const formData = new FormData();
+      formData.append('file', new Blob([fileBuffer], { type: 'image/jpeg' }), fileName);
+      formData.append('customerId', targetCustomerId);
+      formData.append('documentType', documentType);
+
+      const uploadRes = await fetch(`${API_BASE}/documents/upload`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      if (!uploadRes.ok) return null;
+
+      // Fetch the customer's documents list to find the freshly uploaded row's
+      // fileId — the upload response shape isn't strictly contracted across
+      // versions, so the list endpoint is the safe source of truth.
+      const listRes = await fetch(`${API_BASE}/customers/${targetCustomerId}/documents`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!listRes.ok) return null;
+      const body = await listRes.json();
+      const docs: Array<{ fileId: string; document_type: string; file_name: string }> = body.data ?? [];
+      const seeded = docs.find((d) => d.file_name === fileName);
+      if (!seeded) return null;
+      return { fileId: seeded.fileId, documentType: seeded.document_type, fileName: seeded.file_name };
+    }
+
+    test('Trash icon opens a destructive confirmation dialog naming the document', async ({ managerPage }) => {
+      const freshCustomerId = await createTestCustomer(foToken);
+      const seeded = await seedDocument(managerToken, freshCustomerId, 'aadhaar_front');
+      test.skip(!seeded, 'Document upload unavailable in this environment');
+
+      await managerPage.goto(`/customers/${freshCustomerId}`);
+      await managerPage.waitForLoadState('domcontentloaded');
+      await expect(managerPage.getByRole('heading', { name: 'Documents' })).toBeVisible({ timeout: 30_000 });
+
+      // The aria-label uses the human form of the type ("aadhaar front" not "aadhaar_front").
+      const deleteBtn = managerPage.getByRole('button', { name: /delete aadhaar front/i });
+      await expect(deleteBtn).toBeVisible({ timeout: 15_000 });
+      await deleteBtn.click();
+
+      const dialog = managerPage.getByRole('dialog');
+      await expect(dialog).toBeVisible({ timeout: 15_000 });
+      await expect(dialog.getByText('Delete document?')).toBeVisible();
+      // Description interpolates the seeded file name so the user can verify
+      // they're about to nuke the right row.
+      await expect(dialog.getByText(seeded!.fileName, { exact: false })).toBeVisible();
+
+      // Both Cancel and the destructive Delete action must be present.
+      await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeVisible();
+      await expect(dialog.getByRole('button', { name: 'Delete' })).toBeVisible();
+
+      // Cancel must close the dialog without firing a DELETE — assert the row
+      // is still in the documents table afterwards.
+      await dialog.getByRole('button', { name: 'Cancel' }).click();
+      await expect(dialog).not.toBeVisible({ timeout: 15_000 });
+      await expect(managerPage.locator('table tbody tr', { hasText: seeded!.fileName })).toBeVisible();
+    });
+
+    test('confirming delete removes the document and shows success toast', async ({ managerPage }) => {
+      const freshCustomerId = await createTestCustomer(foToken);
+      const seeded = await seedDocument(managerToken, freshCustomerId, 'pan');
+      test.skip(!seeded, 'Document upload unavailable in this environment');
+
+      await managerPage.goto(`/customers/${freshCustomerId}`);
+      await managerPage.waitForLoadState('domcontentloaded');
+      await expect(managerPage.getByRole('heading', { name: 'Documents' })).toBeVisible({ timeout: 30_000 });
+
+      // The seeded row should render before we attempt deletion.
+      const row = managerPage.locator('table tbody tr', { hasText: seeded!.fileName });
+      await expect(row).toBeVisible({ timeout: 15_000 });
+
+      await managerPage.getByRole('button', { name: /delete pan card/i }).click();
+
+      const dialog = managerPage.getByRole('dialog');
+      await expect(dialog).toBeVisible({ timeout: 15_000 });
+
+      // Wait for the DELETE request to actually hit /documents/:fileId so we
+      // verify the UI invoked the API rather than just hiding the row locally.
+      const deleteRequest = managerPage.waitForRequest(
+        (req) => req.method() === 'DELETE' && req.url().includes(`/documents/${seeded!.fileId}`),
+        { timeout: 15_000 },
+      );
+      await dialog.getByRole('button', { name: 'Delete' }).click();
+      await deleteRequest;
+
+      // Success toast confirms the destructive flow completed.
+      await expect(managerPage.getByText('Document deleted.')).toBeVisible({ timeout: 15_000 });
+
+      // The dialog should auto-close and the row should disappear after the
+      // documents query is invalidated.
+      await expect(dialog).not.toBeVisible({ timeout: 15_000 });
+      await expect(row).not.toBeVisible({ timeout: 15_000 });
+    });
+
+    test('403 from API surfaces the "no permission to delete" toast', async ({ managerPage }) => {
+      const freshCustomerId = await createTestCustomer(foToken);
+      const seeded = await seedDocument(managerToken, freshCustomerId, 'photo');
+      test.skip(!seeded, 'Document upload unavailable in this environment');
+
+      // Intercept the DELETE so we can deterministically produce a SCOPE_VIOLATION
+      // response — the trash button is permission-gated, so a real RBAC denial
+      // cannot be driven via UI (the button is hidden for non-privileged roles).
+      await managerPage.route(`**/documents/${seeded!.fileId}`, async (route) => {
+        if (route.request().method() !== 'DELETE') {
+          await route.fallback();
+          return;
+        }
+        await route.fulfill({
+          status: 403,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            statusCode: 403,
+            code: 'SCOPE_VIOLATION',
+            message: 'Forbidden',
+          }),
+        });
+      });
+
+      await managerPage.goto(`/customers/${freshCustomerId}`);
+      await managerPage.waitForLoadState('domcontentloaded');
+      await expect(managerPage.getByRole('heading', { name: 'Documents' })).toBeVisible({ timeout: 30_000 });
+
+      const row = managerPage.locator('table tbody tr', { hasText: seeded!.fileName });
+      await expect(row).toBeVisible({ timeout: 15_000 });
+
+      await managerPage.getByRole('button', { name: /delete photo/i }).click();
+      const dialog = managerPage.getByRole('dialog');
+      await expect(dialog).toBeVisible({ timeout: 15_000 });
+      await dialog.getByRole('button', { name: 'Delete' }).click();
+
+      // Error toast renders the specific permission copy from the page handler.
+      await expect(
+        managerPage.getByText('You do not have permission to delete this document.'),
+      ).toBeVisible({ timeout: 15_000 });
+
+      // The row must remain — failed DELETE should not remove the document.
+      await expect(row).toBeVisible();
+    });
+
+    test('auditor does not see the Trash button (PermissionGate hides destructive action)', async ({ auditorPage }) => {
+      const freshCustomerId = await createTestCustomer(foToken);
+      const seeded = await seedDocument(managerToken, freshCustomerId, 'aadhaar_back');
+      test.skip(!seeded, 'Document upload unavailable in this environment');
+
+      await auditorPage.goto(`/customers/${freshCustomerId}`);
+      await auditorPage.waitForLoadState('domcontentloaded');
+
+      // Some environments hide the customer detail page entirely from auditor.
+      // If access is denied at the page level, the gap is already covered by
+      // RBAC matrix tests — skip rather than false-positive.
+      const accessDenied = auditorPage.getByRole('heading', { name: 'Access Denied' });
+      if (await accessDenied.isVisible({ timeout: 3_000 }).catch(() => false)) {
+        test.skip();
+        return;
+      }
+
+      await expect(auditorPage.getByRole('heading', { name: 'Documents' })).toBeVisible({ timeout: 30_000 });
+
+      // The document row is visible (auditor has customer.read) but the trash
+      // button must be gated away.
+      await expect(auditorPage.locator('table tbody tr', { hasText: seeded!.fileName })).toBeVisible({ timeout: 15_000 });
+      await expect(auditorPage.getByRole('button', { name: /delete aadhaar back/i })).not.toBeVisible();
+    });
+  });
 });

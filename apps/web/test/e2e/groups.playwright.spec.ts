@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { getTokenForRole, createTestGroup } from './fixtures';
+import { getTokenForRole, createTestGroup, createTestCustomer, apiRequest } from './fixtures';
 
 /**
  * Groups Module — Playwright E2E Tests
@@ -274,6 +274,305 @@ test.describe('Groups Module', () => {
           await expect(customerIdInput).toBeVisible();
         }
       }
+    });
+  });
+
+  /**
+   * Add Member submission (success + error) and member-removal coverage.
+   *
+   * The detail page exposes only the Add Member dialog — backend supports member
+   * removal via DELETE /groups/:id/members/:memberId, so we verify the removal
+   * contract through the API and confirm the detail page reflects the change.
+   */
+  test.describe('Add Member submission & member removal', () => {
+    test('manager can add an existing customer as a new member and sees confirmation', async ({
+      managerPage,
+    }) => {
+      const token = await getTokenForRole('manager');
+
+      // Seed fresh group + customer per test so results are deterministic.
+      let groupId: string;
+      let customerId: string;
+      try {
+        groupId = await createTestGroup(token, { name: `AddMember Success ${Date.now()}` });
+        customerId = await createTestCustomer(token);
+      } catch {
+        test.skip();
+        return;
+      }
+
+      // Fetch the seeded customer name so we can match it in the search dropdown.
+      const customer = await apiRequest<{ full_name: string }>(
+        'GET',
+        `/customers/${customerId}`,
+        token,
+      );
+
+      await managerPage.goto(`/groups/${groupId}`);
+      await expect(managerPage.getByRole('heading', { name: /AddMember Success/i })).toBeVisible({
+        timeout: 15_000,
+      });
+
+      // Open the Add Member dialog
+      await managerPage.getByRole('button', { name: /add member/i }).click();
+      await expect(managerPage.getByRole('dialog')).toBeVisible({ timeout: 10_000 });
+
+      // Search by full name (debounced 300ms inside the page).
+      const searchInput = managerPage.getByPlaceholder(/search customer by name/i);
+      await searchInput.fill(customer.full_name);
+
+      // The debounce + customer search query can take a moment; allow up to 15s for the dropdown row.
+      const dropdownOption = managerPage
+        .getByRole('dialog')
+        .locator('li', { hasText: customer.full_name })
+        .first();
+      await expect(dropdownOption).toBeVisible({ timeout: 15_000 });
+      await dropdownOption.click();
+
+      // Submit the dialog
+      await managerPage.getByRole('button', { name: /^add member$/i }).click();
+
+      // Success toast should fire and the dialog should close.
+      await expect(managerPage.getByText(/member added successfully/i)).toBeVisible({
+        timeout: 15_000,
+      });
+      await expect(managerPage.getByRole('dialog')).not.toBeVisible({ timeout: 10_000 });
+
+      // Member should appear in the members list (matches mobile card OR desktop row).
+      await expect(
+        managerPage.getByText(customer.full_name).first(),
+      ).toBeVisible({ timeout: 15_000 });
+
+      // Verify against the API source of truth as well.
+      const detail = await apiRequest<{ members: Array<{ customer_id: string }> }>(
+        'GET',
+        `/groups/${groupId}`,
+        token,
+      );
+      expect(detail.members.some((m) => m.customer_id === customerId)).toBe(true);
+    });
+
+    test('adding a customer who is already a member surfaces an error in the dialog', async ({
+      managerPage,
+    }) => {
+      const token = await getTokenForRole('manager');
+
+      let groupId: string;
+      let customerId: string;
+      try {
+        groupId = await createTestGroup(token, { name: `AddMember Duplicate ${Date.now()}` });
+        customerId = await createTestCustomer(token);
+        // Pre-add via API so the UI attempt is guaranteed to be a duplicate.
+        await apiRequest('POST', `/groups/${groupId}/members`, token, { customerId });
+      } catch {
+        test.skip();
+        return;
+      }
+
+      const customer = await apiRequest<{ full_name: string }>(
+        'GET',
+        `/customers/${customerId}`,
+        token,
+      );
+
+      await managerPage.goto(`/groups/${groupId}`);
+      await expect(managerPage.getByRole('heading', { name: /AddMember Duplicate/i })).toBeVisible({
+        timeout: 15_000,
+      });
+
+      await managerPage.getByRole('button', { name: /add member/i }).click();
+      await expect(managerPage.getByRole('dialog')).toBeVisible({ timeout: 10_000 });
+
+      const searchInput = managerPage.getByPlaceholder(/search customer by name/i);
+      await searchInput.fill(customer.full_name);
+
+      const dropdownOption = managerPage
+        .getByRole('dialog')
+        .locator('li', { hasText: customer.full_name })
+        .first();
+      await expect(dropdownOption).toBeVisible({ timeout: 15_000 });
+      await dropdownOption.click();
+
+      await managerPage.getByRole('button', { name: /^add member$/i }).click();
+
+      // The dialog should remain open and display the backend error message.
+      // We don't assert the exact wording — the page sets `addMemberError` to the API error
+      // text, so we look for any visible destructive (red) error inside the still-open dialog.
+      const dialog = managerPage.getByRole('dialog');
+      await expect(dialog).toBeVisible({ timeout: 10_000 });
+      await expect(dialog.locator('.text-destructive').first()).toBeVisible({ timeout: 15_000 });
+
+      // The success toast must NOT have appeared.
+      await expect(managerPage.getByText(/member added successfully/i)).not.toBeVisible();
+
+      // API should still only show one membership row for this customer.
+      const detail = await apiRequest<{ members: Array<{ customer_id: string }> }>(
+        'GET',
+        `/groups/${groupId}`,
+        token,
+      );
+      const matches = detail.members.filter((m) => m.customer_id === customerId);
+      expect(matches.length).toBe(1);
+    });
+
+    test('submitting Add Member with no customer selected shows validation error', async ({
+      managerPage,
+    }) => {
+      const token = await getTokenForRole('manager');
+
+      let groupId: string;
+      try {
+        groupId = await createTestGroup(token, { name: `AddMember Validation ${Date.now()}` });
+      } catch {
+        test.skip();
+        return;
+      }
+
+      await managerPage.goto(`/groups/${groupId}`);
+      await expect(managerPage.getByRole('heading', { name: /AddMember Validation/i })).toBeVisible({
+        timeout: 15_000,
+      });
+
+      await managerPage.getByRole('button', { name: /add member/i }).click();
+      const dialog = managerPage.getByRole('dialog');
+      await expect(dialog).toBeVisible({ timeout: 10_000 });
+
+      // Click confirm without selecting a customer
+      await managerPage.getByRole('button', { name: /^add member$/i }).click();
+
+      // The handler short-circuits with "Please select a customer" before hitting the API.
+      await expect(dialog.getByText(/please select a customer/i)).toBeVisible({ timeout: 10_000 });
+      // Dialog should remain open
+      await expect(dialog).toBeVisible();
+    });
+
+    test('auditor does NOT see Add Member button on group detail (RBAC denial)', async ({
+      auditorPage,
+    }) => {
+      const token = await getTokenForRole('manager');
+
+      let groupId: string;
+      try {
+        groupId = await createTestGroup(token, { name: `AddMember RBAC ${Date.now()}` });
+      } catch {
+        test.skip();
+        return;
+      }
+
+      await auditorPage.goto(`/groups/${groupId}`);
+
+      // Either the page loads (without the Add Member button) or we hit Access Denied.
+      const heading = auditorPage.getByRole('heading', { name: /AddMember RBAC/i });
+      const accessDenied = auditorPage.getByRole('heading', { name: /access denied/i });
+      await expect(heading.or(accessDenied)).toBeVisible({ timeout: 15_000 });
+
+      if (await heading.isVisible()) {
+        await expect(
+          auditorPage.getByRole('button', { name: /add member/i }),
+        ).toHaveCount(0);
+      }
+    });
+
+    test('member removal via API removes the member from the detail page view', async ({
+      managerPage,
+    }) => {
+      const token = await getTokenForRole('manager');
+
+      let groupId: string;
+      let customerId: string;
+      let memberId: string;
+      try {
+        groupId = await createTestGroup(token, { name: `MemberRemoval ${Date.now()}` });
+        customerId = await createTestCustomer(token);
+        const addResult = await apiRequest<{ id: string }>(
+          'POST',
+          `/groups/${groupId}/members`,
+          token,
+          { customerId },
+        );
+        memberId = addResult.id;
+      } catch {
+        test.skip();
+        return;
+      }
+
+      const customer = await apiRequest<{ full_name: string }>(
+        'GET',
+        `/customers/${customerId}`,
+        token,
+      );
+
+      // Confirm the member is present before removal.
+      await managerPage.goto(`/groups/${groupId}`);
+      await expect(managerPage.getByRole('heading', { name: /MemberRemoval/i })).toBeVisible({
+        timeout: 15_000,
+      });
+      await expect(managerPage.getByText(customer.full_name).first()).toBeVisible({
+        timeout: 15_000,
+      });
+
+      // Remove via API (UI has no removal control; this exercises the contract + page re-render).
+      await apiRequest('DELETE', `/groups/${groupId}/members/${memberId}`, token);
+
+      // Reload the detail page and verify the member no longer appears.
+      await managerPage.goto(`/groups/${groupId}`);
+      await expect(managerPage.getByRole('heading', { name: /MemberRemoval/i })).toBeVisible({
+        timeout: 15_000,
+      });
+      await expect(managerPage.getByText(customer.full_name)).toHaveCount(0, {
+        timeout: 15_000,
+      });
+
+      // API confirms member is gone too.
+      const detail = await apiRequest<{ members: Array<{ customer_id: string }> }>(
+        'GET',
+        `/groups/${groupId}`,
+        token,
+      );
+      expect(detail.members.some((m) => m.customer_id === customerId)).toBe(false);
+    });
+
+    test('auditor cannot remove a group member via the API (RBAC denial)', async ({}) => {
+      const managerToken = await getTokenForRole('manager');
+      const auditorToken = await getTokenForRole('viewer_auditor');
+
+      let groupId: string;
+      let memberId: string;
+      try {
+        groupId = await createTestGroup(managerToken, {
+          name: `MemberRemoval RBAC ${Date.now()}`,
+        });
+        const customerId = await createTestCustomer(managerToken);
+        const addResult = await apiRequest<{ id: string }>(
+          'POST',
+          `/groups/${groupId}/members`,
+          managerToken,
+          { customerId },
+        );
+        memberId = addResult.id;
+      } catch {
+        test.skip();
+        return;
+      }
+
+      // Auditor lacks `group.manage_members`; expect the request to be rejected.
+      let rejected = false;
+      try {
+        await apiRequest('DELETE', `/groups/${groupId}/members/${memberId}`, auditorToken);
+      } catch (err) {
+        rejected = true;
+        // The error message includes the status; assert 401/403 specifically.
+        expect((err as Error).message).toMatch(/40[13]/);
+      }
+      expect(rejected).toBe(true);
+
+      // Member is still present.
+      const detail = await apiRequest<{ members: Array<{ id: string }> }>(
+        'GET',
+        `/groups/${groupId}`,
+        managerToken,
+      );
+      expect(detail.members.some((m) => m.id === memberId)).toBe(true);
     });
   });
 });
