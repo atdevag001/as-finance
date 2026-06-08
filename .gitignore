@@ -51,3 +51,4 @@ _bmad-output/
 
 # Playwright auth state — transient JWT cookies refreshed every test run
 apps/web/test/e2e/.auth/*.json
+backups/
