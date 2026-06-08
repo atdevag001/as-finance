@@ -172,11 +172,20 @@ export class MigrationService {
 
     // Build lookup map: legacy_customer_id → newId
     const customerByLegacy = new Map<string, DraftCustomer>();
+    // ExcelService now annotates every valid row with __rowIndex (1-based, ignoring
+    // blank rows). We pull it out for cross-reference errors so the operator can
+    // open the file and find the bad cell. Falls back to 0 if the parser didn't
+    // populate it (e.g. on a future refactor).
+    const ri = (row: Record<string, unknown>): number => {
+      const v = row['__rowIndex'];
+      return typeof v === 'number' ? v : 0;
+    };
+
     for (const c of draftCustomers) {
       if (customerByLegacy.has(c.legacy_customer_id)) {
         errors.push({
           domain: 'customers',
-          rowIndex: 0,
+          rowIndex: ri(c as unknown as Record<string, unknown>),
           column: 'legacy_customer_id',
           message: `Duplicate legacy_customer_id: ${c.legacy_customer_id}`,
         });
@@ -190,7 +199,7 @@ export class MigrationService {
       if (!customerByLegacy.has(g.leader_legacy_customer_id)) {
         errors.push({
           domain: 'groups',
-          rowIndex: 0,
+          rowIndex: ri(g as unknown as Record<string, unknown>),
           column: 'leader_legacy_customer_id',
           message: `Group ${g.legacy_group_id}: leader ${g.leader_legacy_customer_id} not found in customers file`,
         });
@@ -201,7 +210,7 @@ export class MigrationService {
       if (!groupByLegacy.has(m.legacy_group_id)) {
         errors.push({
           domain: 'group_members',
-          rowIndex: 0,
+          rowIndex: ri(m as unknown as Record<string, unknown>),
           column: 'legacy_group_id',
           message: `Member references unknown group ${m.legacy_group_id}`,
         });
@@ -209,7 +218,7 @@ export class MigrationService {
       if (!customerByLegacy.has(m.member_legacy_customer_id)) {
         errors.push({
           domain: 'group_members',
-          rowIndex: 0,
+          rowIndex: ri(m as unknown as Record<string, unknown>),
           column: 'member_legacy_customer_id',
           message: `Group ${m.legacy_group_id}: member ${m.member_legacy_customer_id} not found in customers file`,
         });
@@ -222,7 +231,7 @@ export class MigrationService {
       if (!customerByLegacy.has(l.customer_legacy_customer_id)) {
         errors.push({
           domain: 'loans',
-          rowIndex: 0,
+          rowIndex: ri(l as unknown as Record<string, unknown>),
           column: 'customer_legacy_customer_id',
           message: `Loan ${l.legacy_loan_id}: customer ${l.customer_legacy_customer_id} not found`,
         });
@@ -230,20 +239,110 @@ export class MigrationService {
       if (l.group_legacy_id && !groupByLegacy.has(l.group_legacy_id)) {
         errors.push({
           domain: 'loans',
-          rowIndex: 0,
+          rowIndex: ri(l as unknown as Record<string, unknown>),
           column: 'group_legacy_id',
           message: `Loan ${l.legacy_loan_id}: group ${l.group_legacy_id} not found`,
         });
       }
     }
 
+    const collectionIdSeen = new Set<string>();
     for (const c of draftCollections) {
       if (!loanByLegacy.has(c.loan_legacy_loan_id)) {
         errors.push({
           domain: 'collections',
-          rowIndex: 0,
+          rowIndex: ri(c as unknown as Record<string, unknown>),
           column: 'loan_legacy_loan_id',
           message: `Collection ${c.legacy_collection_id}: loan ${c.loan_legacy_loan_id} not found`,
+        });
+      }
+      // Duplicate legacy_collection_id would collide on the
+      // mig:coll:<id> idempotency key inside the tx → unique constraint
+      // violation, killing the whole batch. Catch it pre-commit.
+      if (collectionIdSeen.has(c.legacy_collection_id)) {
+        errors.push({
+          domain: 'collections',
+          rowIndex: ri(c as unknown as Record<string, unknown>),
+          column: 'legacy_collection_id',
+          message: `Duplicate legacy_collection_id: ${c.legacy_collection_id}`,
+        });
+      }
+      collectionIdSeen.add(c.legacy_collection_id);
+    }
+
+    // Numeric sanity pass — every *_paise column must be a non-negative
+    // integer within JS safe-int range. The parser admits JS Numbers which
+    // can carry decimals (e.g. 123.45) or values > 2^53. Catch both pre-tx
+    // so we don't blow up mid-commit with a generic BigInt('123.45') throw.
+    const PAISE_FIELDS = {
+      customers: ['monthly_income_paise'] as const,
+      loans: [
+        'principal_paise',
+        'total_interest_paise',
+        'total_payable_paise',
+        'emi_paise',
+        'cached_outstanding_paise',
+      ] as const,
+      collections: ['amount_paise'] as const,
+    };
+    const checkPaise = (
+      domain: MigrationDomain,
+      rows: ReadonlyArray<Record<string, unknown>>,
+      fields: ReadonlyArray<string>,
+    ): void => {
+      for (const row of rows) {
+        for (const f of fields) {
+          const v = row[f];
+          if (v === null || v === undefined || v === '') continue;
+          const n = typeof v === 'number' ? v : Number(String(v));
+          if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0 || n > Number.MAX_SAFE_INTEGER) {
+            errors.push({
+              domain,
+              rowIndex: ri(row),
+              column: f,
+              message: `${f} must be a non-negative integer in paise (no decimals, max 9007199254740992); got "${String(v)}"`,
+            });
+          }
+        }
+      }
+    };
+    checkPaise('customers', draftCustomers as unknown as Record<string, unknown>[], PAISE_FIELDS.customers);
+    checkPaise('loans', draftLoans as unknown as Record<string, unknown>[], PAISE_FIELDS.loans);
+    checkPaise('collections', draftCollections as unknown as Record<string, unknown>[], PAISE_FIELDS.collections);
+
+    // Tenure must be ≥ 1 — zero throws BigInt('0') division mid-tx and
+    // negative produces an empty schedule. Catch in dry-run.
+    for (const l of draftLoans) {
+      const t = Number(l.tenure_months);
+      if (!Number.isInteger(t) || t < 1) {
+        errors.push({
+          domain: 'loans',
+          rowIndex: ri(l as unknown as Record<string, unknown>),
+          column: 'tenure_months',
+          message: `tenure_months must be an integer ≥ 1; got "${String(l.tenure_months)}"`,
+        });
+      }
+      const paid = Number(l.installments_paid_count ?? 0);
+      if (paid > t) {
+        errors.push({
+          domain: 'loans',
+          rowIndex: ri(l as unknown as Record<string, unknown>),
+          column: 'installments_paid_count',
+          message: `installments_paid_count (${paid}) > tenure_months (${t})`,
+        });
+      }
+    }
+
+    // Pincode must be exactly 6 digits — silent truncation/padding hides
+    // user typos.
+    for (const c of draftCustomers) {
+      const p = String(c.pincode).trim();
+      if (!/^\d{6}$/.test(p)) {
+        errors.push({
+          domain: 'customers',
+          rowIndex: ri(c as unknown as Record<string, unknown>),
+          column: 'pincode',
+          message: `pincode must be exactly 6 digits; got "${p}"`,
         });
       }
     }
@@ -291,8 +390,30 @@ export class MigrationService {
     const started = Date.now();
     const now = new Date();
 
+    // MIGRATION_STARTED — write BEFORE the tx so a rollback leaves a trace.
+    try {
+      await this.audit.createAuditLog({
+        action_type: AuditAction.MIGRATION_STARTED,
+        actor_id: actor.id,
+        actor_role: actor.role as 'super_admin',
+        target_entity: 'data_migration',
+        target_id: draft.id,
+        after_state: {
+          fileHashes: draft.fileHashes,
+          rowCounts: draft.totals,
+        },
+        remarks: `Data Migration started: ${JSON.stringify(draft.totals)}`,
+        ip_address: '0.0.0.0',
+        request_id: draft.id,
+      });
+    } catch (err) {
+      this.logger.error('Failed to write MIGRATION_STARTED audit log (non-blocking)', err);
+    }
+
     // Run everything in one tx with a long timeout + Serializable isolation.
-    const result = await this.prisma.$transaction(
+    let result: { auditId: string };
+    try {
+      result = await this.prisma.$transaction(
       async (tx) => {
         // Flip lock to in-progress
         await tx.settings.upsert({
@@ -357,6 +478,31 @@ export class MigrationService {
         isolationLevel: 'Serializable',
       },
     );
+    } catch (err) {
+      // MIGRATION_FAILED — record the failure outside the rolled-back tx.
+      try {
+        await this.audit.createAuditLog({
+          action_type: AuditAction.MIGRATION_FAILED,
+          actor_id: actor.id,
+          actor_role: actor.role as 'super_admin',
+          target_entity: 'data_migration',
+          target_id: draft.id,
+          after_state: {
+            fileHashes: draft.fileHashes,
+            rowCounts: draft.totals,
+            error: err instanceof Error ? err.message : String(err),
+          },
+          remarks: `Data Migration FAILED: ${err instanceof Error ? err.message : 'Unknown error'}`,
+          ip_address: '0.0.0.0',
+          request_id: draft.id,
+        });
+      } catch (auditErr) {
+        this.logger.error('Failed to write MIGRATION_FAILED audit log', auditErr);
+      }
+      // Drop the draft so the operator must re-upload (sanity).
+      this.drafts.delete(draftId);
+      throw err;
+    }
 
     // Drop the draft.
     this.drafts.delete(draftId);
@@ -376,6 +522,8 @@ export class MigrationService {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async writeCustomers(tx: any, draft: Draft, fix: MigrationFixtures, now: Date): Promise<void> {
     for (const c of draft.customers) {
+      const status = normalizeEnum(c.status, ALLOWED_CUSTOMER_STATUS, 'active');
+      const gender = String(c.gender).toLowerCase().trim();
       const aadhaarPlain = String(c.aadhaar).replace(/\D/g, '');
       const aadhaarLastFour = aadhaarPlain.slice(-4).padStart(4, '0');
       const aadhaarCt = this.encryption.encrypt(aadhaarPlain, customerAad(c.newId, 'aadhaar'));
@@ -410,7 +558,6 @@ export class MigrationService {
           pan_number_encrypted: panCt,
           pan_last_four: panLastFour,
           dob: c.dob ? new Date(String(c.dob)) : null,
-          gender: String(c.gender).toLowerCase(),
           occupation: c.occupation ? String(c.occupation) : null,
           monthly_income_paise: c.monthly_income_paise ? BigInt(String(c.monthly_income_paise)) : null,
           address_line1: String(c.address_line1),
@@ -418,8 +565,9 @@ export class MigrationService {
           city: String(c.city),
           district: String(c.district),
           state: String(c.state),
-          pincode: String(c.pincode).slice(0, 6).padStart(6, '0'),
-          status: (c.status ?? 'active') as 'active' | 'blacklisted' | 'inactive',
+          pincode: String(c.pincode).trim(),
+          status: status as 'active' | 'blacklisted' | 'inactive',
+          gender,
           assigned_officer_id: assignedOfficerId,
           created_by: fix.migrationBotUserId,
           created_at: c.registered_at ? new Date(String(c.registered_at)) : now,
@@ -434,15 +582,17 @@ export class MigrationService {
     for (const g of draft.groups) {
       const leader = customerByLegacy.get(g.leader_legacy_customer_id);
       if (!leader) throw new Error(`Group ${g.legacy_group_id}: leader missing at commit time`);
+      const groupStatus = normalizeEnum(g.status, ALLOWED_GROUP_STATUS, 'active');
+      const meetingDay = normalizeEnum(g.meeting_day, ALLOWED_MEETING_DAYS, 'monday');
       await tx.groups.create({
         data: {
           id: g.newId,
           legacy_group_id: String(g.legacy_group_id),
           name: String(g.name),
-          meeting_day: String(g.meeting_day).toLowerCase() as 'monday',
+          meeting_day: meetingDay as 'monday',
           branch_area: String(g.branch_area),
           leader_id: leader.newId,
-          status: (g.status ?? 'active') as 'active' | 'inactive' | 'dissolved',
+          status: groupStatus as 'active' | 'inactive' | 'dissolved',
           created_by: fix.migrationBotUserId,
           created_at: now,
         },
@@ -470,9 +620,15 @@ export class MigrationService {
       leaderInsertedFor.add(`${g.legacy_group_id}:${g.leader_legacy_customer_id}`);
     }
 
+    // Dedup the file: same (group, customer) pair appearing twice in the
+    // members sheet would hit the unique constraint mid-tx. We treat
+    // dupes as a no-op rather than failing — re-uploading the same member
+    // on a different `joined_at` is benign.
+    const seenMembership = new Set(leaderInsertedFor);
     for (const m of draft.groupMembers) {
       const key = `${m.legacy_group_id}:${m.member_legacy_customer_id}`;
-      if (leaderInsertedFor.has(key)) continue; // already added as leader
+      if (seenMembership.has(key)) continue;
+      seenMembership.add(key);
       const group = groupByLegacy.get(m.legacy_group_id);
       const customer = customerByLegacy.get(m.member_legacy_customer_id);
       if (!group || !customer) throw new Error(`group_members: bad reference`);
@@ -515,7 +671,17 @@ export class MigrationService {
       const cachedOutstanding = BigInt(String(l.cached_outstanding_paise));
       const disbursementDate = new Date(String(l.disbursement_date));
       const firstDueDate = new Date(String(l.first_due_date));
-      const status = String(l.status).toLowerCase();
+      const status = normalizeEnum(l.status, ALLOWED_LOAN_STATUS, null);
+      if (!status) {
+        throw new Error(
+          `Loan ${l.legacy_loan_id}: status must be one of [${ALLOWED_LOAN_STATUS.join(', ')}], got '${String(l.status)}'`,
+        );
+      }
+      const disbursementMode = normalizeEnum(
+        (l as { disbursement_mode?: unknown }).disbursement_mode,
+        ALLOWED_PAYMENT_MODE,
+        'cash',
+      );
 
       // 1. Create the loan
       await tx.loans.create({
@@ -535,7 +701,7 @@ export class MigrationService {
           cached_outstanding_paise: cachedOutstanding,
           disbursement_date: disbursementDate,
           first_due_date: firstDueDate,
-          last_due_date: addMonths(firstDueDate, tenureMonths - 1),
+          last_due_date: addMonthsClamped(firstDueDate, tenureMonths - 1),
           last_interest_accrued_to: now,
           created_by: fix.migrationBotUserId,
           approved_by: fix.migrationBotUserId,
@@ -555,37 +721,50 @@ export class MigrationService {
       });
 
       // 3. Materialise loan_schedules — required for ledger recompute to work.
-      // For each of tenureMonths installments: due_date = firstDueDate + (i*30 days)
-      // approximately. For paid installments (first `installmentsPaidCount`),
-      // mark fully paid. For the rest, mark pending with the proportional balance.
-      const installmentTotalPaise = emiPaise;
-      const installmentPrincipal = principalPaise / BigInt(tenureMonths);
-      const installmentInterest = totalInterestPaise / BigInt(tenureMonths);
+      // CRITICAL: sum of installments must EXACTLY equal principal+interest.
+      // Otherwise loan.service.ts close-check (within 1 paise of zero) fails for
+      // migrated closed loans, and reversal recompute drifts on active ones.
+      // We distribute remainder to the LAST installment.
+      if (tenureMonths <= 0) {
+        throw new Error(`Loan ${l.legacy_loan_id}: tenure_months must be > 0`);
+      }
+      const tenureN = BigInt(tenureMonths);
+      const basePrincipal = principalPaise / tenureN;
+      const baseInterest = totalInterestPaise / tenureN;
+      const principalRemainder = principalPaise - basePrincipal * tenureN;
+      const interestRemainder = totalInterestPaise - baseInterest * tenureN;
       for (let i = 0; i < tenureMonths; i++) {
-        const dueDate = addMonths(firstDueDate, i);
+        const dueDate = addMonthsClamped(firstDueDate, i);
+        const isLast = i === tenureMonths - 1;
+        const principalThis = isLast ? basePrincipal + principalRemainder : basePrincipal;
+        const interestThis = isLast ? baseInterest + interestRemainder : baseInterest;
+        const totalThis = principalThis + interestThis;
         const isPaid = i < installmentsPaidCount;
         await tx.loan_schedules.create({
           data: {
             loan_id: l.newId,
             installment_number: i + 1,
             due_date: dueDate,
-            principal_paise: installmentPrincipal,
-            interest_paise: installmentInterest,
-            total_paise: installmentTotalPaise,
-            principal_paid_paise: isPaid ? installmentPrincipal : 0n,
-            interest_paid_paise: isPaid ? installmentInterest : 0n,
+            principal_paise: principalThis,
+            interest_paise: interestThis,
+            total_paise: totalThis,
+            principal_paid_paise: isPaid ? principalThis : 0n,
+            interest_paid_paise: isPaid ? interestThis : 0n,
             penalty_paid_paise: 0n,
             status: isPaid ? 'paid' : 'pending',
           },
         });
       }
+      // Suppress unused-var warning for emiPaise — kept for future use as
+      // a sanity check (total_paise on schedules should sum to ~emi*tenure).
+      void emiPaise;
 
       // 4. disbursements row (idempotent on idempotency_key)
       await tx.disbursements.create({
         data: {
           loan_id: l.newId,
           amount_paise: principalPaise,
-          mode: 'cash', // legacy unknown — default to cash
+          mode: disbursementMode as 'cash' | 'bank_transfer' | 'online',
           disbursed_by: fix.migrationBotUserId,
           disbursed_at: disbursementDate,
           journal_entry_id: fix.sharedJournalEntryId,
@@ -601,6 +780,12 @@ export class MigrationService {
     for (const c of draft.collections) {
       const loan = loanByLegacy.get(c.loan_legacy_loan_id);
       if (!loan) throw new Error(`Collection ${c.legacy_collection_id}: loan missing at commit`);
+      const paymentMode = normalizeEnum(c.payment_mode, ALLOWED_PAYMENT_MODE, null);
+      if (!paymentMode) {
+        throw new Error(
+          `Collection ${c.legacy_collection_id}: payment_mode must be one of [${ALLOWED_PAYMENT_MODE.join(', ')}], got '${String(c.payment_mode)}'`,
+        );
+      }
       await tx.collections.create({
         data: {
           id: c.newId,
@@ -608,7 +793,7 @@ export class MigrationService {
           loan_id: loan.newId,
           amount_paise: BigInt(String(c.amount_paise)),
           payment_date: new Date(String(c.payment_date)),
-          payment_mode: String(c.payment_mode).toLowerCase() as 'cash',
+          payment_mode: paymentMode as 'cash' | 'bank_transfer' | 'online',
           status: 'posted',
           collected_by: fix.migrationBotUserId,
           journal_entry_id: fix.sharedJournalEntryId,
@@ -647,9 +832,52 @@ function sha256(buf: Buffer): string {
   return crypto.createHash('sha256').update(buf).digest('hex');
 }
 
-function addMonths(date: Date, months: number): Date {
+// Enum allowlists — Prisma rejects any value not in these sets. We normalize
+// inputs at the boundary so the operator can put 'Active' / 'CASH' in their file
+// without commit failing with a cryptic enum violation.
+const ALLOWED_CUSTOMER_STATUS = ['active', 'blacklisted', 'inactive'] as const;
+const ALLOWED_GROUP_STATUS = ['active', 'inactive', 'dissolved'] as const;
+const ALLOWED_LOAN_STATUS = [
+  'active',
+  'overdue',
+  'closed',
+  'foreclosed',
+  'defaulted',
+] as const;
+const ALLOWED_PAYMENT_MODE = ['cash', 'bank_transfer', 'online'] as const;
+const ALLOWED_MEETING_DAYS = [
+  'monday',
+  'tuesday',
+  'wednesday',
+  'thursday',
+  'friday',
+  'saturday',
+  'sunday',
+] as const;
+
+function normalizeEnum<T extends string>(
+  raw: unknown,
+  allowed: readonly T[],
+  fallback: T | null,
+): T | null {
+  if (raw === null || raw === undefined) return fallback;
+  const v = String(raw).trim().toLowerCase().replace(/\s+/g, '_');
+  return (allowed as readonly string[]).includes(v) ? (v as T) : fallback;
+}
+
+/**
+ * Add months without month-end overflow. setMonth() lets the day spill over
+ * (Jan 31 + 1 month → Mar 3 because Feb has 28-29 days). For EMI schedules we
+ * want Jan 31 + 1 → Feb 28/29. We do that by capping the day to the new month's
+ * last day after the add.
+ */
+function addMonthsClamped(date: Date, months: number): Date {
   const d = new Date(date);
+  const originalDay = d.getDate();
+  d.setDate(1); // park on the 1st so setMonth never overflows
   d.setMonth(d.getMonth() + months);
+  const lastDayOfNewMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  d.setDate(Math.min(originalDay, lastDayOfNewMonth));
   return d;
 }
 
@@ -708,6 +936,7 @@ const SCHEMAS: Record<MigrationDomain, ImportColumnSchema[]> = {
     { key: 'cached_outstanding_paise', type: 'number', required: true },
     { key: 'disbursement_date', type: 'date', required: true },
     { key: 'first_due_date', type: 'date', required: true },
+    { key: 'disbursement_mode', type: 'string', required: false },
   ],
   collections: [
     { key: 'legacy_collection_id', type: 'string', required: true },

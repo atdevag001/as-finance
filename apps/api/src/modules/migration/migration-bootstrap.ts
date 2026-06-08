@@ -41,13 +41,20 @@ export async function ensureMigrationFixtures(tx: TxClient, now: Date): Promise<
   let bot = await tx.users.findUnique({ where: { username: MIGRATION_BOT_USERNAME } });
   if (!bot) {
     const passwordHash = await bcrypt.hash(randomUUID(), 10); // unguessable; account is inactive anyway
+    // If a real user happens to already have the canonical placeholder mobile,
+    // fall back to a per-bot synthetic string so bootstrap doesn't die.
+    const mobileTaken = await tx.users.findFirst({
+      where: { mobile: MIGRATION_BOT_MOBILE },
+      select: { id: true },
+    });
+    const botMobile = mobileTaken ? `9${randomUUID().replace(/\D/g, '').slice(0, 9).padEnd(9, '0')}` : MIGRATION_BOT_MOBILE;
     bot = await tx.users.create({
       data: {
         username: MIGRATION_BOT_USERNAME,
         password_hash: passwordHash,
         full_name: 'Data Migration (system)',
         email: MIGRATION_BOT_EMAIL,
-        mobile: MIGRATION_BOT_MOBILE,
+        mobile: botMobile,
         role: 'super_admin',
         is_active: false,
       },
@@ -98,10 +105,16 @@ export async function ensureMigrationFixtures(tx: TxClient, now: Date): Promise<
   // mostly informational) and source_id pointing at the product itself so it's
   // discoverable. The KEY safety property: no journal_lines are written, so the
   // entry is invisible to P&L / Trial Balance / Cashbook.
+  // Tight sentinel predicate: source_type + source_id + the exact description
+  // string + zero totals. Even if another JE happens to share source_id, the
+  // description string makes a stray match impossibly unlikely.
+  const SHARED_JE_DESCRIPTION =
+    'LEGACY_MIGRATION shared journal entry — zero impact, points all migrated rows here';
   let je = await tx.journal_entries.findFirst({
     where: {
       source_type: 'disbursement',
-      source_id: product.id, // sentinel — never used for a real disbursement
+      source_id: product.id,
+      description: SHARED_JE_DESCRIPTION,
       total_debit_paise: 0n,
       total_credit_paise: 0n,
     },
@@ -110,7 +123,7 @@ export async function ensureMigrationFixtures(tx: TxClient, now: Date): Promise<
     je = await tx.journal_entries.create({
       data: {
         entry_date: now,
-        description: 'LEGACY_MIGRATION shared journal entry — zero impact, points all migrated rows here',
+        description: SHARED_JE_DESCRIPTION,
         source_type: 'disbursement',
         source_id: product.id,
         total_debit_paise: 0n,

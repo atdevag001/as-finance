@@ -283,6 +283,10 @@ export class ExcelService {
       if (rowErrors.length > 0) {
         errors.push(...rowErrors);
       } else {
+        // Carry the source-file row index on the validated row so downstream
+        // cross-reference checks can point the operator at the right cell.
+        // Reserved __ prefix avoids collision with real schema column names.
+        (parsed as Record<string, unknown>)['__rowIndex'] = seenDataRows;
         validRows.push(parsed as T);
       }
     }

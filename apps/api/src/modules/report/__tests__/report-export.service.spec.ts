@@ -1,15 +1,16 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ReportExportService, type ExportData } from '../report-export.service';
+import { ExcelService } from '../../excel/excel.service';
 
 describe('ReportExportService', () => {
   let service: ReportExportService;
 
   beforeEach(() => {
-    service = new ReportExportService();
+    service = new ReportExportService(new ExcelService());
   });
 
   describe('generateExcel', () => {
-    it('should generate Excel buffer for empty data', async () => {
+    it('rejects export with no columns (now a hard error from ExcelService)', async () => {
       const emptyData: ExportData = {
         reportType: 'test',
         title: 'Test Report',
@@ -18,10 +19,7 @@ describe('ReportExportService', () => {
         rows: [],
       };
 
-      const buffer = await service.generateExcel(emptyData);
-
-      expect(buffer).toBeInstanceOf(Buffer);
-      expect(buffer.length).toBeGreaterThan(0);
+      await expect(service.generateExcel(emptyData)).rejects.toThrow(/at least one column/);
     });
 
     it('should generate Excel buffer with normal data', async () => {

@@ -190,7 +190,10 @@ describe('Property 39: Viewer Read-Only', () => {
     'collect',
     'create_expense',
     'manage_cashbook',
-    'export',
+    // Note: 'export' is intentionally NOT included — viewer_auditor needs to
+    // export read-only views for compliance / regulator filings. See the
+    // Excel I/O plan: customer.export, loan.export, collection.export etc.
+    // are all granted to VIEWER_AUDITOR by design.
     'print',
     'verify',
     'retry',

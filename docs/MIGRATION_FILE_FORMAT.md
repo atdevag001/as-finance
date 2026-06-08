@@ -49,9 +49,11 @@ You can upload all of them in one POST — they're all validated together.
 | `district` | ✅ | text | |
 | `state` | ✅ | text | |
 | `pincode` | ✅ | text | 6 digits |
-| `status` | optional | text | `active` (default), `blacklisted`, or `inactive` |
+| `status` | optional | text | `active` (default), `blacklisted`, or `inactive`. Case-insensitive |
 | `assigned_officer_username` | optional | text | Must match a `users.username` already in the system (resolved at commit) |
 | `registered_at` | optional | date | Preserves the original onboarding date (YYYY-MM-DD). If absent, defaults to migration time |
+
+> 📝 Enum values are normalised case-insensitively — "Active", "ACTIVE", "active" all work.
 
 **Example row:**
 
@@ -102,10 +104,11 @@ Don't include the leader's row here — that's auto-created from `groups.xlsx`.
 | `installments_paid_count` | optional | number | Default `0`. How many EMIs have been paid in full |
 | `emi_paise` | ✅ | number | Per-installment EMI in paise |
 | `purpose` | ✅ | text | Brief description (e.g. "business expansion") |
-| `status` | ✅ | text | `active`, `overdue`, `closed`, `foreclosed`, or `defaulted` |
+| `status` | ✅ | text | `active`, `overdue`, `closed`, `foreclosed`, or `defaulted` (lowercase; case-insensitive). Other LoanStatus values are rejected at commit |
 | `cached_outstanding_paise` | ✅ | number | **Current** balance the customer still owes. This is the single source of truth — the system trusts it. **Include any pending penalty amounts here** (we don't write separate penalty rows for migrated loans) |
 | `disbursement_date` | ✅ | date | When the customer received the loan |
 | `first_due_date` | ✅ | date | First EMI due date |
+| `disbursement_mode` | optional | text | `cash` (default), `bank_transfer`, or `online`. Used for the disbursement report |
 
 > ⚠️ **`cached_outstanding_paise` is the most important field.** If your source says the customer owes ₹4,500, put `450000` here. Don't compute it from collections — the system will trust whatever value you put.
 

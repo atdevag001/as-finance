@@ -80,7 +80,7 @@ describe('ExcelService.parseToRows', () => {
     const result = await svc.parseToRows<{ date: string }>(buf, schema, { filename: 't.xlsx' });
     expect(result.totalRows).toBe(3);
     expect(result.validRows.length).toBe(2);
-    expect(result.validRows[0]).toEqual({ date: '2027-01-26' });
+    expect(result.validRows[0]).toMatchObject({ date: '2027-01-26' });
     expect(result.errors.length).toBe(1);
     expect(result.errors[0]!.column).toBe('date');
     expect(result.errors[0]!.rowIndex).toBe(2);
@@ -104,7 +104,8 @@ describe('ExcelService.parseToRows', () => {
     ];
     const buf = await buildXlsx(['level'], [['high'], ['nope']]);
     const result = await svc.parseToRows<{ level: string }>(buf, schema, { filename: 't.xlsx' });
-    expect(result.validRows).toEqual([{ level: 'high' }]);
+    expect(result.validRows.length).toBe(1);
+    expect(result.validRows[0]).toMatchObject({ level: 'high' });
     expect(result.errors[0]!.message).toContain('high');
   });
 
