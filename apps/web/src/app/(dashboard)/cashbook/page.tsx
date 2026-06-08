@@ -11,6 +11,7 @@ import { useAuth } from '@/providers/auth-provider';
 import { hasPermission } from '@/lib/permissions';
 import { useDailySummary } from '@/hooks/useCashbook';
 import { todayIST } from '@/lib/date-utils';
+import { HelpLink } from '@/components/help-link';
 
 export default function CashbookPage() {
   const { user, isLoading } = useAuth();
@@ -39,10 +40,14 @@ function CashbookContent() {
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold">Cashbook</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold">Cashbook</h1>
+          <HelpLink topic="CASHBOOK_DAY_END" label="How day-end works" />
+        </div>
         <div className="flex gap-2">
           <Button asChild variant="outline" size="sm"><Link href="/cashbook/expenses/new">Record Expense</Link></Button>
           <Button asChild variant="outline" size="sm"><Link href="/cashbook/handovers">Handovers</Link></Button>
+          <HelpLink topic="CASHBOOK_SHORTAGE" label="If cash doesn't tally" />
         </div>
       </div>
 

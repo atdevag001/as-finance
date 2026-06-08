@@ -98,7 +98,7 @@ export class AuthController {
 
   @Post('refresh')
   @SetMetadata(IS_PUBLIC_KEY, true)
-  @Throttle({ refresh: { ttl: 60_000, limit: 10 } })
+  @Throttle({ refresh: { ttl: 60_000, limit: process.env['NODE_ENV'] === 'test' ? 50000 : 10 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Refresh access token using refresh token cookie' })
   @ApiResponse({ status: 200, description: 'Token refreshed' })

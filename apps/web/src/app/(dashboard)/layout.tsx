@@ -6,6 +6,7 @@ import { Menu, X, LogOut } from 'lucide-react';
 import { useAuth } from '@/providers/auth-provider';
 import { SidebarNav } from '@/components/sidebar-nav';
 import { MobileBottomNav } from '@/components/mobile-bottom-nav';
+import { HelpFab } from '@/components/help-fab';
 import { Button } from '@/components/ui/button';
 import { LoadingSpinner } from '@/components/shared/loading-spinner';
 
@@ -104,6 +105,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Mobile Bottom Navigation */}
       <MobileBottomNav onMoreClick={() => setSidebarOpen(true)} />
+
+      {/* Contextual help button on stake pages */}
+      <HelpFab />
     </div>
   );
 }

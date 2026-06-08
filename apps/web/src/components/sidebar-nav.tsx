@@ -16,6 +16,7 @@ import {
   Wallet,
   Bell,
   Package,
+  HelpCircle,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -44,6 +45,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Users', href: '/users', icon: UserCog, permission: 'user.read' },
   { label: 'Audit Logs', href: '/audit', icon: Shield, permission: 'audit.read' },
   { label: 'Settings', href: '/settings', icon: Settings, permission: 'settings.read' },
+  { label: 'Help', href: '/help', icon: HelpCircle, permission: 'help.read' },
 ];
 
 function hasPermission(role: string, permission: string): boolean {

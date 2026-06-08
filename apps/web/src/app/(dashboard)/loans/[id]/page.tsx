@@ -30,6 +30,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useQuery } from '@tanstack/react-query';
+import { HelpLink } from '@/components/help-link';
 import { apiClient, ApiClientError } from '@/lib/api-client';
 
 // Map backend error codes to user-friendly messages.
@@ -461,6 +462,7 @@ function LoanDetailPageContent({ params }: { params: { id: string } }) {
             >
               Approve
             </Button>
+            <HelpLink topic="LOAN_APPROVE" label="How to approve a loan" />
             <Button
               variant="destructive"
               onClick={() => setRejectOpen(true)}
@@ -480,6 +482,7 @@ function LoanDetailPageContent({ params }: { params: { id: string } }) {
             >
               Disburse
             </Button>
+            <HelpLink topic="LOAN_DISBURSE" label="How to disburse a loan" />
           </PermissionGate>
         )}
         {canForeclose && (
@@ -492,6 +495,7 @@ function LoanDetailPageContent({ params }: { params: { id: string } }) {
             >
               {generateQuote.isPending ? 'Generating…' : 'Foreclosure'}
             </Button>
+            <HelpLink topic="LOAN_FORECLOSE" label="How foreclosure works" />
           </PermissionGate>
         )}
         {canClose && (

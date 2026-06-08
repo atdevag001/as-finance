@@ -57,3 +57,70 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* ────────────────────────────────────────────────────────────
+   Help section styles
+   prose-help: readable body type for non-technical readers
+   (older eyes, Devanagari script, long-form reading)
+   ──────────────────────────────────────────────────────────── */
+@layer components {
+  .prose-help {
+    font-size: 17px;
+    line-height: 1.7;
+    max-width: 65ch;
+  }
+  .prose-help h1 {
+    font-size: 1.875rem;
+    line-height: 1.2;
+  }
+  .prose-help h2 {
+    font-size: 1.5rem;
+    line-height: 1.3;
+  }
+  .prose-help h3 {
+    font-size: 1.25rem;
+  }
+  .prose-help :where(p, li) {
+    line-height: 1.7;
+  }
+  .prose-help :lang(hi) {
+    font-feature-settings: 'kern' 1, 'liga' 1;
+  }
+}
+
+/* Print: hide app chrome, expand content full-width, page-break per H2 */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  aside,
+  nav,
+  header,
+  footer,
+  .no-print {
+    display: none !important;
+  }
+  main {
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+  .help-printable {
+    max-width: 100% !important;
+    padding: 0 !important;
+  }
+  .help-printable img {
+    max-width: 100% !important;
+    page-break-inside: avoid;
+  }
+  .help-printable h2 {
+    page-break-before: auto;
+    page-break-after: avoid;
+  }
+  .help-printable section {
+    page-break-inside: avoid;
+  }
+  a[href]::after {
+    content: '';
+  }
+}

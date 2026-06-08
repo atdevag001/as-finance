@@ -32,6 +32,7 @@ import { NotificationModule } from './modules/notification/notification.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { ReportModule } from './modules/report/report.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { HelpModule } from './modules/help/help.module';
 
 @Module({
   imports: [
@@ -85,6 +86,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
     SettingsModule,
     ReportModule,
     DashboardModule,
+    HelpModule,
     LoggerModule.forRoot({
       pinoHttp: {
         transport:

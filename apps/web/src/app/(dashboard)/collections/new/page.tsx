@@ -16,6 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/providers/auth-provider';
 import { hasPermission } from '@/lib/permissions';
+import { HelpLink } from '@/components/help-link';
 
 type PaymentMode = 'cash' | 'bank_transfer' | 'online';
 
@@ -249,6 +250,7 @@ function NewCollectionPageContent() {
           </Link>
         </Button>
         <h1 className="text-2xl font-bold">Post Collection</h1>
+        <HelpLink topic="COLLECTION_POST" label="How to post a collection" />
       </div>
 
       {serverError && <ErrorMessage message={serverError} />}

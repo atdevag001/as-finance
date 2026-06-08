@@ -91,4 +91,8 @@ export const PERMISSIONS: Record<string, readonly UserRole[]> = {
 
   // Dashboard KPIs
   'dashboard.read': READ_ALL,
+
+  // Help / User Guide
+  'help.read': READ_ALL,
+  'help.submit_feedback': READ_ALL,
 } as const;
