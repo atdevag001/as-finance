@@ -282,11 +282,12 @@ describe('CashbookService', () => {
         'accountant',
       );
 
-      // sourceType must be uppercase to match AccountingService.maybeWriteCashTransaction's
-      // categoryMap; otherwise the auto-write falls back to 'collection' and the
-      // cashbook miscounts the expense.
+      // sourceType is the typed JournalSourceType.EXPENSE constant, which
+      // resolves to lowercase 'expense' (matches the Prisma enum column
+      // the JE writes to). The accounting auto-mirror's categoryMap also
+      // keys on lowercase since the medium-pass fix.
       const jeArg = accountingService.createJournalEntry.mock.calls[0]![0];
-      expect(jeArg.sourceType).toBe('EXPENSE');
+      expect(jeArg.sourceType).toBe('expense');
       // sourceId must be a real UUID (was 'pending' before — would have thrown
       // on the @db.Uuid cast in production).
       expect(jeArg.sourceId).toMatch(/^[0-9a-f-]{36}$/);
