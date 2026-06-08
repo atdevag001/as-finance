@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from '@/providers/auth-provider';
 import { hasPermission } from '@/lib/permissions';
+import { HelpLink } from '@/components/help-link';
 import {
   getChangedSettings,
   classifySettingValue,
@@ -50,7 +51,11 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Settings</h1>
+      <div className="flex items-center gap-2">
+        <h1 className="text-2xl font-bold">Settings</h1>
+        <HelpLink topic="SETTINGS_BOUNDS" label="What each setting affects" />
+        <HelpLink topic="SETTINGS_HOLIDAYS" label="Holiday calendar — how it affects EMIs" />
+      </div>
       <SettingsSection />
       <HolidaySection />
     </div>

@@ -97,6 +97,33 @@ const SHOTS: Shot[] = [
 
   // Help itself — meta screenshots
   { slug: 'help-home', chapter: 'getting-started', role: 'manager', url: '/help', viewport: 'desktop', waitFor: 'h1' },
+
+  // V1.5 — new chapter screenshots
+
+  // Loan Products
+  { slug: 'loan-products-list', chapter: 'loan-products', role: 'super_admin', url: '/loan-products', viewport: 'desktop', waitFor: 'h1' },
+  { slug: 'loan-product-new', chapter: 'loan-products', role: 'super_admin', url: '/loan-products/new', viewport: 'desktop', waitFor: 'h1' },
+
+  // Receipts
+  { slug: 'receipts-list', chapter: 'receipts', role: 'manager', url: '/receipts', viewport: 'desktop', waitFor: 'h1' },
+
+  // Accounting
+  { slug: 'accounting-hub', chapter: 'accounting', role: 'accountant', url: '/accounting', viewport: 'desktop', waitFor: 'h1' },
+  { slug: 'trial-balance', chapter: 'accounting', role: 'accountant', url: '/accounting/trial-balance', viewport: 'desktop', waitFor: 'h1' },
+  { slug: 'profit-loss', chapter: 'accounting', role: 'accountant', url: '/accounting/profit-loss', viewport: 'desktop', waitFor: 'h1' },
+  { slug: 'balance-sheet', chapter: 'accounting', role: 'accountant', url: '/accounting/balance-sheet', viewport: 'desktop', waitFor: 'h1' },
+
+  // Notifications
+  { slug: 'notifications-list', chapter: 'notifications', role: 'super_admin', url: '/notifications', viewport: 'desktop', waitFor: 'h1' },
+
+  // Audit Logs (with the new ❓ icons next to title)
+  { slug: 'audit-log-filtered', chapter: 'audit', role: 'super_admin', url: '/audit', viewport: 'desktop', waitFor: 'h1' },
+
+  // Settings (with the new ❓ icons next to title)
+  { slug: 'settings-page', chapter: 'settings', role: 'super_admin', url: '/settings', viewport: 'desktop', waitFor: 'h1' },
+
+  // Help home — refreshed with all 19 chapters
+  { slug: 'help-home-all-chapters', chapter: 'getting-started', role: 'manager', url: '/help', viewport: 'desktop', waitFor: 'h1' },
 ];
 
 function ensureDir(dir: string): void {

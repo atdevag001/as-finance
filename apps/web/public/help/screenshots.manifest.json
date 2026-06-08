@@ -1,12 +1,61 @@
 {
-  "generatedAt": "2026-06-08T08:22:02.615Z",
+  "generatedAt": "2026-06-08T11:32:23.704Z",
   "entries": [
+    {
+      "slug": "settings",
+      "chapter": "admin",
+      "role": "super_admin",
+      "viewport": "desktop",
+      "capturedAt": "2026-06-08T11:32:00.978Z"
+    },
+    {
+      "slug": "audit-log",
+      "chapter": "admin",
+      "role": "super_admin",
+      "viewport": "desktop",
+      "capturedAt": "2026-06-08T11:32:04.945Z"
+    },
     {
       "slug": "help-home",
       "chapter": "getting-started",
       "role": "manager",
       "viewport": "desktop",
-      "capturedAt": "2026-06-08T08:22:02.524Z"
+      "capturedAt": "2026-06-08T11:32:08.477Z"
+    },
+    {
+      "slug": "loan-products-list",
+      "chapter": "loan-products",
+      "role": "super_admin",
+      "viewport": "desktop",
+      "capturedAt": "2026-06-08T11:32:12.155Z"
+    },
+    {
+      "slug": "loan-product-new",
+      "chapter": "loan-products",
+      "role": "super_admin",
+      "viewport": "desktop",
+      "capturedAt": "2026-06-08T11:32:15.520Z"
+    },
+    {
+      "slug": "receipts-list",
+      "chapter": "receipts",
+      "role": "manager",
+      "viewport": "desktop",
+      "capturedAt": "2026-06-08T11:32:18.340Z"
+    },
+    {
+      "slug": "accounting-hub",
+      "chapter": "accounting",
+      "role": "accountant",
+      "viewport": "desktop",
+      "capturedAt": "2026-06-08T11:32:21.383Z"
+    },
+    {
+      "slug": "trial-balance",
+      "chapter": "accounting",
+      "role": "accountant",
+      "viewport": "desktop",
+      "capturedAt": "2026-06-08T11:32:23.616Z"
     }
   ]
 }

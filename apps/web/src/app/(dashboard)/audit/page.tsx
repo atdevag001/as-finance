@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { LoadingSpinner, ErrorMessage, PaginationControls, AccessDenied, DateDisplay } from '@/components/shared';
 import { Input } from '@/components/ui/input';
+import { HelpLink } from '@/components/help-link';
 import {
   Select,
   SelectContent,
@@ -94,7 +95,11 @@ function AuditContent() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Audit Log</h1>
+      <div className="flex items-center gap-2">
+        <h1 className="text-2xl font-bold">Audit Log</h1>
+        <HelpLink topic="AUDIT_INVESTIGATE" label="How to read and investigate" />
+        <HelpLink topic="AUDIT_FILTER" label="Filtering tips" />
+      </div>
 
       <div className="flex flex-wrap gap-2">
         <Select value={entity || ALL} onValueChange={handleSelectChange(setEntity)}>

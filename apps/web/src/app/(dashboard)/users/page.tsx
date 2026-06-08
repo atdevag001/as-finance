@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { Plus } from 'lucide-react';
+import { HelpLink } from '@/components/help-link';
 import { useAuth } from '@/providers/auth-provider';
 import { hasPermission } from '@/lib/permissions';
 import { useUsers } from '@/hooks/useUsers';
@@ -46,7 +47,10 @@ export default function UsersPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">User Management</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold">User Management</h1>
+          <HelpLink topic="USER_NEW" label="How to create a user" />
+        </div>
         <PermissionGate permission="user.create">
           <Button asChild>
             <Link href="/users/new">

@@ -95,13 +95,21 @@ test.describe('Help — every chapter loads', () => {
   const chapters = [
     'getting-started',
     'roles',
+    'workflows',
     'customers',
     'loans',
+    'loan-products',
     'collections',
+    'receipts',
     'groups',
     'cashbook',
+    'accounting',
+    'penalties',
     'reports',
     'admin',
+    'settings',
+    'notifications',
+    'audit',
     'troubleshooting',
     'glossary',
   ];
@@ -205,6 +213,36 @@ test.describe('Help — embedded <HelpLink> in app', () => {
       const href = await link.getAttribute('href');
       expect(href).toContain('/help/cashbook');
       expect(href).toContain('#day-end');
+    } finally {
+      await ctx.close();
+    }
+  });
+
+  test('? icon next to Loan Products title points to loan-products chapter', async ({ browser }) => {
+    const { page, ctx } = await newAuthedPage(browser, 'super_admin');
+    try {
+      await page.goto('/loan-products', { waitUntil: 'networkidle' });
+      const link = page.getByRole('link', { name: /How loan products work/i });
+      await expect(link).toBeVisible();
+      const href = await link.getAttribute('href');
+      expect(href).toContain('/help/loan-products');
+    } finally {
+      await ctx.close();
+    }
+  });
+
+  test('? icons next to Settings + Audit + Notifications point to their chapters', async ({ browser }) => {
+    const { page, ctx } = await newAuthedPage(browser, 'super_admin');
+    try {
+      await page.goto('/settings', { waitUntil: 'networkidle' });
+      await expect(page.getByRole('link', { name: /What each setting affects/i })).toBeVisible();
+      await expect(page.getByRole('link', { name: /Holiday calendar/i })).toBeVisible();
+
+      await page.goto('/audit', { waitUntil: 'networkidle' });
+      await expect(page.getByRole('link', { name: /How to read and investigate/i })).toBeVisible();
+
+      await page.goto('/notifications', { waitUntil: 'networkidle' });
+      await expect(page.getByRole('link', { name: /What these statuses mean/i })).toBeVisible();
     } finally {
       await ctx.close();
     }

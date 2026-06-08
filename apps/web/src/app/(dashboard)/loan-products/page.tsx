@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { Plus } from 'lucide-react';
+import { HelpLink } from '@/components/help-link';
 import { useLoanProducts, useDeactivateLoanProduct, type LoanProduct } from '@/hooks/useLoanProducts';
 import { useToast } from '@/providers/toast-provider';
 import { useAuth } from '@/providers/auth-provider';
@@ -60,7 +61,10 @@ function LoanProductsPageContent() {
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold">Loan Products</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold">Loan Products</h1>
+          <HelpLink topic="LOAN_PRODUCT_NEW" label="How loan products work" />
+        </div>
         <PermissionGate permission="loan_product.create">
           <Button asChild>
             <Link href="/loan-products/new">

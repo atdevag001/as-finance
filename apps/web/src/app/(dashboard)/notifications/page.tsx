@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { RefreshCw } from 'lucide-react';
+import { HelpLink } from '@/components/help-link';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   LoadingSpinner,
@@ -90,7 +91,10 @@ function NotificationsContent() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Notifications</h1>
+      <div className="flex items-center gap-2">
+        <h1 className="text-2xl font-bold">Notifications</h1>
+        <HelpLink topic="NOTIFICATION_RETRY" label="What these statuses mean" />
+      </div>
 
       <div className="flex flex-wrap gap-2">
         <Select value={status} onValueChange={handleStatusChange}>
