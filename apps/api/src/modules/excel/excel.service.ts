@@ -212,12 +212,20 @@ export class ExcelService {
     });
 
     // Match headers to schema (case-insensitive, ignore whitespace differences).
+    // Optional columns may legitimately be omitted from the file — only flag
+    // required ones as missing. (Operators following the migration template
+    // instructions remove unused optional columns, so failing on optional
+    // absence would force them to keep useless empty headers.)
     const colIndexByKey = new Map<string, number>();
     const missing: string[] = [];
     for (const col of schema) {
       const idx = headerLabels.findIndex((h) => normalize(h) === normalize(col.key));
-      if (idx < 0) missing.push(col.key);
-      else colIndexByKey.set(col.key, idx + 1); // ExcelJS columns are 1-indexed
+      if (idx < 0) {
+        if (col.required ?? true) missing.push(col.key);
+        // optional + absent: don't add to colIndexByKey → row parsing skips it.
+      } else {
+        colIndexByKey.set(col.key, idx + 1); // ExcelJS columns are 1-indexed
+      }
     }
     if (missing.length > 0) {
       throw new BadRequestException(

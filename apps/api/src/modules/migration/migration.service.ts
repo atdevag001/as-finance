@@ -1163,3 +1163,21 @@ const DOMAIN_INSTRUCTIONS: Record<MigrationDomain, { description: string; notes:
     ],
   },
 };
+
+/**
+ * Test-only re-export of the pure helpers. Keeps regression coverage for the
+ * 11 defects surfaced by the migration adversarial-review pass without forcing
+ * us to spin up a full NestJS test bed for every assertion.
+ *
+ * Not part of the public API. Do not import outside __tests__.
+ */
+export const __INTERNAL__ = {
+  normalizeEnum,
+  addMonthsClamped,
+  sha256,
+  ALLOWED_CUSTOMER_STATUS,
+  ALLOWED_GROUP_STATUS,
+  ALLOWED_LOAN_STATUS,
+  ALLOWED_PAYMENT_MODE,
+  ALLOWED_MEETING_DAYS,
+};
