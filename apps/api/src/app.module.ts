@@ -33,6 +33,9 @@ import { SettingsModule } from './modules/settings/settings.module';
 import { ReportModule } from './modules/report/report.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { HelpModule } from './modules/help/help.module';
+import { ExcelModule } from './modules/excel/excel.module';
+import { ExportsModule } from './modules/exports/exports.module';
+import { ImportModule } from './modules/import/import.module';
 
 @Module({
   imports: [
@@ -87,6 +90,9 @@ import { HelpModule } from './modules/help/help.module';
     ReportModule,
     DashboardModule,
     HelpModule,
+    ExcelModule,
+    ExportsModule,
+    ImportModule,
     LoggerModule.forRoot({
       pinoHttp: {
         transport:

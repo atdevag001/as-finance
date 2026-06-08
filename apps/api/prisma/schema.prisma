@@ -161,6 +161,8 @@ enum AuditAction {
   cash_handover_verified
   document_uploaded
   document_deleted
+  data_exported
+  data_imported
 }
 
 enum DayOfWeek {

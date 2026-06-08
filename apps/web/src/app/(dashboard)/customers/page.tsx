@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/providers/auth-provider';
 import { hasPermission } from '@/lib/permissions';
+import { ExportButton } from '@/components/data-io/export-button';
 
 // 'inactive' is a valid DTO value but no service ever writes it — hide until a deactivation flow exists.
 const STATUS_OPTIONS = [
@@ -61,13 +62,22 @@ export default function CustomersPage() {
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold">Customers</h1>
-        <PermissionGate permission="customer.create">
-          <Button asChild>
-            <Link href="/customers/new">
-              <Plus className="mr-2 h-4 w-4" />New Customer
-            </Link>
-          </Button>
-        </PermissionGate>
+        <div className="flex gap-2">
+          <ExportButton
+            permission="customer.export"
+            endpoint="/exports/customers.xlsx"
+            filename="customers.xlsx"
+            query={{ status, search: debouncedSearch }}
+            supportsUnmaskPii
+          />
+          <PermissionGate permission="customer.create">
+            <Button asChild>
+              <Link href="/customers/new">
+                <Plus className="mr-2 h-4 w-4" />New Customer
+              </Link>
+            </Button>
+          </PermissionGate>
+        </div>
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">

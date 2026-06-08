@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from '@/providers/auth-provider';
 import { hasPermission } from '@/lib/permissions';
 import { HelpLink } from '@/components/help-link';
+import { ExportButton } from '@/components/data-io/export-button';
+import { ImportModal } from '@/components/data-io/import-modal';
 import {
   getChangedSettings,
   classifySettingValue,
@@ -51,10 +53,37 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2">
-        <h1 className="text-2xl font-bold">Settings</h1>
-        <HelpLink topic="SETTINGS_BOUNDS" label="What each setting affects" />
-        <HelpLink topic="SETTINGS_HOLIDAYS" label="Holiday calendar — how it affects EMIs" />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold">Settings</h1>
+          <HelpLink topic="SETTINGS_BOUNDS" label="What each setting affects" />
+          <HelpLink topic="SETTINGS_HOLIDAYS" label="Holiday calendar — how it affects EMIs" />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <ExportButton
+            permission="settings.export"
+            endpoint="/exports/settings.xlsx"
+            filename="settings.xlsx"
+          />
+          <ImportModal
+            permission="settings.import"
+            domain="settings"
+            title="Import System Settings"
+            triggerLabel="Import Settings"
+          />
+          <ExportButton
+            permission="settings.export"
+            endpoint="/exports/holidays.xlsx"
+            filename="holidays.xlsx"
+            label="Holidays"
+          />
+          <ImportModal
+            permission="settings.import"
+            domain="holidays"
+            title="Import Holiday Calendar"
+            triggerLabel="Import Holidays"
+          />
+        </div>
       </div>
       <SettingsSection />
       <HolidaySection />

@@ -29,7 +29,8 @@ export type ChapterListItem = {
     | 'Shield'
     | 'LifeBuoy'
     | 'GraduationCap'
-    | 'Route';
+    | 'Route'
+    | 'FileSpreadsheet';
 };
 
 export const CHAPTERS: ChapterListItem[] = [
@@ -221,6 +222,16 @@ export const CHAPTERS: ChapterListItem[] = [
       en: 'EMI, DPD, PAR, foreclosure — in plain language.',
       hi: 'EMI, DPD, PAR, फोरक्लोज़र — आसान भाषा में।',
       hinglish: 'EMI, DPD, PAR, foreclosure — aasaan bhasha mein.',
+    },
+  },
+  {
+    id: 'data-import-export',
+    iconName: 'FileSpreadsheet',
+    label: { en: 'Data Import / Export', hi: 'डेटा आयात / निर्यात', hinglish: 'Data Import / Export' },
+    hook: {
+      en: 'Excel in, Excel out — for reports and migration.',
+      hi: 'Excel अंदर, Excel बाहर — रिपोर्ट और माइग्रेशन के लिए।',
+      hinglish: 'Excel in, Excel out — reports aur migration ke liye.',
     },
   },
 ];

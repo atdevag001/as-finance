@@ -4,6 +4,8 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { Plus } from 'lucide-react';
 import { HelpLink } from '@/components/help-link';
+import { ExportButton } from '@/components/data-io/export-button';
+import { ImportModal } from '@/components/data-io/import-modal';
 import { useLoanProducts, useDeactivateLoanProduct, type LoanProduct } from '@/hooks/useLoanProducts';
 import { useToast } from '@/providers/toast-provider';
 import { useAuth } from '@/providers/auth-provider';
@@ -65,13 +67,26 @@ function LoanProductsPageContent() {
           <h1 className="text-2xl font-bold">Loan Products</h1>
           <HelpLink topic="LOAN_PRODUCT_NEW" label="How loan products work" />
         </div>
-        <PermissionGate permission="loan_product.create">
-          <Button asChild>
-            <Link href="/loan-products/new">
-              <Plus className="mr-2 h-4 w-4" />New Product
-            </Link>
-          </Button>
-        </PermissionGate>
+        <div className="flex flex-wrap gap-2">
+          <ExportButton
+            permission="loan_product.export"
+            endpoint="/exports/loan-products.xlsx"
+            filename="loan-products.xlsx"
+          />
+          <ImportModal
+            permission="loan_product.import"
+            domain="loan-products"
+            title="Import Loan Products"
+            triggerLabel="Import Products"
+          />
+          <PermissionGate permission="loan_product.create">
+            <Button asChild>
+              <Link href="/loan-products/new">
+                <Plus className="mr-2 h-4 w-4" />New Product
+              </Link>
+            </Button>
+          </PermissionGate>
+        </div>
       </div>
 
       {isLoading && (

@@ -95,4 +95,19 @@ export const PERMISSIONS: Record<string, readonly UserRole[]> = {
   // Help / User Guide
   'help.read': READ_ALL,
   'help.submit_feedback': READ_ALL,
+
+  // Data Export — read-heavy, every export is audit-logged
+  'customer.export': [SUPER_ADMIN, MANAGER, ACCOUNTANT, VIEWER_AUDITOR],
+  'loan.export': [SUPER_ADMIN, MANAGER, ACCOUNTANT, VIEWER_AUDITOR],
+  'loan_product.export': [SUPER_ADMIN, MANAGER],
+  'collection.export': [SUPER_ADMIN, MANAGER, ACCOUNTANT, VIEWER_AUDITOR],
+  'group.export': [SUPER_ADMIN, MANAGER, ACCOUNTANT, VIEWER_AUDITOR],
+  'settings.export': [SUPER_ADMIN, MANAGER],
+
+  // Data Import — write-heavy, dry-run + commit + idempotency
+  'settings.import': [SUPER_ADMIN],
+  'loan_product.import': [SUPER_ADMIN],
+
+  // PII unmask on export — extremely restricted, every use audit-logged
+  'export.unmask_pii': [SUPER_ADMIN],
 } as const;

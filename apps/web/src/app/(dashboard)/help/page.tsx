@@ -21,6 +21,7 @@ import {
   LifeBuoy,
   GraduationCap,
   Route,
+  FileSpreadsheet,
   Phone,
   Sparkles,
   type LucideIcon,
@@ -53,6 +54,7 @@ const ICONS: Record<string, LucideIcon> = {
   LifeBuoy,
   GraduationCap,
   Route,
+  FileSpreadsheet,
 };
 
 const PAGE: Record<HelpLang, {

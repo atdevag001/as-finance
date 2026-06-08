@@ -146,4 +146,6 @@ export enum AuditAction {
   CASH_HANDOVER_VERIFIED = 'cash_handover_verified',
   DOCUMENT_UPLOADED = 'document_uploaded',
   DOCUMENT_DELETED = 'document_deleted',
+  DATA_EXPORTED = 'data_exported',
+  DATA_IMPORTED = 'data_imported',
 }

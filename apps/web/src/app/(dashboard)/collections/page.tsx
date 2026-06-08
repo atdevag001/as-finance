@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { Plus, Search, X } from 'lucide-react';
+import { ExportButton } from '@/components/data-io/export-button';
 import { useCollections, type Collection } from '@/hooks/useCollections';
 import { todayIST } from '@/lib/date-utils';
 import {
@@ -97,9 +98,20 @@ function CollectionsPageContent() {
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold">Collections</h1>
-        <Button asChild>
-          <Link href="/collections/new"><Plus className="mr-2 h-4 w-4" />Post Collection</Link>
-        </Button>
+        <div className="flex gap-2">
+          <ExportButton
+            permission="collection.export"
+            endpoint="/exports/collections.xlsx"
+            filename="collections.xlsx"
+            query={{
+              startDate: appliedFilters.startDate,
+              endDate: appliedFilters.endDate,
+            }}
+          />
+          <Button asChild>
+            <Link href="/collections/new"><Plus className="mr-2 h-4 w-4" />Post Collection</Link>
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}

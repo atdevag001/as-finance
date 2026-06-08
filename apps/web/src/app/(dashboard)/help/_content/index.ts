@@ -18,6 +18,7 @@ import { notifications } from './notifications';
 import { audit } from './audit';
 import { troubleshooting } from './troubleshooting';
 import { glossary } from './glossary';
+import { dataImportExport } from './data-import-export';
 
 export const ALL_CHAPTERS: Record<string, ChapterContent> = {
   'getting-started': gettingStarted,
@@ -39,6 +40,7 @@ export const ALL_CHAPTERS: Record<string, ChapterContent> = {
   audit,
   troubleshooting,
   glossary,
+  'data-import-export': dataImportExport,
 };
 
 export {
@@ -61,4 +63,5 @@ export {
   audit,
   troubleshooting,
   glossary,
+  dataImportExport,
 };

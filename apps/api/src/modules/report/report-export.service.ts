@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import * as ExcelJS from 'exceljs';
 import PDFDocument from 'pdfkit';
+import { ExcelService } from '../excel/excel.service';
+import type { ExportColumn as SharedExportColumn } from '../excel/types';
 
 export interface ExportColumn {
   key: string;
@@ -19,11 +21,23 @@ export interface ExportData {
 
 @Injectable()
 export class ReportExportService {
+  constructor(private readonly excel: ExcelService) {}
+
   /**
    * Generate Excel file from report data.
-   * Returns Buffer containing XLSX file.
+   * Delegates to the shared ExcelService — keeps backward-compat shape.
    */
   async generateExcel(data: ExportData): Promise<Buffer> {
+    return this.excel.exportToBuffer(
+      data.columns as SharedExportColumn[],
+      data.rows,
+      { title: data.title || data.reportType, filters: data.filters, summary: data.summary },
+    );
+  }
+
+  /** Legacy implementation kept for emergency fallback. */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  private async _generateExcelLegacy(data: ExportData): Promise<Buffer> {
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'AS Finance';
     workbook.created = new Date();

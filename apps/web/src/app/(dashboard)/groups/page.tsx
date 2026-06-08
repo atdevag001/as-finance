@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { Plus } from 'lucide-react';
+import { ExportButton } from '@/components/data-io/export-button';
 import { useGroups } from '@/hooks/useGroups';
 import {
   StatusBadge,
@@ -44,13 +45,20 @@ function GroupsPageContent() {
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold">Groups</h1>
-        <PermissionGate permission="group.create">
-          <Button asChild>
-            <Link href="/groups/new">
-              <Plus className="mr-2 h-4 w-4" />New Group
-            </Link>
-          </Button>
-        </PermissionGate>
+        <div className="flex gap-2">
+          <ExportButton
+            permission="group.export"
+            endpoint="/exports/groups.xlsx"
+            filename="groups.xlsx"
+          />
+          <PermissionGate permission="group.create">
+            <Button asChild>
+              <Link href="/groups/new">
+                <Plus className="mr-2 h-4 w-4" />New Group
+              </Link>
+            </Button>
+          </PermissionGate>
+        </div>
       </div>
 
       {isLoading && (

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { Plus, X } from 'lucide-react';
+import { ExportButton } from '@/components/data-io/export-button';
 import { useLoans } from '@/hooks/useLoans';
 import { AccessDenied, StatusBadge, MoneyDisplay, LoadingSpinner, ErrorMessage, PaginationControls, PermissionGate, MobileCardList, type MobileCardItem } from '@/components/shared';
 import { Button } from '@/components/ui/button';
@@ -70,13 +71,21 @@ function LoansPageContent() {
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold">Loans</h1>
-        <PermissionGate permission="loan.create">
-          <Button asChild>
-            <Link href="/loans/new">
-              <Plus className="mr-2 h-4 w-4" />New Loan
-            </Link>
-          </Button>
-        </PermissionGate>
+        <div className="flex gap-2">
+          <ExportButton
+            permission="loan.export"
+            endpoint="/exports/loans.xlsx"
+            filename="loans.xlsx"
+            query={{ status }}
+          />
+          <PermissionGate permission="loan.create">
+            <Button asChild>
+              <Link href="/loans/new">
+                <Plus className="mr-2 h-4 w-4" />New Loan
+              </Link>
+            </Button>
+          </PermissionGate>
+        </div>
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
