@@ -49,7 +49,10 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
       {
         name: 'refresh',
         ttl: 60_000,
-        limit: process.env['NODE_ENV'] === 'test' ? 1000 : 10,
+        // 50k/min in test so a multi-worker Playwright suite running 50+ min
+        // can't exhaust the bucket. /auth/refresh keys by IP for
+        // unauthenticated requests; all workers share one bucket.
+        limit: process.env['NODE_ENV'] === 'test' ? 50_000 : 10,
       },
       {
         name: 'changePassword',
