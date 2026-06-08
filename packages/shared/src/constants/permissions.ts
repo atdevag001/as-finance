@@ -110,4 +110,8 @@ export const PERMISSIONS: Record<string, readonly UserRole[]> = {
 
   // PII unmask on export — extremely restricted, every use audit-logged
   'export.unmask_pii': [SUPER_ADMIN],
+
+  // Data Migration — one-shot, locks after first successful run
+  'migration.run': [SUPER_ADMIN],
+  'migration.read': [SUPER_ADMIN, VIEWER_AUDITOR],
 } as const;

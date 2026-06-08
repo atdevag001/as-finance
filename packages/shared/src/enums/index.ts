@@ -148,4 +148,7 @@ export enum AuditAction {
   DOCUMENT_DELETED = 'document_deleted',
   DATA_EXPORTED = 'data_exported',
   DATA_IMPORTED = 'data_imported',
+  MIGRATION_STARTED = 'migration_started',
+  MIGRATION_COMPLETED = 'migration_completed',
+  MIGRATION_FAILED = 'migration_failed',
 }

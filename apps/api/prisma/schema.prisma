@@ -163,6 +163,9 @@ enum AuditAction {
   document_deleted
   data_exported
   data_imported
+  migration_started
+  migration_completed
+  migration_failed
 }
 
 enum DayOfWeek {
@@ -391,6 +394,10 @@ model customers {
   creator          users          @relation("customer_created_by", fields: [created_by], references: [id])
   photo            file_metadata? @relation(fields: [photo_file_id], references: [id])
 
+  /// Forensic lookup back to the source system row id. Nullable; populated only
+  /// for rows ingested via the Data Migration module.
+  legacy_customer_id String? @db.VarChar(120)
+
   documents      customer_documents[]
   family_members family_members[]
   guarantors     guarantors[]
@@ -405,6 +412,7 @@ model customers {
   @@index([assigned_officer_id], name: "idx_customers_assigned_officer")
   @@index([created_by], name: "idx_customers_created_by")
   @@index([photo_file_id], name: "idx_customers_photo_file_id")
+  @@index([legacy_customer_id], name: "idx_customers_legacy_id")
 }
 
 /// KYC and supporting documents for customers
@@ -548,6 +556,9 @@ model loans {
   creator         users                 @relation("loan_created_by", fields: [created_by], references: [id])
   approver        users?                @relation("loan_approved_by", fields: [approved_by], references: [id])
 
+  /// Forensic lookup back to the source system loan number.
+  legacy_loan_id String? @db.VarChar(120)
+
   approvals       loan_approvals[]
   status_history  loan_status_history[]
   schedules       loan_schedules[]
@@ -566,6 +577,7 @@ model loans {
   @@index([dpd], name: "idx_loans_dpd")
   @@index([overdue_bucket], name: "idx_loans_overdue_bucket")
   @@index([created_at(sort: Desc)], name: "idx_loans_created_at")
+  @@index([legacy_loan_id], name: "idx_loans_legacy_id")
 }
 
 /// Approval workflow entries for loans
@@ -677,6 +689,9 @@ model collections {
   original_collection     collections?             @relation("collection_reversal", fields: [original_collection_id], references: [id])
   reversals               collections[]            @relation("collection_reversal")
   allocations             collection_allocations[]
+  /// Forensic lookup back to the source-system collection id.
+  legacy_collection_id String? @db.VarChar(120)
+
   receipts                receipts[]
   foreclosure_settlements foreclosures[]
 
@@ -684,6 +699,7 @@ model collections {
   @@index([payment_date], name: "idx_collections_payment_date")
   @@index([status], name: "idx_collections_status")
   @@index([original_collection_id], name: "idx_collections_original_collection_id")
+  @@index([legacy_collection_id], name: "idx_collections_legacy_id")
 }
 
 /// Allocation breakdown of a collection across installments
@@ -839,6 +855,9 @@ model groups {
   created_at  DateTime    @default(now()) @db.Timestamptz()
   updated_at  DateTime    @updatedAt @db.Timestamptz()
 
+  /// Forensic lookup back to the source-system group id.
+  legacy_group_id String? @db.VarChar(120)
+
   leader            customers           @relation("group_leader", fields: [leader_id], references: [id])
   creator           users               @relation(fields: [created_by], references: [id])
   members           group_members[]
@@ -848,6 +867,7 @@ model groups {
   @@index([status], name: "idx_groups_status")
   @@index([leader_id], name: "idx_groups_leader_id")
   @@index([branch_area], name: "idx_groups_branch_area")
+  @@index([legacy_group_id], name: "idx_groups_legacy_id")
 }
 
 /// Group membership tracking

@@ -17,6 +17,7 @@ import {
   Bell,
   Package,
   HelpCircle,
+  Database,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -45,6 +46,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Users', href: '/users', icon: UserCog, permission: 'user.read' },
   { label: 'Audit Logs', href: '/audit', icon: Shield, permission: 'audit.read' },
   { label: 'Settings', href: '/settings', icon: Settings, permission: 'settings.read' },
+  { label: 'Data Migration', href: '/data-migration', icon: Database, permission: 'migration.run' },
   { label: 'Help', href: '/help', icon: HelpCircle, permission: 'help.read' },
 ];
 

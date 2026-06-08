@@ -36,6 +36,7 @@ import { HelpModule } from './modules/help/help.module';
 import { ExcelModule } from './modules/excel/excel.module';
 import { ExportsModule } from './modules/exports/exports.module';
 import { ImportModule } from './modules/import/import.module';
+import { MigrationModule } from './modules/migration/migration.module';
 
 @Module({
   imports: [
@@ -93,6 +94,7 @@ import { ImportModule } from './modules/import/import.module';
     ExcelModule,
     ExportsModule,
     ImportModule,
+    MigrationModule,
     LoggerModule.forRoot({
       pinoHttp: {
         transport:
