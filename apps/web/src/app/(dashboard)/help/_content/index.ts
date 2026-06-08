@@ -19,6 +19,7 @@ import { audit } from './audit';
 import { troubleshooting } from './troubleshooting';
 import { glossary } from './glossary';
 import { dataImportExport } from './data-import-export';
+import { dataMigration } from './data-migration';
 
 export const ALL_CHAPTERS: Record<string, ChapterContent> = {
   'getting-started': gettingStarted,
@@ -41,6 +42,7 @@ export const ALL_CHAPTERS: Record<string, ChapterContent> = {
   troubleshooting,
   glossary,
   'data-import-export': dataImportExport,
+  'data-migration': dataMigration,
 };
 
 export {
@@ -64,4 +66,5 @@ export {
   troubleshooting,
   glossary,
   dataImportExport,
+  dataMigration,
 };

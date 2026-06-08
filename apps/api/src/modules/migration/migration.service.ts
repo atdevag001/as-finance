@@ -1,4 +1,5 @@
 import * as crypto from 'crypto';
+import * as ExcelJS from 'exceljs';
 import {
   BadRequestException,
   ConflictException,
@@ -88,6 +89,95 @@ export class MigrationService {
     private readonly settings: SettingsService,
     private readonly encryption: EncryptionService,
   ) {}
+
+  /**
+   * Generate an .xlsx template for a single migration domain.
+   *
+   * Format:
+   *   • Sheet "Data": header row exactly matching the schema keys, followed by
+   *     one example row showing valid values. Operators replace the example with
+   *     real rows and re-upload. The header row is what parseToRows matches
+   *     against, so the round-trip (download → fill → upload) works.
+   *   • Sheet "Instructions": required-vs-optional table + enum cheat-sheet +
+   *     per-column hints. Read-only context, ignored by parseToRows.
+   *
+   * No DB / no audit — pure file generation. Permission gating happens in
+   * the controller.
+   */
+  async generateTemplate(domain: MigrationDomain): Promise<Buffer> {
+    const cols = TEMPLATE_COLUMNS[domain];
+    if (!cols) {
+      throw new BadRequestException(`Unknown migration domain '${domain}'`);
+    }
+    const instructions = DOMAIN_INSTRUCTIONS[domain];
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'AS Finance — Data Migration';
+    wb.created = new Date();
+
+    // ── Sheet 1: Data (round-trip compatible) ─────────────────────────────
+    const data = wb.addWorksheet('Data');
+    data.addRow(cols.map((c) => c.key));
+    const header = data.getRow(1);
+    header.font = { bold: true };
+    header.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE0E0E0' },
+    };
+    header.border = { bottom: { style: 'thin' } };
+
+    // Example row — shows valid values; operators overwrite with real data.
+    data.addRow(cols.map((c) => c.example));
+    const example = data.getRow(2);
+    example.font = { italic: true, color: { argb: 'FF666666' } };
+
+    // Reasonable column widths.
+    cols.forEach((c, i) => {
+      const col = data.getColumn(i + 1);
+      col.width = Math.min(36, Math.max(14, c.key.length + 4, String(c.example).length + 4));
+    });
+
+    // ── Sheet 2: Instructions (context) ───────────────────────────────────
+    const info = wb.addWorksheet('Instructions');
+    info.columns = [
+      { header: 'Column', key: 'col', width: 30 },
+      { header: 'Required', key: 'req', width: 12 },
+      { header: 'Example', key: 'ex', width: 30 },
+      { header: 'Notes / format', key: 'hint', width: 60 },
+    ];
+    info.getRow(1).font = { bold: true };
+    info.getRow(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE0E0E0' },
+    };
+    for (const c of cols) {
+      info.addRow({
+        col: c.key,
+        req: c.required ? 'YES' : 'optional',
+        ex: c.example,
+        hint: c.hint ?? '',
+      });
+    }
+
+    // Trailing notes block — domain-level rules.
+    info.addRow([]);
+    const titleRow = info.addRow([instructions.description]);
+    titleRow.font = { bold: true };
+    info.mergeCells(`A${titleRow.number}`, `D${titleRow.number}`);
+    for (const note of instructions.notes) {
+      info.addRow([`• ${note}`]);
+      info.mergeCells(`A${info.rowCount}`, `D${info.rowCount}`);
+    }
+    info.addRow([]);
+    const footer = info.addRow(['Full spec: docs/MIGRATION_FILE_FORMAT.md (also served at /docs/MIGRATION_FILE_FORMAT.md)']);
+    footer.font = { italic: true, size: 10 };
+    info.mergeCells(`A${footer.number}`, `D${footer.number}`);
+
+    const arr = (await wb.xlsx.writeBuffer()) as ArrayBuffer;
+    return Buffer.from(arr);
+  }
 
   async getState(): Promise<{ state: MigrationState; completedAt?: string; completedBy?: string }> {
     const all = await this.settings.findAll();
@@ -945,4 +1035,131 @@ const SCHEMAS: Record<MigrationDomain, ImportColumnSchema[]> = {
     { key: 'payment_date', type: 'date', required: true },
     { key: 'payment_mode', type: 'string', required: true },
   ],
+};
+
+// ────────────────────────────────────────────────────────────────────────────
+// Template metadata — drives GET /migration/template/:domain.xlsx
+// Each entry: one column = one (header, example, optional hint) tuple.
+// Order here is the order the user sees in the downloaded template.
+// ────────────────────────────────────────────────────────────────────────────
+
+type TemplateColumn = {
+  key: string;
+  required: boolean;
+  example: string;
+  hint?: string;
+};
+
+export const TEMPLATE_COLUMNS: Record<MigrationDomain, TemplateColumn[]> = {
+  customers: [
+    { key: 'legacy_customer_id', required: true, example: 'CUST-007', hint: 'Your old-system customer id (unique within file)' },
+    { key: 'full_name', required: true, example: 'Ravi Kumar' },
+    { key: 'father_or_husband_name', required: false, example: 'Suresh Kumar' },
+    { key: 'mobile', required: true, example: '9876543210', hint: '10 digits' },
+    { key: 'alternate_mobile', required: false, example: '' },
+    { key: 'aadhaar', required: true, example: '123412341234', hint: '12 digits — stored encrypted' },
+    { key: 'pan', required: false, example: '', hint: '10-char PAN, uppercase' },
+    { key: 'dob', required: false, example: '1990-04-15', hint: 'YYYY-MM-DD' },
+    { key: 'gender', required: true, example: 'male', hint: 'male | female | other' },
+    { key: 'occupation', required: false, example: 'shopkeeper' },
+    { key: 'monthly_income_paise', required: false, example: '1500000', hint: '₹15,000 → 1500000' },
+    { key: 'address_line1', required: true, example: '12 Gandhi Road' },
+    { key: 'address_line2', required: false, example: '' },
+    { key: 'city', required: true, example: 'Pune' },
+    { key: 'district', required: true, example: 'Pune' },
+    { key: 'state', required: true, example: 'Maharashtra' },
+    { key: 'pincode', required: true, example: '411001', hint: 'exactly 6 digits' },
+    { key: 'status', required: false, example: 'active', hint: 'active | blacklisted | inactive' },
+    { key: 'assigned_officer_username', required: false, example: '', hint: 'must exist in users table' },
+    { key: 'registered_at', required: false, example: '2024-03-12', hint: 'YYYY-MM-DD' },
+  ],
+  groups: [
+    { key: 'legacy_group_id', required: true, example: 'GRP-001' },
+    { key: 'name', required: true, example: 'Saraswati Group' },
+    { key: 'leader_legacy_customer_id', required: true, example: 'CUST-007', hint: 'must reference customers file' },
+    { key: 'meeting_day', required: true, example: 'monday', hint: 'monday..sunday (lowercase)' },
+    { key: 'branch_area', required: true, example: 'Kothrud' },
+    { key: 'status', required: false, example: 'active', hint: 'active | inactive | dissolved' },
+  ],
+  group_members: [
+    { key: 'legacy_group_id', required: true, example: 'GRP-001' },
+    { key: 'member_legacy_customer_id', required: true, example: 'CUST-008', hint: 'do NOT include the leader (auto-added)' },
+    { key: 'joined_at', required: false, example: '2024-05-01', hint: 'YYYY-MM-DD' },
+  ],
+  loans: [
+    { key: 'legacy_loan_id', required: true, example: 'LN-101' },
+    { key: 'customer_legacy_customer_id', required: true, example: 'CUST-007' },
+    { key: 'group_legacy_id', required: false, example: '', hint: 'only for group loans' },
+    { key: 'principal_paise', required: true, example: '1000000', hint: '₹10,000 → 1000000' },
+    { key: 'total_interest_paise', required: true, example: '120000' },
+    { key: 'total_payable_paise', required: true, example: '1120000' },
+    { key: 'tenure_months', required: true, example: '12', hint: 'integer ≥ 1' },
+    { key: 'installments_paid_count', required: false, example: '3', hint: '≤ tenure_months' },
+    { key: 'emi_paise', required: true, example: '93333' },
+    { key: 'purpose', required: true, example: 'business expansion' },
+    { key: 'status', required: true, example: 'active', hint: 'active | overdue | closed | foreclosed | defaulted' },
+    { key: 'cached_outstanding_paise', required: true, example: '840000', hint: 'TRUSTED — current balance' },
+    { key: 'disbursement_date', required: true, example: '2025-01-15' },
+    { key: 'first_due_date', required: true, example: '2025-02-15' },
+    { key: 'disbursement_mode', required: false, example: 'cash', hint: 'cash | bank_transfer | online' },
+  ],
+  collections: [
+    { key: 'legacy_collection_id', required: true, example: 'COLL-5001', hint: 'unique within file' },
+    { key: 'loan_legacy_loan_id', required: true, example: 'LN-101' },
+    { key: 'amount_paise', required: true, example: '93333' },
+    { key: 'payment_date', required: true, example: '2025-02-15' },
+    { key: 'payment_mode', required: true, example: 'cash', hint: 'cash | bank_transfer | online' },
+  ],
+};
+
+// ────────────────────────────────────────────────────────────────────────────
+// Per-domain instruction sheet — what the operator sees on the second tab
+// ────────────────────────────────────────────────────────────────────────────
+
+const DOMAIN_INSTRUCTIONS: Record<MigrationDomain, { description: string; notes: string[] }> = {
+  customers: {
+    description: 'Customers — one row per person. Aadhaar/PAN are stored encrypted with per-record AAD.',
+    notes: [
+      'legacy_customer_id must be unique within this file (duplicates rejected at dry-run).',
+      'pincode must be EXACTLY 6 digits — no padding, no truncation.',
+      'gender must be one of: male, female, other.',
+      'status defaults to "active" if omitted; allowed: active, blacklisted, inactive.',
+      'monthly_income_paise: paise (₹ × 100), integer only, ≤ 9007199254740992.',
+    ],
+  },
+  groups: {
+    description: 'Groups — one row per group. The leader is automatically added as the first member.',
+    notes: [
+      'leader_legacy_customer_id must exist in customers.xlsx.',
+      'meeting_day must be lowercase: monday..sunday.',
+      'status defaults to "active"; allowed: active, inactive, dissolved.',
+    ],
+  },
+  group_members: {
+    description: 'Group members — do NOT include the leader (auto-inserted from groups.xlsx).',
+    notes: [
+      'Duplicate (legacy_group_id, member_legacy_customer_id) rows are silently deduped at commit.',
+      'Differing joined_at on duplicate rows is discarded — only the first row is used.',
+    ],
+  },
+  loans: {
+    description: 'Loans — every loan gets a system-generated LN-NNNNNNN number AND a generated EMI schedule.',
+    notes: [
+      'All *_paise columns must be non-negative integers ≤ 9007199254740992 (no decimals).',
+      'tenure_months must be an integer ≥ 1; installments_paid_count ≤ tenure_months.',
+      'status (lowercase): active | overdue | closed | foreclosed | defaulted.',
+      'cached_outstanding_paise is TRUSTED — it becomes the source of truth for the balance.',
+      'EMI schedule is materialised at commit: first_due_date, +1mo (month-end clamped), … for tenure_months total.',
+      'disbursement_mode optional; defaults to "cash". Allowed: cash, bank_transfer, online.',
+    ],
+  },
+  collections: {
+    description: 'Historical collections — does NOT post journal entries (uses a shared zero-totals JE).',
+    notes: [
+      'legacy_collection_id must be unique (duplicates collide on the mig:coll:<id> idempotency key).',
+      'loan_legacy_loan_id must reference a row in loans.xlsx.',
+      'payment_mode (lowercase): cash | bank_transfer | online.',
+      'No receipts are generated for migrated collections. Look up by legacy_collection_id if needed later.',
+    ],
+  },
 };

@@ -4,7 +4,9 @@
   "private": true,
   "description": "AS Finance LMS — Next.js frontend",
   "scripts": {
+    "predev": "node -e \"require('fs').mkdirSync('public/docs',{recursive:true});require('fs').copyFileSync('../../docs/MIGRATION_FILE_FORMAT.md','public/docs/MIGRATION_FILE_FORMAT.md')\"",
     "dev": "next dev",
+    "prebuild": "node -e \"require('fs').mkdirSync('public/docs',{recursive:true});require('fs').copyFileSync('../../docs/MIGRATION_FILE_FORMAT.md','public/docs/MIGRATION_FILE_FORMAT.md')\"",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",

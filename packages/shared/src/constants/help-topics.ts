@@ -73,6 +73,11 @@ export const HELP_TOPICS = {
   DAY_END_COLLECTOR: { chapter: 'workflows', section: 'day-end-collection-officer' },
   DAY_END_ACCOUNTANT: { chapter: 'workflows', section: 'day-end-accountant' },
   MONTH_END: { chapter: 'workflows', section: 'month-end' },
+
+  // Data Migration
+  DATA_MIGRATION_FILES: { chapter: 'data-migration', section: 'the-five-files' },
+  DATA_MIGRATION_VALIDATIONS: { chapter: 'data-migration', section: 'validations' },
+  DATA_MIGRATION_AUDIT: { chapter: 'data-migration', section: 'audit-logs' },
 } as const;
 
 export type HelpTopicId = keyof typeof HELP_TOPICS;

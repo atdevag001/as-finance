@@ -3,8 +3,10 @@ import {
   Body,
   Controller,
   Get,
+  Param,
   Post,
   Req,
+  Res,
   UploadedFiles,
   UseInterceptors,
 } from '@nestjs/common';
@@ -12,6 +14,7 @@ import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { IsUUID } from 'class-validator';
+import type { Response } from 'express';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 import { MAX_IMPORT_FILE_BYTES } from '../excel/types';
 import { MigrationService } from './migration.service';
@@ -25,6 +28,15 @@ class CommitMigrationDto {
 }
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+const MIGRATION_DOMAINS = ['customers', 'groups', 'group_members', 'loans', 'collections'] as const;
+
+function assertMigrationDomain(domain: string): MigrationDomain {
+  if ((MIGRATION_DOMAINS as readonly string[]).includes(domain)) return domain as MigrationDomain;
+  throw new BadRequestException(
+    `Unknown migration domain '${domain}'. Allowed: ${MIGRATION_DOMAINS.join(', ')}`,
+  );
+}
 
 const FILE_FIELDS = [
   { name: 'customers', maxCount: 1 },
@@ -59,6 +71,19 @@ export class MigrationController {
   @ApiOperation({ summary: 'Return current migration lock state' })
   async state() {
     return this.migration.getState();
+  }
+
+  @Get('template/:domain.xlsx')
+  @Throttle({ default: { ttl: 60_000, limit: 20 } })
+  @RequirePermission('migration.run')
+  @ApiOperation({ summary: 'Download a blank .xlsx template for a migration domain' })
+  async template(@Param('domain') domain: string, @Res() res: Response): Promise<void> {
+    const dom = assertMigrationDomain(domain);
+    const buffer = await this.migration.generateTemplate(dom);
+    res.setHeader('Content-Type', XLSX_MIME);
+    res.setHeader('Content-Length', String(buffer.length));
+    res.setHeader('Content-Disposition', `attachment; filename="${dom}-template.xlsx"`);
+    res.send(buffer);
   }
 
   @Post('dry-run')

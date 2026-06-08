@@ -30,7 +30,8 @@ export type ChapterListItem = {
     | 'LifeBuoy'
     | 'GraduationCap'
     | 'Route'
-    | 'FileSpreadsheet';
+    | 'FileSpreadsheet'
+    | 'Database';
 };
 
 export const CHAPTERS: ChapterListItem[] = [
@@ -229,9 +230,19 @@ export const CHAPTERS: ChapterListItem[] = [
     iconName: 'FileSpreadsheet',
     label: { en: 'Data Import / Export', hi: 'डेटा आयात / निर्यात', hinglish: 'Data Import / Export' },
     hook: {
-      en: 'Excel in, Excel out — for reports and migration.',
-      hi: 'Excel अंदर, Excel बाहर — रिपोर्ट और माइग्रेशन के लिए।',
-      hinglish: 'Excel in, Excel out — reports aur migration ke liye.',
+      en: 'Excel in, Excel out — for reports and ongoing data flow.',
+      hi: 'Excel अंदर, Excel बाहर — रिपोर्ट और रोज़ के data flow के लिए।',
+      hinglish: 'Excel in, Excel out — reports aur regular data flow ke liye.',
+    },
+  },
+  {
+    id: 'data-migration',
+    iconName: 'Database',
+    label: { en: 'Data Migration', hi: 'डेटा माइग्रेशन', hinglish: 'Data Migration' },
+    hook: {
+      en: 'One-shot legacy-system backfill — go-live day only.',
+      hi: 'एक-बार वाला पुराने सिस्टम से data — सिर्फ go-live दिन।',
+      hinglish: 'One-shot legacy backfill — sirf go-live day ke liye.',
     },
   },
 ];

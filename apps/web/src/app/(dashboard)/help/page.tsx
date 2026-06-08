@@ -22,6 +22,7 @@ import {
   GraduationCap,
   Route,
   FileSpreadsheet,
+  Database,
   Phone,
   Sparkles,
   type LucideIcon,
@@ -55,6 +56,7 @@ const ICONS: Record<string, LucideIcon> = {
   GraduationCap,
   Route,
   FileSpreadsheet,
+  Database,
 };
 
 const PAGE: Record<HelpLang, {

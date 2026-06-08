@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Upload, Database, Copy } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Upload, Database, Copy, Download } from 'lucide-react';
 import { useAuth } from '@/providers/auth-provider';
 import { useToast } from '@/providers/toast-provider';
 import { hasPermission } from '@/lib/permissions';
@@ -9,6 +9,7 @@ import { apiClient, ApiClientError } from '@/lib/api-client';
 import { AccessDenied } from '@/components/shared';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { HelpLink } from '@/components/help-link';
 import { cn } from '@/lib/utils';
 
 type MigrationState = {
@@ -137,6 +138,25 @@ export default function DataMigrationPage() {
       .then(() => showToast({ message: 'Copied to clipboard', variant: 'success' }));
   }
 
+  async function downloadTemplate(domain: DomainKey): Promise<void> {
+    try {
+      const blob = await apiClient.getBlob(`/migration/template/${domain}.xlsx`);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${domain}-template.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      showToast({
+        message: `Template download failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        variant: 'error',
+      });
+    }
+  }
+
   const locked = state?.state === 'completed';
 
   return (
@@ -144,19 +164,15 @@ export default function DataMigrationPage() {
       <div className="flex items-center gap-2">
         <Database className="h-5 w-5 text-primary" aria-hidden="true" />
         <h1 className="text-2xl font-bold">Data Migration</h1>
+        <HelpLink topic="DATA_MIGRATION_FILES" label="How Data Migration works" />
       </div>
       <p className="max-w-3xl text-sm text-muted-foreground">
         One-shot import of existing customer + loan + collection + group data from your legacy system.
-        Read{' '}
-        <a
-          className="underline"
-          href="https://github.com/atdevag001/as-finance/blob/main/docs/MIGRATION_FILE_FORMAT.md"
-          target="_blank"
-          rel="noreferrer"
-        >
-          MIGRATION_FILE_FORMAT.md
+        Read the{' '}
+        <a className="underline" href="/docs/MIGRATION_FILE_FORMAT.md" target="_blank" rel="noreferrer">
+          file-format spec
         </a>{' '}
-        before using. Max 5 MB and 5 000 rows per file.
+        before using, or just download a template per file below. Max 5 MB and 5 000 rows per file.
       </p>
 
       {commitResult && (
@@ -258,6 +274,16 @@ export default function DataMigrationPage() {
                     }}
                     className="text-sm"
                   />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => void downloadTemplate(d.key)}
+                    aria-label={`Download blank ${d.label} template`}
+                  >
+                    <Download className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+                    Template
+                  </Button>
                   {files[d.key] && (
                     <span className="text-xs text-muted-foreground">
                       {files[d.key]!.name} ({(files[d.key]!.size / 1024).toFixed(1)} KB)
