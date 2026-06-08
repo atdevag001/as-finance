@@ -33,6 +33,21 @@ export class HealthController {
     return { status: 'ok' };
   }
 
+  @Get('version')
+  @HttpCode(HttpStatus.OK)
+  @SkipThrottle()
+  @ApiOperation({ summary: 'Build identifier — name, semver, git sha, build time' })
+  @ApiResponse({ status: 200, description: 'Build identity' })
+  version() {
+    return {
+      name: 'as-finance-api',
+      version: process.env['npm_package_version'] ?? '0.1.0',
+      gitSha: process.env['GIT_SHA'] ?? 'unknown',
+      buildAt: process.env['BUILD_AT'] ?? new Date(0).toISOString(),
+      nodeEnv: process.env['NODE_ENV'] ?? 'unknown',
+    };
+  }
+
   @Get('ready')
   @ApiOperation({ summary: 'Readiness probe — checks database connectivity' })
   @ApiResponse({ status: 200, description: 'Service is ready' })

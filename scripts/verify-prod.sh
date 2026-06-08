@@ -75,15 +75,15 @@ check "GET ${BASE_URL}${API_PREFIX}/health/ready returns 200" bash -c "
 # ─── 2. TLS / HSTS / security headers ─────────────────────────────────
 _blue "[2/7] Security headers"
 
-HEADERS="$(curl -sIk "$BASE_URL/" 2>/dev/null)"
+HEADERS="$(curl -sk -I "$BASE_URL/login" 2>/dev/null)"
 
 check "Strict-Transport-Security present" bash -c "
   echo '$HEADERS' | grep -qi 'strict-transport-security'
 "
-warn "X-Frame-Options present" bash -c "
+check "X-Frame-Options present" bash -c "
   echo '$HEADERS' | grep -qi 'x-frame-options'
 "
-warn "X-Content-Type-Options: nosniff" bash -c "
+check "X-Content-Type-Options: nosniff" bash -c "
   echo '$HEADERS' | grep -qi 'x-content-type-options: nosniff'
 "
 
@@ -96,7 +96,7 @@ else
   JAR="$(mktemp /tmp/verify-jar.XXXXXX)"
   trap 'rm -f "$JAR"' EXIT
 
-  LOGIN_HEADERS="$(curl -sDk - -o /dev/null -X POST "$BASE_URL$API_PREFIX/auth/login" \
+  LOGIN_HEADERS="$(curl -sk -D - -o /dev/null -X POST "$BASE_URL$API_PREFIX/auth/login" \
     -H "Content-Type: application/json" \
     -H "Origin: $BASE_URL" \
     -c "$JAR" \
@@ -123,7 +123,7 @@ fi
 # ─── 4. CORS preflight ────────────────────────────────────────────────
 _blue "[4/7] CORS"
 
-CORS_RESP="$(curl -sIk -X OPTIONS "$BASE_URL$API_PREFIX/auth/login" \
+CORS_RESP="$(curl -sk -I -X OPTIONS "$BASE_URL$API_PREFIX/auth/login" \
   -H "Origin: $BASE_URL" \
   -H "Access-Control-Request-Method: POST" \
   -H "Access-Control-Request-Headers: Content-Type" 2>/dev/null)"
