@@ -11,7 +11,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { apiClient, setAccessToken, getAccessToken } from '@/lib/api-client';
+import { apiClient, ApiClientError, setAccessToken, getAccessToken } from '@/lib/api-client';
 import { decodeJwtPayload } from '@/lib/jwt';
 import { useToastSafe } from './toast-provider';
 
@@ -171,22 +171,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setAccessToken(existingToken);
         }
       }
+      // Refresh with backoff on 429 — rate-limit races (multiple tabs or
+      // parallel E2E workers all calling /auth/refresh simultaneously) used to
+      // cause the catch to clear auth and cascade every protected page into
+      // AccessDenied. Retry up to 3 times before giving up.
+      const tryRefresh = async (): Promise<{ accessToken: string; user: AuthUser } | null> => {
+        const backoffMs = [0, 1500, 4000];
+        for (let i = 0; i < backoffMs.length; i++) {
+          if (cancelled) return null;
+          if (backoffMs[i]! > 0) await new Promise((r) => setTimeout(r, backoffMs[i]));
+          try {
+            return await apiClient.post<{ accessToken: string; user: AuthUser }>(
+              '/auth/refresh',
+              undefined,
+              { skipRefresh: true },
+            );
+          } catch (err) {
+            // Only retry on 429 (rate limit). 401/403 are terminal — refresh
+            // token actually invalid; don't loop. Network / 5xx are transient
+            // but we cap at 3 attempts.
+            const status = err instanceof ApiClientError ? err.statusCode : 0;
+            if (status === 401 || status === 403) throw err;
+            if (i === backoffMs.length - 1) throw err;
+          }
+        }
+        return null;
+      };
       try {
-        const data = await apiClient.post<{ accessToken: string; user: AuthUser }>(
-          '/auth/refresh',
-          undefined,
-          { skipRefresh: true },
-        );
-        if (!cancelled) {
+        const data = await tryRefresh();
+        if (!cancelled && data) {
           setAccessToken(data.accessToken);
           setTokenCookie(data.accessToken);
           setState({ user: data.user, isLoading: false, isAuthenticated: true });
         }
-      } catch {
+      } catch (err) {
         if (!cancelled) {
-          // Only clear auth if we don't have an active token
-          // (prevents race condition with concurrent login)
-          if (!getAccessToken()) {
+          const status = err instanceof ApiClientError ? err.statusCode : 0;
+          // 401/403: refresh token really is invalid → log out for real.
+          // Anything else (429 still, network blip, 5xx): preserve the previous
+          // state. The middleware still has the access_token cookie, so the
+          // user stays effectively logged in until the next user action.
+          if (status === 401 || status === 403) {
+            setAccessToken(null);
             setTokenCookie(null);
             setState({ user: null, isLoading: false, isAuthenticated: false });
           } else {
